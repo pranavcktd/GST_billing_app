@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #eef5fd;
+  --color-brand-100: #d6e7fa;
+  --color-brand-500: #2a78d6;
+  --color-brand-600: #1f65bb;
+  --color-brand-700: #1c5cab;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* chart series (validated: dataviz palette slots 1-3) */
+  --color-series-1: #2a78d6;
+  --color-series-2: #eb6834;
+  --color-series-3: #1baf7a; /* <3:1 on white: chart ships with legend, tooltip and table view */
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: #f6f7f9;
+  color: #1c2430;
+}
+
+/* data tables */
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.tbl th {
+  text-align: left;
+  font-weight: 600;
+  color: #5b6573;
+  background: #f8f9fb;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.tbl td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid #eef0f3;
+  vertical-align: top;
+}
+.tbl tbody tr:hover {
+  background: #fafbfc;
+}
+.tbl .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tbl tfoot td {
+  font-weight: 600;
+  background: #f8f9fb;
+}
+
+.input {
+  width: 100%;
+  border: 1px solid #d5d9e0;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.875rem;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input:focus {
+  border-color: var(--color-brand-500);
+  box-shadow: 0 0 0 3px var(--color-brand-100);
+}
+.input:disabled {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+  body {
+    background: #fff;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-sheet {
+    box-shadow: none !important;
+    margin: 0 !important;
+    max-width: none !important;
+    padding: 0 !important;
+  }
+}
