@@ -8,6 +8,7 @@ from ..deps import BCtx
 from ..gst.constants import ItemType, StockMoveType
 from ..models import Item, StockMovement, VoucherLine
 from ..schemas import ItemIn, ItemOut, StockAdjustIn, StockMoveOut
+from ..services import hsn_master
 from ..services.ledger import item_stock
 from ..services.plans import require_feature
 
@@ -43,9 +44,17 @@ def list_items(ctx: BCtx, search: str | None = None, include_inactive: bool = Fa
     return [_out(i, stock.get(i.id, 0), ctx) for i in items]
 
 
+def _check_hsn(ctx: BCtx, data: ItemIn) -> None:
+    try:
+        hsn_master.check_code(ctx.db, data.hsn_sac, data.type)
+    except hsn_master.HsnError as e:
+        raise HTTPException(422, str(e)) from e
+
+
 @router.post("", response_model=ItemOut, status_code=201)
 def create_item(data: ItemIn, ctx: BCtx):
     ctx.need("items", "create")
+    _check_hsn(ctx, data)
     fields = data.model_dump(exclude={"opening_stock", "opening_stock_date"})
     it = Item(business_id=ctx.bid, **fields)
     ctx.db.add(it)
@@ -95,6 +104,8 @@ def get_item(item_id: str, ctx: BCtx):
 def update_item(item_id: str, data: ItemIn, ctx: BCtx):
     ctx.need("items", "edit")
     it = _get(ctx, item_id)
+    if data.hsn_sac != it.hsn_sac or data.type != it.type:
+        _check_hsn(ctx, data)
     for k, v in data.model_dump(exclude={"opening_stock", "opening_stock_date"}).items():
         setattr(it, k, v)
     ctx.db.commit()

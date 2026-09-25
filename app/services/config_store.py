@@ -37,7 +37,7 @@ class Field:
     key: str
     group: str
     label: str
-    type: str          # money | int | number | text | rates | list | map_text | map_number
+    type: str          # money | int | number | text | bool | rates | list | map_text | map_number
     default: Any
     help: str = ""
     options: list = field(default_factory=list)
@@ -64,6 +64,9 @@ FIELDS: list[Field] = [
     Field("hsn_digits_small", "GST rules", "HSN digits — turnover up to ₹5 crore", "int", 4,
           "Minimum HSN digits on B2B invoices and GSTR-1 table 12."),
     Field("hsn_digits_large", "GST rules", "HSN digits — turnover above ₹5 crore", "int", 6),
+    Field("hsn_strict", "GST rules", "Only allow HSN/SAC codes from the official master", "bool", False,
+          "On: items and bills must use a code from Admin → HSN master (businesses can request missing codes). "
+          "Off: other codes are allowed with a warning."),
     Field("late_fee_per_day", "GST rules", "Late fee per day (CGST + SGST, ₹)", "money", 50,
           "For GSTR-1 / GSTR-3B with tax liability (₹20 for nil returns)."),
     Field("interest_rate", "GST rules", "Interest on late tax payment (% p.a.)", "number", 18),
@@ -223,6 +226,10 @@ def clean_values(values: dict) -> dict:
             if n != int(n) or n < 1:
                 raise ConfigError(f"{f.label}: must be a whole number")
             out[key] = int(n)
+        elif f.type == "bool":
+            if isinstance(v, str):
+                v = v.strip().lower() in ("1", "true", "yes", "on")
+            out[key] = bool(v)
         elif f.type == "text":
             if not str(v).strip():
                 raise ConfigError(f"{f.label}: cannot be empty")

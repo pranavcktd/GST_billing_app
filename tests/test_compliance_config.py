@@ -113,6 +113,6 @@ def test_hsn_master_and_rate_notice(client, monkeypatch):
     # bulk import / export of the master
     x = client.get("/api/admin/hsn/export", headers=root)
     assert x.status_code == 200 and x.content[:2] == b"PK"
-    csv = "HSN/SAC Code,Description,GST %,Cess %,Effective From\n1006,Rice,5,0,2025-09-22\n12,bad,5,,\n9999,Bad rate,13,,\n"
-    res = client.post("/api/admin/hsn/import", headers=root, files={"file": ("hsn.csv", csv.encode(), "text/csv")}).json()
-    assert res["created"] == 1 and len(res["errors"]) == 2
+    csv = "HSN/SAC Code,Description,GST %,Cess %,Effective From\n1006,Rice,5,0,2025-09-22\n1,bad,5,,\n9999,Bad rate,13,,\n"
+    res = client.post("/api/admin/hsn/import", headers=root, data={"dry_run": "false"}, files={"file": ("hsn.csv", csv.encode(), "text/csv")}).json()
+    assert res["created"] == 1 and res["error_count"] == 2

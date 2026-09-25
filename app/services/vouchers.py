@@ -39,7 +39,7 @@ from .accounts import resolve_account
 from .godowns import resolve_godown
 from .plans import check_invoice_limit
 from .numbering import allocate_number
-from . import config_store
+from . import config_store, hsn_master
 
 ZERO = Decimal("0")
 
@@ -154,6 +154,11 @@ def save_voucher(ctx: Ctx, data: VoucherIn, voucher: Voucher | None = None) -> V
         select(ExpenseItem).where(ExpenseItem.business_id == ctx.bid, ExpenseItem.id.in_(exp_ids)))}
     if len(exp_items) != len(exp_ids):
         raise bad("One or more expense items were not found")
+    for code in {l.hsn_sac for l in data.lines if l.hsn_sac}:
+        try:
+            hsn_master.check_code(db, code, None, data.date)
+        except hsn_master.HsnError as e:
+            raise bad(str(e)) from e
 
     reverse_charge = data.reverse_charge and not outward and tax_applicable
     totals = calc_invoice(
