@@ -237,3 +237,29 @@ def usage(db: Session, days: int = 30) -> dict:
             "saved_by_cache_pct": round(100 * agg["cache"] / max(1, agg["cache"] + agg["live_ok"])),
             "recent": [dict(gstin=r.gstin, source=r.source, ok=r.ok, http_status=r.http_status, error=r.error,
                             name=(r.data or {}).get("legal_name"), business_id=r.business_id, at=r.created_at) for r in recent]}
+
+
+# ================================================================ free status (no API call)
+def last_status(db: Session, gstins: list[str]) -> dict[str, dict]:
+    """Latest successful verification of each GSTIN anywhere on the platform, from our own records.
+
+    Only public GST-registry fields are returned. `fresh` tells whether autofill will be free
+    (served from the cache) or will need a paid lookup."""
+    gstins = sorted({g.strip().upper() for g in gstins if g and len(g.strip()) == 15})[:500]
+    if not gstins:
+        return {}
+    s = settings(db)
+    cutoff = dt.datetime.now(dt.UTC) - dt.timedelta(days=int(s["cache_days"]))
+    latest = (select(GstinLookup.gstin, func.max(GstinLookup.created_at).label("at"))
+              .where(GstinLookup.gstin.in_(gstins), GstinLookup.ok.is_(True), GstinLookup.source == "LIVE")
+              .group_by(GstinLookup.gstin).subquery())
+    rows = db.execute(select(GstinLookup).join(latest, (GstinLookup.gstin == latest.c.gstin) & (GstinLookup.created_at == latest.c.at))
+                      .where(GstinLookup.source == "LIVE", GstinLookup.ok.is_(True))).scalars().all()
+    out = {}
+    for r in rows:
+        d = r.data or {}
+        at = r.created_at if r.created_at.tzinfo else r.created_at.replace(tzinfo=dt.UTC)
+        out[r.gstin] = dict(verified=True, verified_at=r.created_at, status=d.get("status"), active=bool(d.get("active")),
+                            legal_name=d.get("legal_name"), trade_name=d.get("trade_name"), taxpayer_type=d.get("taxpayer_type"),
+                            fresh=at >= cutoff, days_ago=(dt.datetime.now(dt.UTC) - at).days)
+    return out

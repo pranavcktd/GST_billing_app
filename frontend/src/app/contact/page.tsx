@@ -1,7 +1,7 @@
 import { LegalPage } from "@/components/LegalPage";
 import { Company } from "@/lib/config";
 
-export const metadata = { title: "Contact — GST Billing" };
+export const metadata = { title: "Contact" };
 
 export default function Contact() {
   return (

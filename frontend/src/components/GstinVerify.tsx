@@ -1,9 +1,10 @@
 "use client";
 
-import { BadgeCheck, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
+import { BadgeCheck, Loader2, RefreshCw, ShieldAlert, ShieldQuestion } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { BrandName } from "@/lib/config";
 import { gstinError } from "@/lib/gst";
 
 export interface GstinInfo {
@@ -15,6 +16,12 @@ export interface GstinInfo {
   source: "live" | "cache"; fetched_at: string;
 }
 
+/** Last verification of a GSTIN anywhere on the platform (from our own records — free). */
+export interface GstinStatus {
+  verified: boolean; verified_at?: string; status?: string | null; active?: boolean; legal_name?: string | null;
+  trade_name?: string | null; taxpayer_type?: string | null; fresh?: boolean; days_ago?: number;
+}
+
 // re-checked at most once a minute, so switching it on in Admin → Integrations shows up without a reload
 let availability: { at: number; value: Promise<boolean> } | null = null;
 const isAvailable = () => {
@@ -24,21 +31,56 @@ const isAvailable = () => {
   return availability.value;
 };
 
+const statusCache = new Map<string, GstinStatus>();
+export async function gstinStatuses(gstins: string[]): Promise<Record<string, GstinStatus>> {
+  const want = [...new Set(gstins.map((g) => g.trim().toUpperCase()).filter((g) => g.length === 15))];
+  const missing = want.filter((g) => !statusCache.has(g));
+  if (missing.length) {
+    const r = await api<Record<string, GstinStatus>>("/gstin/status", { body: { gstins: missing } });
+    for (const [g, s] of Object.entries(r)) statusCache.set(g, s);
+  }
+  return Object.fromEntries(want.map((g) => [g, statusCache.get(g) ?? { verified: false }]));
+}
+
+const fmt = (d?: string) => (d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "");
+
+/** Small badge with the last verification result (used in lists and next to GSTIN fields). */
+export function GstinBadge({ s }: { s?: GstinStatus }) {
+  if (!s) return null;
+  if (!s.verified) return <span className="inline-flex items-center gap-0.5 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500" title="Not verified yet"><ShieldQuestion size={11} /> Not verified</span>;
+  return (
+    <span title={`Verified on ${fmt(s.verified_at)}: ${s.status ?? ""} · ${s.taxpayer_type ?? ""}`}
+      className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium ${s.active ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+      {s.active ? <BadgeCheck size={11} /> : <ShieldAlert size={11} />} {s.active ? "Verified" : s.status || "Inactive"}
+    </span>
+  );
+}
+
 /**
- * "Verify & autofill" next to a GSTIN field. Nothing is called while typing — the paid lookup runs
- * only when the user clicks. Hidden when the platform has not enabled GSTIN verification.
+ * GSTIN verification next to a GSTIN field.
+ * - Shows, for free, whether this GSTIN was already verified on the platform (by anyone) and the result.
+ * - "Autofill (free)" when a recent verification exists; "Verify & autofill" otherwise (paid lookup).
+ * Nothing is called while typing except the free status check.
  */
 export function GstinVerify({ gstin, onResult, filled }: { gstin: string | null; onResult: (d: GstinInfo) => void; filled?: string[] }) {
   const { me } = useAuth();
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState<GstinInfo | null>(null);
+  const [status, setStatus] = useState<GstinStatus | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => { isAvailable().then(setEnabled); }, []);
   const g = (gstin ?? "").trim().toUpperCase();
   const valid = g.length === 15 && !gstinError(g);
   const stale = info && info.gstin !== g;
+
+  useEffect(() => {
+    if (!enabled || !valid) return;
+    let alive = true;
+    const t = setTimeout(() => gstinStatuses([g]).then((r) => alive && setStatus(r[g])).catch(() => {}), 300);
+    return () => { alive = false; clearTimeout(t); };
+  }, [enabled, valid, g]);
 
   if (enabled === null) return null;
   if (!enabled) {
@@ -57,6 +99,10 @@ export function GstinVerify({ gstin, onResult, filled }: { gstin: string | null;
     try {
       const d = await api<GstinInfo>("/gstin/verify", { body: { gstin: g, refresh } });
       setInfo(d);
+      const s: GstinStatus = { verified: true, verified_at: d.fetched_at, status: d.status, active: d.active, legal_name: d.legal_name,
+        trade_name: d.trade_name, taxpayer_type: d.taxpayer_type, fresh: true, days_ago: 0 };
+      statusCache.set(d.gstin, s);
+      setStatus(s);
       onResult(d);
     } catch (e) {
       setErr((e as Error).message);
@@ -65,13 +111,27 @@ export function GstinVerify({ gstin, onResult, filled }: { gstin: string | null;
     }
   }
 
+  const known = valid && status?.verified && status.fresh;
+  const st = valid && status && (!info || stale) ? status : null;
+
   return (
     <div className="mt-1.5 space-y-1.5">
+      {st?.verified && (
+        <div className={`rounded-md px-2.5 py-1.5 text-xs ${st.active ? "bg-emerald-50 text-emerald-900" : "bg-red-50 text-red-900"}`}>
+          <span className="font-medium">{st.active ? <BadgeCheck size={12} className="mr-1 inline" /> : <ShieldAlert size={12} className="mr-1 inline" />}
+            Already verified on <BrandName /></span> on {fmt(st.verified_at)}{st.days_ago ? ` (${st.days_ago} days ago)` : ""}: <b>{st.status || "—"}</b>
+          {st.legal_name ? ` · ${st.legal_name}` : ""}
+          {!st.active && <div className="mt-0.5 font-medium">At the last check this GSTIN was not active.</div>}
+        </div>
+      )}
       {(!info || stale) && (
         <button type="button" disabled={!valid || busy} onClick={() => run()}
-          title={valid ? "Fetch name, address and registration details from the GST portal" : "Type the full 15-character GSTIN to enable"}
+          title={!valid ? "Type the full 15-character GSTIN to enable"
+            : known ? "Fill the details from the earlier verification — no new lookup is made"
+              : "Fetch name, address and registration details from the GST portal"}
           className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-50">
-          {busy ? <Loader2 size={13} className="animate-spin" /> : <BadgeCheck size={13} />} Verify & autofill
+          {busy ? <Loader2 size={13} className="animate-spin" /> : <BadgeCheck size={13} />}
+          {known ? "Autofill from verified details (free)" : status?.verified ? "Verify again & autofill" : "Verify & autofill"}
         </button>
       )}
       {err && <p className="text-xs text-red-700">{err}</p>}
@@ -91,9 +151,9 @@ export function GstinVerify({ gstin, onResult, filled }: { gstin: string | null;
           <div className="opacity-80">
             {[info.constitution, info.registration_date && `registered ${info.registration_date}`, info.cancellation_date && `cancelled ${info.cancellation_date}`].filter(Boolean).join(" · ")}
           </div>
-          {!info.active && <div className="mt-1 font-medium">This GSTIN is not active — GST should not be charged to / claimed from it. Check with the party.</div>}
+          {!info.active && <div className="mt-1 font-medium">This GSTIN is not active as per the latest available data — please confirm with the party before charging or claiming GST.</div>}
           {filled && filled.length > 0 && <div className="mt-1 opacity-80">Filled in: {filled.join(", ")}. Please check and complete the rest.</div>}
-          {info.source === "cache" && <div className="opacity-60">Verified earlier on {new Date(info.fetched_at).toLocaleDateString("en-IN")}</div>}
+          <div className="opacity-60">{info.source === "cache" ? `From the verification of ${fmt(info.fetched_at)} — no new lookup was made.` : "Verified just now."} Data as provided by the GST data source.</div>
         </div>
       )}
     </div>

@@ -8,6 +8,7 @@ import { Button, Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
 import { downloadFile, qs } from "@/lib/api";
 import { downloadCsv, fmtDate, monthRange, money, qty } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
+import { ReviewNote } from "@/components/ReviewNote";
 
 type Tax = { taxable: number; igst: number; cgst: number; sgst: number; cess: number };
 type RateRow = Tax & { rate: number };
@@ -105,6 +106,7 @@ export default function Gstr1Page() {
         </>
       } />
       <PeriodPicker value={period} onChange={setPeriod} />
+      <ReviewNote />
       <ErrorBox message={error} />
       {loading || !data ? (
         <Loading />

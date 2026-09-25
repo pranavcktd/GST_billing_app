@@ -114,3 +114,20 @@ def test_provider_errors_and_types(client, monkeypatch):
     assert d["party_gst_type"] == "COMPOSITION" and d["business_gst_type"] == "COMPOSITION" and not d["active"]
     assert d["cancellation_date"] == "2024-03-31"
     assert G.normalise({"taxpayer_type": "SEZ Unit"}, GOOD)["party_gst_type"] == "SEZ"
+
+
+def test_last_status_is_free_and_platform_wide(client, monkeypatch):
+    root = superadmin(client, monkeypatch)
+    enable(client, root, cache_days=30)
+    fake_provider(monkeypatch)
+    a, b = signup(client), signup(client, email="b@shop.in")
+    st = client.post("/api/gstin/status", headers=a, json={"gstins": [GOOD]}).json()
+    assert st == {GOOD: {"verified": False}}
+    post(client, a, "/api/gstin/verify", {"gstin": GOOD}, 200)
+    # another user of another account sees it was verified, without any API call
+    CALLS.clear()
+    st = client.post("/api/gstin/status", headers=b, json={"gstins": [GOOD.lower(), "27AABCS1429B1Z1"]}).json()
+    assert st[GOOD]["verified"] and st[GOOD]["fresh"] and st[GOOD]["status"] == "Active" and st[GOOD]["days_ago"] == 0
+    assert st["27AABCS1429B1Z1"] == {"verified": False} and CALLS == []
+    # and autofill for them comes from the cache (free)
+    assert post(client, b, "/api/gstin/verify", {"gstin": GOOD}, 200)["source"] == "cache" and CALLS == []

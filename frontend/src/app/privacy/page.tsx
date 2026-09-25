@@ -1,7 +1,7 @@
 import { LegalPage } from "@/components/LegalPage";
 import { Company } from "@/lib/config";
 
-export const metadata = { title: "Privacy Policy — GST Billing" };
+export const metadata = { title: "Privacy Policy" };
 
 export default function Privacy() {
   return (
