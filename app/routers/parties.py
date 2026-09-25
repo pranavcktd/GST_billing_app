@@ -3,7 +3,7 @@ import datetime as dt
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import or_, select
 
-from ..deps import WRITERS, BCtx
+from ..deps import BCtx
 from ..gst.constants import PartyType
 from ..models import Party, Payment, Voucher
 from ..schemas import PartyIn, PartyOut
@@ -27,6 +27,7 @@ def _out(p: Party, balance) -> PartyOut:
 
 @router.get("", response_model=list[PartyOut])
 def list_parties(ctx: BCtx, search: str | None = None, type: PartyType | None = None, include_inactive: bool = False):
+    ctx.need("parties", "view")
     q = select(Party).where(Party.business_id == ctx.bid).order_by(Party.name)
     if not include_inactive:
         q = q.where(Party.is_active.is_(True))
@@ -42,7 +43,7 @@ def list_parties(ctx: BCtx, search: str | None = None, type: PartyType | None = 
 
 @router.post("", response_model=PartyOut, status_code=201)
 def create_party(data: PartyIn, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("parties", "create")
     p = Party(business_id=ctx.bid, **data.model_dump())
     ctx.db.add(p)
     ctx.db.commit()
@@ -51,13 +52,14 @@ def create_party(data: PartyIn, ctx: BCtx):
 
 @router.get("/{party_id}", response_model=PartyOut)
 def get_party(party_id: str, ctx: BCtx):
+    ctx.need("parties", "view")
     p = _get(ctx, party_id)
     return _out(p, party_balances(ctx.db, ctx.bid, [p.id]).get(p.id, 0))
 
 
 @router.put("/{party_id}", response_model=PartyOut)
 def update_party(party_id: str, data: PartyIn, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("parties", "edit")
     p = _get(ctx, party_id)
     for k, v in data.model_dump().items():
         setattr(p, k, v)
@@ -68,7 +70,7 @@ def update_party(party_id: str, data: PartyIn, ctx: BCtx):
 @router.delete("/{party_id}", status_code=204)
 def delete_party(party_id: str, ctx: BCtx):
     """Parties with transactions are deactivated instead of deleted, to keep records intact."""
-    ctx.require(*WRITERS)
+    ctx.need("parties", "delete")
     p = _get(ctx, party_id)
     used = ctx.db.scalar(select(Voucher.id).where(Voucher.party_id == p.id).limit(1)) or ctx.db.scalar(
         select(Payment.id).where(Payment.party_id == p.id).limit(1)
@@ -82,5 +84,7 @@ def delete_party(party_id: str, ctx: BCtx):
 
 @router.get("/{party_id}/ledger")
 def get_ledger(party_id: str, ctx: BCtx, date_from: dt.date | None = None, date_to: dt.date | None = None):
+    if not (ctx.can("reports_sales") or ctx.can("reports_financial")):
+        ctx.need("reports_financial", "view")
     p = _get(ctx, party_id)
     return {"party": _out(p, 0).model_dump(mode="json"), **party_ledger(ctx.db, p, date_from, date_to)}

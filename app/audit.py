@@ -10,7 +10,7 @@ from .db import get_db
 from .models import AuditLog, User
 from .security import decode_token
 
-SKIP = ("/api/auth/", "/api/uploads", "/api/import/", "/api/billing/webhook")
+SKIP = ("/api/auth/", "/api/uploads", "/api/import/", "/api/billing/webhook", "/api/reconcile/", "/api/admin/", "/api/reseller/")
 ENTITY = [
     (r"^/api/vouchers/[^/]+/cancel$", "document", "CANCEL"),
     (r"^/api/vouchers/[^/]+/einvoice", "e-invoice", "ACTION"),

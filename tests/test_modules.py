@@ -274,4 +274,4 @@ def test_members(client):
     h = {**staff, "X-Business-Id": owner["X-Business-Id"]}
     assert client.get("/api/parties", headers=h).status_code == 200
     assert client.post("/api/parties", headers=h, json={"name": "x"}).status_code == 403  # accountant is read-only
-    assert client.post("/api/members", headers=owner, json={"email": "nobody@x.in", "role": "STAFF"}).status_code == 404
+    assert client.post("/api/members", headers=owner, json={"email": "nobody@x.in", "role": "BILLING"}).status_code == 404

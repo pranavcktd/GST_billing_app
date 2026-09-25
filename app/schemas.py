@@ -114,10 +114,13 @@ class MyBusinessOut(BaseModel):
     gstin: str | None
     gst_type: BusinessGstType
     role: Role
+    owned: bool = False
+    permissions: dict | None = None
 
 
 class MeOut(BaseModel):
     user: UserOut
+    platform_role: str | None = None
     businesses: list[MyBusinessOut]
 
 
@@ -251,6 +254,7 @@ class BusinessOut(ORM):
     print_settings: PrintSettings | None
     einvoice_username: str | None
     einvoice_password_set: bool = False
+    plan: dict | None = None
 
 
 # ---------- parties ----------

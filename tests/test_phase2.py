@@ -167,29 +167,43 @@ def test_items_assign_codes(client):
 def test_subscription_trial_limits_and_payments(client, monkeypatch):
     h, cust, item = setup(client)
     st = client.get("/api/billing/status", headers=h).json()
-    assert st["status"] == "TRIAL" and st["plan"]["code"] == "BUSINESS" and st["dev_mode"]
+    assert st["status"] == "TRIAL" and st["plan"]["code"] == "ENTERPRISE" and st["dev_mode"] and st["is_owner"]
     plans = client.get("/api/billing/plans").json()  # public, no auth
-    assert [p["code"] for p in plans["plans"]] == ["FREE", "GROWTH", "BUSINESS"]
+    assert [p["code"] for p in plans["plans"]] == ["FREE", "STARTER", "PROFESSIONAL", "ENTERPRISE"]
 
     # drop to the free plan with a tiny limit
     db = db_session()
-    db.get(Subscription, h["X-Business-Id"]).plan = "FREE"
+    owner_id = client.get("/api/auth/me", headers=h).json()["user"]["id"]
+    db.get(Subscription, owner_id).plan = "FREE"
     db.commit()
+    assert client.get("/api/businesses/current", headers=h).json()["plan"]["watermark"] is True
     monkeypatch.setitem(P.PLANS["FREE"], "invoices_per_month", 1)
     sale(client, h, cust, item)
     r = client.post("/api/vouchers", headers=h, json={"type": "SALE", "date": "2026-09-10", "party_id": cust["id"],
                                                       "lines": [{"name": "x", "qty": 1, "rate": 1}]})
-    assert r.status_code == 402 and "upgrade" in r.json()["detail"].lower()
+    assert r.status_code == 402 and r.json()["detail"]["code"] == "UPGRADE" and r.json()["detail"]["plan"] == "STARTER"
     assert client.get("/api/exports/tally", headers=h, params={"date_from": "2026-09-01", "date_to": "2026-09-30"}).status_code == 402
+    assert client.get("/api/exports/gstr1-json", headers=h, params={"date_from": "2026-09-01", "date_to": "2026-09-30"}).status_code == 402
     assert client.post("/api/godowns", headers=h, json={"name": "Second"}).status_code == 402
+    assert client.get("/api/reports/run/profit-loss", headers=h).status_code == 402      # Starter report
+    assert client.get("/api/reports/run/day-book", headers=h).status_code == 200         # free report
+    locked = {r["slug"]: r["locked"] for r in client.get("/api/reports/catalog", headers=h).json()}
+    assert locked["day-book"] is False and locked["balance-sheet"] is True
+    # one business on Free
+    r = client.post("/api/businesses", headers={"Authorization": h["Authorization"]},
+                    json={"name": "Second shop", "gst_type": "UNREGISTERED", "state_code": "27"})
+    assert r.status_code == 402
 
-    # local development: simulated payment upgrades the plan
-    order = post(client, h, "/api/billing/order", {"plan": "GROWTH", "cycle": "YEARLY"}, 200)
-    assert order["amount"] == float(P.with_gst(Decimal("3999"))) and not order["live"]
+    # local development: simulated payment upgrades the whole account
+    order = post(client, h, "/api/billing/order", {"plan": "STARTER", "cycle": "YEARLY"}, 200)
+    assert order["amount"] == float(P.with_gst(Decimal("1999"))) and not order["live"]
     res = post(client, h, "/api/billing/verify", {"order_id": order["order_id"], "simulate": True}, 200)
-    assert res["plan"] == "GROWTH" and res["status"] == "ACTIVE"
+    assert res["plan"] == "STARTER" and res["status"] == "ACTIVE"
     assert client.post("/api/vouchers", headers=h, json={"type": "SALE", "date": "2026-09-10", "party_id": cust["id"],
                                                          "lines": [{"name": "x", "qty": 1, "rate": 1}]}).status_code == 201
+    assert client.get("/api/businesses/current", headers=h).json()["plan"]["watermark"] is False
+    # addon packs are Enterprise-only
+    assert client.post("/api/billing/order", headers=h, json={"plan": "ADDON_BUSINESSES"}).status_code == 400
 
     # real Razorpay signature checks
     monkeypatch.setattr(get_settings(), "razorpay_key_secret", "rzp_secret")
@@ -200,3 +214,22 @@ def test_subscription_trial_limits_and_payments(client, monkeypatch):
     sig = hmac.new(b"wh_secret", body, hashlib.sha256).hexdigest()
     assert client.post("/api/billing/webhook", content=body, headers={"x-razorpay-signature": sig}).status_code == 200
     assert client.post("/api/billing/webhook", content=body, headers={"x-razorpay-signature": "x"}).status_code == 400
+
+
+def test_gstr2b_reconciliation(client):
+    h, _, item = setup(client)
+    sup_gstin = gstin("27", "AAACW9999E")
+    sup = post(client, h, "/api/parties", {"name": "Supplier", "type": "SUPPLIER", "gst_type": "REGISTERED", "gstin": sup_gstin})
+    for no, qty in (("W-001", 10), ("W-002", 5), ("W-003", 1)):
+        post(client, h, "/api/vouchers", {"type": "PURCHASE", "date": "2026-09-05", "party_id": sup["id"], "supplier_invoice_no": no,
+                                          "lines": [{"item_id": item["id"], "name": "Bottle", "qty": qty, "rate": 300, "gst_rate": 18}]})
+    two_b = {"data": {"gstin": "x", "rtnprd": "092026", "docdata": {"b2b": [{"ctin": sup_gstin, "trdnm": "Supplier", "inv": [
+        {"inum": "W 001", "dt": "05-09-2026", "val": 3540, "txval": 3000, "igst": 0, "cgst": 270, "sgst": 270, "cess": 0},
+        {"inum": "W-002", "dt": "05-09-2026", "val": 1800, "txval": 1600, "igst": 0, "cgst": 144, "sgst": 144, "cess": 0},
+        {"inum": "W-009", "dt": "06-09-2026", "val": 118, "txval": 100, "igst": 0, "cgst": 9, "sgst": 9, "cess": 0}]}]}}}
+    r = client.post("/api/reconcile/gstr2b", headers=h, files={"file": ("2b.json", json.dumps(two_b).encode())},
+                    data={"date_from": "2026-09-01", "date_to": "2026-09-30"})
+    assert r.status_code == 200, r.text
+    counts = {s["label"]: s["value"] for s in r.json()["summary"]}
+    assert counts["Matched"] == 1 and counts["Amount mismatch"] == 1 and counts["Missing in books"] == 1
+    assert counts["Not in 2B (ITC at risk)"] == 54  # W-003: 300 taxable x 18%

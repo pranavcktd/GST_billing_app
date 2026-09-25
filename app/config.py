@@ -16,6 +16,8 @@ class Settings(BaseSettings):
 
     # "development" enables local conveniences (simulated subscription payments). Set "production" when live.
     app_env: str = "development"
+    # comma-separated emails that get Super Admin (platform owner) access when they sign in
+    superadmin_emails: str = ""
 
     # Railway exposes DATABASE_URL as postgresql://user:pass@host:port/db
     database_url: str = "sqlite:///./dev.db"
@@ -44,6 +46,10 @@ class Settings(BaseSettings):
     gsp_base_url: str | None = None
     gsp_client_id: str | None = None
     gsp_client_secret: str | None = None
+
+    @property
+    def superadmins(self) -> set[str]:
+        return {e.strip().lower() for e in self.superadmin_emails.split(",") if e.strip()}
 
     @property
     def is_dev(self) -> bool:

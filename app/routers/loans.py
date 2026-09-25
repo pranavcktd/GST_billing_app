@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from ..deps import MANAGERS, BCtx
+from ..deps import BCtx
 from ..gst.constants import LoanTxnType
 from ..models import Loan, LoanTxn
 from ..schemas import LoanIn, LoanOut, LoanTxnIn, LoanTxnOut
@@ -60,6 +60,7 @@ def statement(loan: Loan, date_from: dt.date | None = None, date_to: dt.date | N
 
 @router.get("", response_model=list[LoanOut])
 def list_loans(ctx: BCtx):
+    ctx.need("cashbank", "view")
     loans = ctx.db.scalars(select(Loan).options(selectinload(Loan.txns))
                            .where(Loan.business_id == ctx.bid).order_by(Loan.name)).all()
     return [_out(l) for l in loans]
@@ -67,7 +68,7 @@ def list_loans(ctx: BCtx):
 
 @router.post("", response_model=LoanOut, status_code=201)
 def create_loan(data: LoanIn, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("cashbank", "create")
     loan = Loan(business_id=ctx.bid, **data.model_dump())
     ctx.db.add(loan)
     ctx.db.commit()
@@ -76,7 +77,7 @@ def create_loan(data: LoanIn, ctx: BCtx):
 
 @router.put("/{loan_id}", response_model=LoanOut)
 def update_loan(loan_id: str, data: LoanIn, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("cashbank", "edit")
     loan = _get(ctx, loan_id)
     for k, v in data.model_dump().items():
         setattr(loan, k, v)
@@ -86,7 +87,7 @@ def update_loan(loan_id: str, data: LoanIn, ctx: BCtx):
 
 @router.delete("/{loan_id}", status_code=204)
 def delete_loan(loan_id: str, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("cashbank", "delete")
     loan = _get(ctx, loan_id)
     if loan.txns:
         loan.is_active = False
@@ -97,13 +98,14 @@ def delete_loan(loan_id: str, ctx: BCtx):
 
 @router.get("/{loan_id}")
 def get_loan(loan_id: str, ctx: BCtx, date_from: dt.date | None = None, date_to: dt.date | None = None):
+    ctx.need("cashbank", "view")
     loan = _get(ctx, loan_id)
     return {"loan": _out(loan).model_dump(mode="json"), **statement(loan, date_from, date_to)}
 
 
 @router.post("/{loan_id}/txns", response_model=LoanTxnOut, status_code=201)
 def add_txn(loan_id: str, data: LoanTxnIn, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("cashbank", "create")
     loan = _get(ctx, loan_id)
     acc = resolve_account(ctx.db, ctx.bid, data.account_id)
     if data.type == LoanTxnType.EMI and data.principal > outstanding(loan):
@@ -116,7 +118,7 @@ def add_txn(loan_id: str, data: LoanTxnIn, ctx: BCtx):
 
 @router.delete("/{loan_id}/txns/{txn_id}", status_code=204)
 def delete_txn(loan_id: str, txn_id: str, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("cashbank", "delete")
     loan = _get(ctx, loan_id)
     t = ctx.db.get(LoanTxn, txn_id)
     if not t or t.loan_id != loan.id:

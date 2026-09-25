@@ -7,7 +7,7 @@ import cloudinary.uploader
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..config import get_settings
-from ..deps import WRITERS, BCtx
+from ..deps import BCtx
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
@@ -33,7 +33,7 @@ async def upload_image(
     file: UploadFile = File(...),
     kind: Literal["logo", "signature", "item"] = Form(...),
 ):
-    ctx.require(*WRITERS)
+    ctx.need("items" if kind == "item" else "settings", "edit")
     _configure()
     if file.content_type not in ALLOWED:
         raise HTTPException(400, "Only PNG, JPEG or WEBP images are allowed")

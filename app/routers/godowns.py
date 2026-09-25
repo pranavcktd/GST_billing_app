@@ -3,7 +3,7 @@ from decimal import Decimal
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 
-from ..deps import MANAGERS, WRITERS, BCtx
+from ..deps import BCtx
 from ..gst.constants import ItemType, StockMoveType
 from ..models import Godown, Item, StockMovement, StockTransfer, Voucher
 from ..schemas import GodownIn, GodownOut, StockTransferIn
@@ -23,6 +23,8 @@ def _owned(ctx: BCtx, gid: str) -> Godown:
 
 @router.get("/godowns", response_model=list[GodownOut])
 def list_godowns(ctx: BCtx):
+    if not any(ctx.can(m, "create") for m in ("sales", "purchases")):
+        ctx.need("items", "view")
     default_godown(ctx.db, ctx.bid)
     ctx.db.commit()
     values = godown_stock_values(ctx.db, ctx.bid)
@@ -37,7 +39,7 @@ def list_godowns(ctx: BCtx):
 
 @router.post("/godowns", response_model=GodownOut, status_code=201)
 def create_godown(data: GodownIn, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("items", "create")
     default_godown(ctx.db, ctx.bid)
     check_godown_limit(ctx.db, ctx.bid)
     g = Godown(business_id=ctx.bid, **data.model_dump())
@@ -48,7 +50,7 @@ def create_godown(data: GodownIn, ctx: BCtx):
 
 @router.put("/godowns/{gid}", response_model=GodownOut)
 def update_godown(gid: str, data: GodownIn, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("items", "edit")
     g = _owned(ctx, gid)
     g.name, g.address = data.name, data.address
     ctx.db.commit()
@@ -57,7 +59,7 @@ def update_godown(gid: str, data: GodownIn, ctx: BCtx):
 
 @router.delete("/godowns/{gid}", status_code=204)
 def delete_godown(gid: str, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("items", "delete")
     g = _owned(ctx, gid)
     if g.is_default:
         raise HTTPException(400, "The main godown cannot be deleted")
@@ -74,6 +76,7 @@ def delete_godown(gid: str, ctx: BCtx):
 
 @router.get("/items/{item_id}/godowns")
 def item_godown_stock(item_id: str, ctx: BCtx):
+    ctx.need("items", "view")
     it = ctx.db.get(Item, item_id)
     if not it or it.business_id != ctx.bid:
         raise HTTPException(404, "Item not found")
@@ -85,6 +88,7 @@ def item_godown_stock(item_id: str, ctx: BCtx):
 # ---------------------------------------------------------------- stock transfers
 @router.get("/stock-transfers")
 def list_transfers(ctx: BCtx):
+    ctx.need("items", "view")
     names = {g.id: g.name for g in ctx.db.scalars(select(Godown).where(Godown.business_id == ctx.bid))}
     out = []
     for t in ctx.db.scalars(select(StockTransfer).where(StockTransfer.business_id == ctx.bid)
@@ -100,7 +104,7 @@ def list_transfers(ctx: BCtx):
 
 @router.post("/stock-transfers", status_code=201)
 def create_transfer(data: StockTransferIn, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("items", "create")
     src = resolve_godown(ctx.db, ctx.bid, data.from_godown_id)
     dst = resolve_godown(ctx.db, ctx.bid, data.to_godown_id)
     if src.id == dst.id:
@@ -133,7 +137,7 @@ def create_transfer(data: StockTransferIn, ctx: BCtx):
 
 @router.delete("/stock-transfers/{tid}", status_code=204)
 def delete_transfer(tid: str, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("items", "delete")
     t = ctx.db.get(StockTransfer, tid)
     if not t or t.business_id != ctx.bid:
         raise HTTPException(404, "Transfer not found")

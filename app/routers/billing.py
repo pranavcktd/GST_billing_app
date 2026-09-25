@@ -1,4 +1,4 @@
-"""Subscription plans and payments (Razorpay)."""
+"""Subscription plans and payments (Razorpay). The subscription belongs to the account owner."""
 
 from typing import Literal
 
@@ -17,28 +17,36 @@ router = APIRouter(prefix="/billing", tags=["billing"])
 
 def _plan_out(code: str) -> dict:
     p = P.PLANS[code]
-    return dict(code=code, name=p["name"], tagline=p["tagline"], monthly=float(p["monthly"]),
-                yearly=float(p["yearly"]), monthly_with_gst=float(P.with_gst(p["monthly"])),
-                yearly_with_gst=float(P.with_gst(p["yearly"])), invoices_per_month=p["invoices_per_month"],
-                users=p["users"], godowns=p["godowns"], einvoice=p["einvoice"], ewaybill=p["ewaybill"], tally=p["tally"])
+    return dict(code=code, name=p["name"], audience=p["audience"], highlights=p["highlights"],
+                monthly=float(p["monthly"]), yearly=float(p["yearly"]),
+                monthly_with_gst=float(P.with_gst(p["monthly"])), yearly_with_gst=float(P.with_gst(p["yearly"])),
+                **{k: p[k] for k in ("invoices_per_month", "invoices_per_year", "businesses", "users", "godowns",
+                                     "einvoice", "gst_json", "gstr2b", "api_quota", "audit_view", "custom_themes",
+                                     "watermark", "barcode", "custom_roles", "tally", "backup_mb")})
 
 
 @router.get("/plans")
 def plans():
-    """Public — used by the landing page."""
+    """Public — used by the landing / pricing page."""
     return {"plans": [_plan_out(c) for c in P.ORDER], "trial_days": P.TRIAL_DAYS, "trial_plan": P.TRIAL_PLAN,
-            "gst_rate": float(P.GST_RATE)}
+            "gst_rate": float(P.GST_RATE),
+            "addon": {"code": P.ADDON["code"], "name": P.ADDON["name"], "yearly": float(P.ADDON["yearly"]),
+                      "yearly_with_gst": float(P.with_gst(P.ADDON["yearly"]))}}
 
 
 @router.get("/status")
 def status(ctx: BCtx):
-    sub = P.current(ctx.db, ctx.bid)
+    account = P.account_of(ctx.db, ctx.bid)
+    sub = P.current(ctx.db, account)
+    plan = P.plan_of(ctx.db, account)
     ctx.db.commit()
-    history = ctx.db.scalars(select(SubscriptionPayment).where(SubscriptionPayment.business_id == ctx.bid)
-                             .order_by(SubscriptionPayment.created_at.desc()).limit(24)).all()
+    owner = ctx.role == Role.OWNER
+    history = ctx.db.scalars(select(SubscriptionPayment).where(SubscriptionPayment.account_id == account)
+                             .order_by(SubscriptionPayment.created_at.desc()).limit(24)).all() if owner else []
     return {
-        "plan": _plan_out(sub.plan), "status": sub.status, "valid_until": sub.valid_until,
-        "usage": P.usage(ctx.db, ctx.bid), "payments_live": P.payments_live(),
+        "plan": {**_plan_out(sub.plan), "businesses": plan["businesses"]}, "status": sub.status,
+        "valid_until": sub.valid_until, "extra_businesses": sub.extra_businesses,
+        "usage": P.usage(ctx.db, ctx.bid), "is_owner": owner, "payments_live": P.payments_live(),
         "dev_mode": get_settings().is_dev and not P.payments_live(),
         "payments": [dict(id=h.id, plan=h.plan, cycle=h.cycle, amount=float(h.amount), status=h.status,
                           order_id=h.order_id, payment_id=h.payment_id, created_at=h.created_at) for h in history],
@@ -46,14 +54,15 @@ def status(ctx: BCtx):
 
 
 class OrderIn(BaseModel):
-    plan: Literal["GROWTH", "BUSINESS"]
-    cycle: Literal["MONTHLY", "YEARLY"]
+    plan: Literal["STARTER", "PROFESSIONAL", "ENTERPRISE", "ADDON_BUSINESSES"]
+    cycle: Literal["MONTHLY", "YEARLY"] = "YEARLY"
 
 
 @router.post("/order")
 def create_order(data: OrderIn, ctx: BCtx):
-    ctx.require(Role.OWNER, Role.ADMIN)
-    pay = P.create_order(ctx.db, ctx.bid, data.plan, data.cycle)
+    ctx.require(Role.OWNER)
+    account = P.account_of(ctx.db, ctx.bid)
+    pay = P.create_order(ctx.db, account, data.plan, data.cycle)
     ctx.db.commit()
     return {"order_id": pay.order_id, "amount": float(pay.amount), "amount_paise": int(pay.amount * 100),
             "currency": "INR", "key_id": get_settings().razorpay_key_id, "live": P.payments_live(),
@@ -69,9 +78,10 @@ class VerifyIn(BaseModel):
 
 @router.post("/verify")
 def verify(data: VerifyIn, ctx: BCtx):
-    ctx.require(Role.OWNER, Role.ADMIN)
+    ctx.require(Role.OWNER)
+    account = P.account_of(ctx.db, ctx.bid)
     pay = ctx.db.scalar(select(SubscriptionPayment).where(SubscriptionPayment.order_id == data.order_id,
-                                                          SubscriptionPayment.business_id == ctx.bid))
+                                                          SubscriptionPayment.account_id == account))
     if not pay:
         raise HTTPException(404, "Order not found")
     if data.simulate:
@@ -86,12 +96,13 @@ def verify(data: VerifyIn, ctx: BCtx):
         payment_id = data.payment_id
     sub = P.activate(ctx.db, pay, payment_id)
     ctx.db.commit()
-    return {"plan": sub.plan, "status": sub.status, "valid_until": sub.valid_until}
+    return {"plan": sub.plan, "status": sub.status, "valid_until": sub.valid_until,
+            "extra_businesses": sub.extra_businesses}
 
 
 @router.post("/webhook", include_in_schema=False)
 async def webhook(request: Request, db: DB):
-    """Razorpay webhook (event: payment.captured / order.paid) — activates even if the browser closed."""
+    """Razorpay webhook (payment.captured / order.paid) — activates even if the browser was closed."""
     body = await request.body()
     if not P.webhook_signature_ok(body, request.headers.get("x-razorpay-signature", "")):
         raise HTTPException(400, "Bad signature")
