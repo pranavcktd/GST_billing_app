@@ -1,6 +1,7 @@
 "use client";
 
-import { Download, RefreshCw, Trash2 } from "lucide-react";
+import { Download, RefreshCw, Send, Trash2 } from "lucide-react";
+import { RequestCode } from "@/components/HsnPicker";
 import { useState } from "react";
 import { ImportButton } from "@/components/ImportDialog";
 import { Button, Card, Empty, ErrorBox, Field, Input, Loading, PageHeader, Select } from "@/components/ui";
@@ -17,7 +18,9 @@ export default function HsnPage() {
   const [f, setF] = useState({ code: "", description: "", gst_rate: 18, cess_rate: "", effective_from: "" });
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const { data: masterHits } = useFetch<Omit<Hsn, "id">[]>(f.code.length >= 2 ? `/hsn-master${qs({ search: f.code })}` : null);
+  const [requesting, setRequesting] = useState(false);
+  const { data: requests, reload: reloadRequests } = useFetch<{ id: string; code: string; description: string; status: string; admin_note: string | null; created_at: string }[]>("/hsn-master/requests");
+  const { data: masterHits } = useFetch<(Omit<Hsn, "id" | "gst_rate"> & { gst_rate: number | null })[]>(f.code.length >= 2 ? `/hsn-master${qs({ search: f.code })}` : null);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -40,7 +43,7 @@ export default function HsnPage() {
 
   async function pickMaster(code: string) {
     const hit = (masterHits ?? []).find((h) => h.code === code);
-    if (hit) setF({ code: hit.code, description: hit.description ?? "", gst_rate: hit.gst_rate, cess_rate: String(hit.cess_rate || ""), effective_from: hit.effective_from ?? "" });
+    if (hit) setF({ code: hit.code, description: hit.description ?? "", gst_rate: hit.gst_rate ?? f.gst_rate, cess_rate: String(hit.cess_rate || ""), effective_from: hit.effective_from ?? "" });
   }
 
   async function apply() {
@@ -57,6 +60,7 @@ export default function HsnPage() {
         actions={
           <>
             <ImportButton entity="hsn" title="HSN / SAC codes (add or update)" onDone={reload} />
+            <Button variant="secondary" onClick={() => setRequesting(true)}><Send size={16} /> Request a missing code</Button>
             <Button variant="secondary" onClick={copyMaster} title="Copy the codes used on your items from the platform's official HSN master"><Download size={16} /> Sync from official master</Button>
             <Button variant="secondary" onClick={apply}><RefreshCw size={16} /> Apply rates to items</Button>
           </>
@@ -78,7 +82,7 @@ export default function HsnPage() {
             From the official master:
             {masterHits!.slice(0, 8).map((h) => (
               <button key={h.code} type="button" onClick={() => pickMaster(h.code)} className="rounded border border-gray-200 px-1.5 py-0.5 hover:bg-gray-50" title={h.description ?? ""}>
-                <span className="font-mono">{h.code}</span> · {h.gst_rate}%
+                <span className="font-mono">{h.code}</span>{h.gst_rate !== null ? ` · ${h.gst_rate}%` : ""}
               </button>
             ))}
           </div>
@@ -105,6 +109,24 @@ export default function HsnPage() {
           </table>
         )}
       </Card>
+          {requests && requests.length > 0 && (
+        <Card className="mt-5 overflow-x-auto">
+          <h2 className="px-5 pt-4 pb-2 font-semibold text-gray-900">My code requests</h2>
+          <table className="tbl">
+            <thead><tr><th>Code</th><th>Description</th><th>Requested</th><th>Status</th><th>Reply</th></tr></thead>
+            <tbody>
+              {requests.map((r) => (
+                <tr key={r.id}>
+                  <td className="font-mono">{r.code}</td><td className="text-xs">{r.description}</td><td>{fmtDate(r.created_at)}</td>
+                  <td className={r.status === "APPROVED" ? "text-emerald-700" : r.status === "REJECTED" ? "text-red-700" : "text-amber-700"}>{r.status === "PENDING" ? "Waiting for review" : r.status === "APPROVED" ? "Added to the official list" : "Rejected"}</td>
+                  <td className="text-xs">{r.admin_note ?? ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+      {requesting && <RequestCode code={f.code} service={f.code.startsWith("99")} onClose={() => setRequesting(false)} onDone={reloadRequests} />}
     </>
   );
 }

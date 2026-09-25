@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { HsnPicker } from "@/components/HsnPicker";
 import { ImageUpload } from "@/components/ImageUpload";
 import { Button, Card, ErrorBox, Field, Input, Select, Textarea } from "@/components/ui";
 import { GST_RATES, UNITS } from "@/lib/constants";
-import { api } from "@/lib/api";
 import { today } from "@/lib/format";
 import type { Item, ItemType } from "@/lib/types";
 
@@ -43,24 +43,6 @@ export function ItemForm({
       set(k, (e.target.value === "" ? (nullable ? null : 0) : Number(e.target.value)) as never),
   });
   const goods = it.type === "GOODS";
-  const [hsnHint, setHsnHint] = useState<string | null>(null);
-
-  /** Look the code up in the HSN/SAC master and apply its current GST rate. */
-  async function lookupHsn(code: string) {
-    setHsnHint(null);
-    if (!/^\d{4,8}$/.test(code)) return;
-    try {
-      const hits = await api<{ code: string; description: string | null; gst_rate: number; cess_rate: number }[]>(`/hsn?search=${code}`);
-      const hit = hits.find((h) => h.code === code);
-      if (hit) {
-        setIt((prev) => ({ ...prev, gst_rate: hit.gst_rate, cess_rate: hit.cess_rate }));
-        setHsnHint(`From HSN master: ${hit.gst_rate}% GST${hit.description ? ` — ${hit.description}` : ""}`);
-      }
-    } catch {
-      /* master lookup is optional */
-    }
-  }
-
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -93,9 +75,9 @@ export function ItemForm({
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Item name" required className="sm:col-span-2"><Input required autoFocus {...text("name")} /></Field>
           <Field label="Item code / SKU"><Input {...text("code")} /></Field>
-          <Field label={goods ? "HSN code" : "SAC code"} hint="4–8 digits; mandatory for most GST filers">
-            <Input inputMode="numeric" maxLength={8} pattern="\d{4,8}" {...text("hsn_sac")} onBlur={(e) => lookupHsn(e.target.value)} />
-            {hsnHint && <span className="mt-1 block text-xs text-emerald-700">{hsnHint}</span>}
+          <Field label={goods ? "HSN code" : "SAC code"} hint="Search the official list by code or name">
+            <HsnPicker value={it.hsn_sac ?? ""} service={!goods} onChange={(c) => set("hsn_sac", c as never)}
+              onRate={(gst, cess) => setIt((prev) => ({ ...prev, gst_rate: gst, cess_rate: cess ?? prev.cess_rate }))} />
           </Field>
           <Field label="Unit">
             <Select value={it.unit} onChange={(e) => set("unit", e.target.value)}>
