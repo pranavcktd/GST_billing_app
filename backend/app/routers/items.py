@@ -54,6 +54,30 @@ def create_item(data: ItemIn, ctx: BCtx):
     return _out(it, data.opening_stock if data.type == ItemType.GOODS else 0)
 
 
+def _ean13(body12: str) -> str:
+    total = sum(int(d) * (3 if i % 2 else 1) for i, d in enumerate(body12))
+    return body12 + str((10 - total % 10) % 10)
+
+
+@router.post("/assign-codes")
+def assign_codes(ctx: BCtx):
+    """Give every item without a code an in-store EAN-13 barcode (prefix 2xx, reserved for internal use)."""
+    ctx.require(*WRITERS)
+    used = {c for c in ctx.db.scalars(select(Item.code).where(Item.business_id == ctx.bid, Item.code.is_not(None)))}
+    seq, count = 1, 0
+    for it in ctx.db.scalars(select(Item).where(Item.business_id == ctx.bid, Item.code.is_(None)).order_by(Item.name)):
+        while True:
+            code = _ean13(f"2{seq:011d}")
+            seq += 1
+            if code not in used:
+                break
+        it.code = code
+        used.add(code)
+        count += 1
+    ctx.db.commit()
+    return {"assigned": count}
+
+
 @router.get("/{item_id}", response_model=ItemOut)
 def get_item(item_id: str, ctx: BCtx):
     it = _get(ctx, item_id)

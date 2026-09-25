@@ -126,6 +126,32 @@ class TokenOut(MeOut):
 
 
 # ---------- business ----------
+class CustomField(BaseModel):
+    key: Annotated[str, StringConstraints(pattern=r"^[a-z0-9_]{1,30}$")]
+    label: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
+    print: bool = True
+
+
+class PrintSettings(BaseModel):
+    """How invoices look. Stored as JSON on the business."""
+    theme: Literal["classic", "modern", "minimal"] = "classic"
+    accent: Annotated[str, StringConstraints(pattern=r"^#[0-9a-fA-F]{6}$")] = "#1f65bb"
+    paper: Literal["A4", "A5", "THERMAL_80", "THERMAL_58"] = "A4"
+    copy_labels: list[Literal["ORIGINAL", "DUPLICATE", "TRIPLICATE"]] = ["ORIGINAL"]
+    show_hsn: bool = True
+    show_discount: bool = True
+    show_tax_summary: bool = True
+    show_bank: bool = True
+    show_upi_qr: bool = True
+    show_terms: bool = True
+    show_signature: bool = True
+    show_item_description: bool = True
+    show_transport: bool = True
+    title_override: Opt(40) = None
+    footer_note: Opt(300) = None
+    custom_fields: Annotated[list[CustomField], Field(max_length=8)] = []
+
+
 class BusinessIn(BaseModel):
     name: Name
     legal_name: Opt() = None
@@ -159,6 +185,10 @@ class BusinessIn(BaseModel):
     invoice_terms: Opt(2000) = None
     auto_backup: bool = True
     backup_email: Opt(200) = None
+    transfer_prefix: Prefix = "ST"
+    print_settings: PrintSettings = PrintSettings()
+    einvoice_username: Opt(100) = None
+    einvoice_password: Opt(100) = None  # write-only; stored encrypted
 
     _gstin = field_validator("gstin")(_check_gstin)
     _state = field_validator("state_code")(_check_state)
@@ -217,6 +247,10 @@ class BusinessOut(ORM):
     invoice_terms: str | None
     auto_backup: bool
     backup_email: str | None
+    transfer_prefix: str
+    print_settings: PrintSettings | None
+    einvoice_username: str | None
+    einvoice_password_set: bool = False
 
 
 # ---------- parties ----------
@@ -370,6 +404,25 @@ class VoucherLineIn(BaseModel):
     _rate = field_validator("gst_rate")(_check_gst_rate)
 
 
+class TransportIn(BaseModel):
+    """Transport details printed on the bill and used for the e-way bill."""
+    mode: Literal["1", "2", "3", "4"] = "1"  # road / rail / air / ship
+    vehicle_no: Opt(20) = None
+    vehicle_type: Literal["R", "O"] = "R"  # regular / over-dimensional cargo
+    transporter_name: Opt(100) = None
+    transporter_id: Opt(15) = None  # transporter GSTIN / TRANSIN
+    doc_no: Opt(20) = None          # LR / RR / airway bill no.
+    doc_date: dt.date | None = None
+    distance_km: Annotated[int, Field(ge=0, le=4000)] = 0
+    sub_supply_type: Literal["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"] = "1"
+    ship_to: Opt(300) = None
+
+    @field_validator("vehicle_no")
+    @classmethod
+    def _veh(cls, v):
+        return v.upper().replace(" ", "") if v else v
+
+
 class VoucherIn(BaseModel):
     type: VoucherType
     number: DocNumber | None = None  # auto-generated when blank
@@ -396,6 +449,9 @@ class VoucherIn(BaseModel):
     payment_mode: PaymentMode = PaymentMode.CASH
     payment_account_id: str | None = None  # defaults to cash in hand
     source_voucher_id: str | None = None   # estimate / order / challan being converted
+    godown_id: str | None = None           # stock location; default godown when empty
+    transport: "TransportIn | None" = None
+    extra_fields: dict[str, Annotated[str, StringConstraints(max_length=200)]] | None = None
 
     _pos = field_validator("place_of_supply")(_check_state)
 
@@ -470,6 +526,18 @@ class VoucherOut(ORM):
     converted_to_id: str | None
     source_voucher_id: str | None
     expense_category_id: str | None
+    godown_id: str | None
+    transport: dict | None
+    extra_fields: dict | None
+    irn: str | None
+    ack_no: str | None
+    ack_date: dt.datetime | None
+    signed_qr: str | None
+    einvoice_status: str | None
+    einvoice_sandbox: bool
+    ewb_no: str | None
+    ewb_date: dt.datetime | None
+    ewb_valid_till: dt.datetime | None
     paid: Num = Decimal("0")
     balance: Num = Decimal("0")
     status: str = ""
@@ -701,3 +769,32 @@ class ExpenseItemOut(ORM):
     rate: Num
     gst_rate: Num
     is_active: bool
+
+
+# ---------- godowns ----------
+class GodownIn(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    address: Opt(300) = None
+
+
+class GodownOut(ORM):
+    id: str
+    name: str
+    address: str | None
+    is_default: bool
+    is_active: bool
+    stock_value: Num = Decimal("0")
+
+
+class TransferLineIn(BaseModel):
+    item_id: str
+    qty: Annotated[Decimal, Field(gt=0, max_digits=14, decimal_places=3)]
+    batch_no: Opt(50) = None
+
+
+class StockTransferIn(BaseModel):
+    date: dt.date
+    from_godown_id: str
+    to_godown_id: str
+    note: Opt(200) = None
+    lines: Annotated[list[TransferLineIn], Field(min_length=1, max_length=500)]

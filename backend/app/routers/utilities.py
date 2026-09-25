@@ -13,6 +13,7 @@ from ..gst.constants import GST_RATES, Role
 from ..models import Backup, Business, HsnCode, Item, Membership, User
 from ..services import backup as bk
 from ..services.importer import ENTITIES, run_import, template
+from ..services.plans import check_user_limit
 
 router = APIRouter(tags=["utilities"])
 MAX_UPLOAD = 10 * 1024 * 1024
@@ -226,6 +227,7 @@ class MemberIn(BaseModel):
 @router.post("/members", status_code=201)
 def add_member(data: MemberIn, ctx: BCtx):
     ctx.require(Role.OWNER, Role.ADMIN)
+    check_user_limit(ctx.db, ctx.bid)
     u = ctx.db.scalar(select(User).where(func.lower(User.email) == data.email.lower()))
     if not u:
         raise HTTPException(404, "No account with this email — ask them to sign up first, then add them here")

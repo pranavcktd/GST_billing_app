@@ -24,6 +24,8 @@ from ..models import (
     Backup,
     Business,
     CapitalEntry,
+    Godown,
+    StockTransfer,
     Counter,
     ExpenseCategory,
     ExpenseItem,
@@ -45,8 +47,8 @@ FORMAT = "gst-billing-backup"
 VERSION = 1
 
 # insert order respects foreign keys
-TABLES = [Business, Account, ExpenseCategory, ExpenseItem, Party, Item, Loan, HsnCode, Voucher, VoucherLine,
-          StockMovement, Payment, PaymentAllocation, Counter, AccountTransfer, CapitalEntry, LoanTxn, TaxPayment]
+TABLES = [Business, Account, Godown, ExpenseCategory, ExpenseItem, Party, Item, Loan, HsnCode, Voucher, VoucherLine,
+          StockTransfer, StockMovement, Payment, PaymentAllocation, Counter, AccountTransfer, CapitalEntry, LoanTxn, TaxPayment]
 # id references stored without a foreign key
 LOOSE_REFS = {"vouchers": ["source_voucher_id", "converted_to_id"]}
 SELF_REFS = {"vouchers": ["original_voucher_id"]}
@@ -204,5 +206,8 @@ def restore_as_new(db: Session, blob: bytes, user_id: str, new_name: str | None 
     for t, rid, colname, val in deferred:
         db.execute(update(t).where(t.c.id == rid).values({colname: val}))
     db.add(Membership(user_id=user_id, business_id=new_bid, role=Role.OWNER))
+    from .plans import start_trial
+
+    start_trial(db, new_bid)
     db.flush()
     return db.get(Business, new_bid)

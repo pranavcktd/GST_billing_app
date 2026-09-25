@@ -116,6 +116,7 @@ class StockMoveType(str, Enum):
     PURCHASE = "PURCHASE"
     PURCHASE_RETURN = "PURCHASE_RETURN"
     ADJUSTMENT = "ADJUSTMENT"
+    TRANSFER = "TRANSFER"  # between godowns; nets to zero overall
 
 
 # Per voucher type: stock direction, party ledger direction (+ = party owes us more),

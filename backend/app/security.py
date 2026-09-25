@@ -31,3 +31,22 @@ def decode_token(token: str) -> str | None:
         return jwt.decode(token, get_settings().jwt_secret, algorithms=[ALGORITHM])["sub"]
     except jwt.PyJWTError:
         return None
+
+
+# ---------------------------------------------------------------- secrets at rest
+def _fernet():
+    import base64
+    import hashlib
+
+    from cryptography.fernet import Fernet
+
+    key = hashlib.sha256(("enc:" + get_settings().jwt_secret).encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(key))
+
+
+def encrypt_secret(value: str) -> str:
+    return _fernet().encrypt(value.encode()).decode()
+
+
+def decrypt_secret(token: str) -> str:
+    return _fernet().decrypt(token.encode()).decode()

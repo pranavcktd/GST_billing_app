@@ -5,6 +5,7 @@ import datetime as dt
 from decimal import Decimal
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     LargeBinary,
     Date,
@@ -104,6 +105,12 @@ class Business(Base):
     invoice_terms: Mapped[str | None] = mapped_column(Text)
     auto_backup: Mapped[bool] = mapped_column(Boolean, default=True)
     backup_email: Mapped[str | None] = mapped_column(String(200))
+    transfer_prefix: Mapped[str] = mapped_column(String(8), default="ST")
+    # invoice look & feel, custom fields, paper size... (see schemas.PrintSettings)
+    print_settings: Mapped[dict | None] = mapped_column(JSON)
+    # e-invoice / e-way bill API user created on the IRP / EWB portal (password encrypted)
+    einvoice_username: Mapped[str | None] = mapped_column(String(100))
+    einvoice_password_enc: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -188,6 +195,32 @@ class Account(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class Godown(Base):
+    """A warehouse / shop / store location that holds stock."""
+
+    __tablename__ = "godowns"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    address: Mapped[str | None] = mapped_column(Text)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class StockTransfer(Base):
+    """Move stock from one godown to another (no effect on quantity overall or on accounts)."""
+
+    __tablename__ = "stock_transfers"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    number: Mapped[str] = mapped_column(String(16))
+    date: Mapped[dt.date] = mapped_column(Date)
+    from_godown_id: Mapped[str] = mapped_column(ForeignKey("godowns.id", ondelete="RESTRICT"))
+    to_godown_id: Mapped[str] = mapped_column(ForeignKey("godowns.id", ondelete="RESTRICT"))
+    note: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class ExpenseCategory(Base):
     __tablename__ = "expense_categories"
     __table_args__ = (UniqueConstraint("business_id", "name", name="uq_expense_category"),)
@@ -246,6 +279,20 @@ class Voucher(Base):
     reason: Mapped[str | None] = mapped_column(String(200))
     expense_category_id: Mapped[str | None] = mapped_column(ForeignKey("expense_categories.id", ondelete="RESTRICT"))
     source_voucher_id: Mapped[str | None] = mapped_column(String(32))  # order / challan / estimate it came from
+    godown_id: Mapped[str | None] = mapped_column(ForeignKey("godowns.id", ondelete="RESTRICT"))
+    # vehicle no, transporter, distance, LR... used on the bill and for the e-way bill
+    transport: Mapped[dict | None] = mapped_column(JSON)
+    extra_fields: Mapped[dict | None] = mapped_column(JSON)  # business-defined custom fields (PO no. etc.)
+    # e-invoice (IRN) and e-way bill
+    irn: Mapped[str | None] = mapped_column(String(64))
+    ack_no: Mapped[str | None] = mapped_column(String(20))
+    ack_date: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    signed_qr: Mapped[str | None] = mapped_column(Text)
+    einvoice_status: Mapped[str | None] = mapped_column(String(12))  # GENERATED / CANCELLED
+    einvoice_sandbox: Mapped[bool] = mapped_column(Boolean, default=False)
+    ewb_no: Mapped[str | None] = mapped_column(String(20))
+    ewb_date: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    ewb_valid_till: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
     sub_total: Mapped[Decimal] = mapped_column(Money)
     discount: Mapped[Decimal] = mapped_column(Money)
@@ -321,6 +368,8 @@ class StockMovement(Base):
     qty: Mapped[Decimal] = mapped_column(Qty)  # signed: + in, - out
     rate: Mapped[Decimal | None] = mapped_column(Money)
     batch_no: Mapped[str | None] = mapped_column(String(50))
+    godown_id: Mapped[str | None] = mapped_column(ForeignKey("godowns.id", ondelete="RESTRICT"), index=True)
+    transfer_id: Mapped[str | None] = mapped_column(ForeignKey("stock_transfers.id", ondelete="CASCADE"), index=True)
     voucher_id: Mapped[str | None] = mapped_column(ForeignKey("vouchers.id", ondelete="CASCADE"), index=True)
     note: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -492,4 +541,45 @@ class Backup(Base):
     data: Mapped[bytes] = mapped_column(LargeBinary)
     emailed_to: Mapped[str | None] = mapped_column(String(200))
     created_by_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class AuditLog(Base):
+    """Who changed what, when. Written automatically for every successful change."""
+
+    __tablename__ = "audit_logs"
+    __table_args__ = (Index("ix_audit_business_created", "business_id", "created_at"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str | None] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"))
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    user_name: Mapped[str | None] = mapped_column(String(120))
+    action: Mapped[str] = mapped_column(String(12))  # CREATE / UPDATE / DELETE / CANCEL / ACTION
+    entity: Mapped[str] = mapped_column(String(40))
+    entity_id: Mapped[str | None] = mapped_column(String(32))
+    summary: Mapped[str] = mapped_column(String(300))
+    ip: Mapped[str | None] = mapped_column(String(45))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Subscription(Base):
+    """The plan a company is on. New companies start on a free trial of the top plan."""
+
+    __tablename__ = "subscriptions"
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True)
+    plan: Mapped[str] = mapped_column(String(20))           # FREE / GROWTH / BUSINESS
+    status: Mapped[str] = mapped_column(String(10))         # TRIAL / ACTIVE / EXPIRED
+    valid_until: Mapped[dt.date | None] = mapped_column(Date)
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class SubscriptionPayment(Base):
+    __tablename__ = "subscription_payments"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    plan: Mapped[str] = mapped_column(String(20))
+    cycle: Mapped[str] = mapped_column(String(10))  # MONTHLY / YEARLY
+    amount: Mapped[Decimal] = mapped_column(Money)   # incl. GST
+    order_id: Mapped[str] = mapped_column(String(60), unique=True)
+    payment_id: Mapped[str | None] = mapped_column(String(60))
+    status: Mapped[str] = mapped_column(String(10))  # CREATED / PAID / FAILED
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)

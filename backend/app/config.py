@@ -3,11 +3,23 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def to_sqlalchemy_url(url: str) -> str:
+    """Use the psycopg (v3) driver for plain postgres URLs (Railway gives postgresql://...)."""
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    # "development" enables local conveniences (simulated subscription payments). Set "production" when live.
+    app_env: str = "development"
+
     # Railway exposes DATABASE_URL as postgresql://user:pass@host:port/db
     database_url: str = "sqlite:///./dev.db"
+    test_database_url: str | None = None  # pytest uses this database (wiped on every test)
     jwt_secret: str = "dev-only-secret-change-me-in-production-0000"
     jwt_expire_minutes: int = 60 * 24 * 7
     cors_origins: str = "http://localhost:3000"
@@ -22,14 +34,24 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     smtp_from: str | None = None
 
+    # subscriptions (Razorpay dashboard -> Settings -> API keys / Webhooks)
+    razorpay_key_id: str | None = None
+    razorpay_key_secret: str | None = None
+    razorpay_webhook_secret: str | None = None
+
+    # e-invoice / e-way bill: "sandbox" issues test IRNs locally; "gsp" calls your GSP's API
+    einvoice_provider: str = "sandbox"
+    gsp_base_url: str | None = None
+    gsp_client_id: str | None = None
+    gsp_client_secret: str | None = None
+
+    @property
+    def is_dev(self) -> bool:
+        return self.app_env.lower() != "production"
+
     @property
     def sqlalchemy_url(self) -> str:
-        url = self.database_url
-        # Use the psycopg (v3) driver for plain postgres URLs.
-        for prefix in ("postgres://", "postgresql://"):
-            if url.startswith(prefix):
-                return "postgresql+psycopg://" + url[len(prefix):]
-        return url
+        return to_sqlalchemy_url(self.database_url)
 
     @property
     def cors_origin_list(self) -> list[str]:
