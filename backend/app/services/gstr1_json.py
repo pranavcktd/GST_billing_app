@@ -57,6 +57,7 @@ def build(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) -> d
     b2cl: dict[str, list] = defaultdict(list)
     cdnr: dict[str, list] = defaultdict(list)
     cdnur: list = []
+    exp: dict[str, list] = defaultdict(list)
     b2cs: dict[tuple, dict] = defaultdict(lambda: dict(txval=ZERO, iamt=ZERO, camt=ZERO, samt=ZERO, csamt=ZERO))
     nil = {k: ZERO for k in ("INTRB2B", "INTRAB2B", "INTRB2C", "INTRAB2C")}
     hsn = {"B2B": defaultdict(lambda: dict(qty=ZERO, txval=ZERO, iamt=ZERO, camt=ZERO, samt=ZERO, csamt=ZERO, desc="")),
@@ -78,14 +79,29 @@ def build(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) -> d
             h["samt"] += sign * l.sgst
             h["csamt"] += sign * l.cess
             h["desc"] = h["desc"] or l.name[:30]
-        items = _items(v)
+        is_export = bool(v.export_type and v.export_type.startswith("EXP"))
+        items = _items(v, only_rated=not is_export)
         if not items:
+            continue
+        if is_export:
+            pay = "WPAY" if v.export_type == "EXPWP" else "WOPAY"
+            for it in items:  # exports carry only IGST and cess
+                it["itm_det"] = {k: it["itm_det"].get(k, 0.0) for k in ("txval", "rt", "iamt", "csamt")}
+            if sale:
+                inv = {"inum": v.number, "idt": _date(v.date), "val": _f(v.grand_total), "itms": items}
+                if v.shipping_bill_no:
+                    inv.update(sbnum=v.shipping_bill_no, sbdt=_date(v.shipping_bill_date) if v.shipping_bill_date else None,
+                               sbpcode=v.port_code)
+                exp[pay].append({k: val for k, val in inv.items() if val is not None})
+            else:
+                cdnur.append({"typ": "EXP" + pay, "ntty": "C", "nt_num": v.number, "nt_dt": _date(v.date),
+                               "val": _f(v.grand_total), "itms": items})
             continue
         if sale:
             inv = {"inum": v.number, "idt": _date(v.date), "val": _f(v.grand_total), "pos": v.place_of_supply,
                    "itms": items}
             if reg:
-                b2b[v.party_gstin].append({**inv, "rchrg": "Y" if v.reverse_charge else "N", "inv_typ": "R"})
+                b2b[v.party_gstin].append({**inv, "rchrg": "Y" if v.reverse_charge else "N", "inv_typ": {"SEZWP": "SEWP", "SEZWOP": "SEWOP"}.get(v.export_type or "", "R")})
             elif v.inter_state and v.grand_total > B2CL_LIMIT:
                 b2cl[v.place_of_supply].append({k: inv[k] for k in ("inum", "idt", "val", "itms")})
             else:
@@ -98,7 +114,7 @@ def build(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) -> d
             note = {"ntty": "C", "nt_num": v.number, "nt_dt": _date(v.date), "val": _f(v.grand_total),
                     "pos": v.place_of_supply, "itms": items}
             if reg:
-                cdnr[v.party_gstin].append({**note, "rchrg": "N", "inv_typ": "R"})
+                cdnr[v.party_gstin].append({**note, "rchrg": "N", "inv_typ": {"SEZWP": "SEWP", "SEZWOP": "SEWOP"}.get(v.export_type or "", "R")})
             else:
                 orig = originals.get(v.original_voucher_id)
                 if orig and orig.inter_state and orig.grand_total > B2CL_LIMIT:
@@ -137,6 +153,7 @@ def build(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) -> d
                  for k, b in sorted(b2cs.items()) if b["txval"]],
         "cdnr": [{"ctin": k, "nt": v} for k, v in sorted(cdnr.items())],
         "cdnur": cdnur,
+        "exp": [{"exp_typ": k, "inv": v} for k, v in sorted(exp.items())],
         "nil": {"inv": [{"sply_ty": k, "expt_amt": 0, "nil_amt": _f(v), "ngsup_amt": 0} for k, v in nil.items() if v]},
         "hsn": {"hsn_b2b": hsn_rows(hsn["B2B"]), "hsn_b2c": hsn_rows(hsn["B2C"])},
         "doc_issue": {"doc_det": doc_det},

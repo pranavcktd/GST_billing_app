@@ -13,7 +13,7 @@ import type { ExpenseCategory, ExpenseItem } from "@/lib/types";
 export default function ExpenseSetupPage() {
   const { data: cats, reload: reloadCats } = useFetch<ExpenseCategory[]>("/expenses/categories");
   const { data: items, reload: reloadItems } = useFetch<ExpenseItem[]>("/expenses/items");
-  const [cat, setCat] = useState<{ id?: string; name: string; kind: "DIRECT" | "INDIRECT" }>({ name: "", kind: "INDIRECT" });
+  const [cat, setCat] = useState<{ id?: string; name: string; kind: "DIRECT" | "INDIRECT"; itc_blocked: boolean }>({ name: "", kind: "INDIRECT", itc_blocked: false });
   const [item, setItem] = useState<{ id?: string; name: string; category_id: string; rate: string; gst_rate: number; hsn_sac: string }>(
     { name: "", category_id: "", rate: "", gst_rate: 0, hsn_sac: "" });
   const [error, setError] = useState<string | null>(null);
@@ -25,8 +25,8 @@ export default function ExpenseSetupPage() {
     e.preventDefault();
     setError(null);
     try {
-      await api(cat.id ? `/expenses/categories/${cat.id}` : "/expenses/categories", { method: cat.id ? "PUT" : "POST", body: { name: cat.name, kind: cat.kind } });
-      setCat({ name: "", kind: "INDIRECT" });
+      await api(cat.id ? `/expenses/categories/${cat.id}` : "/expenses/categories", { method: cat.id ? "PUT" : "POST", body: { name: cat.name, kind: cat.kind, itc_blocked: cat.itc_blocked } });
+      setCat({ name: "", kind: "INDIRECT", itc_blocked: false });
       reloadCats();
     } catch (err) { setError((err as Error).message); }
   }
@@ -63,6 +63,9 @@ export default function ExpenseSetupPage() {
                 <option value="INDIRECT">Indirect</option><option value="DIRECT">Direct</option>
               </Select>
             </Field>
+            <label className="flex items-center gap-1.5 pb-2 text-xs text-gray-600" title="GST on these expenses is not claimed as input tax credit (Sec. 17(5): food, club, personal use…)">
+              <input type="checkbox" checked={cat.itc_blocked} onChange={(e) => setCat({ ...cat, itc_blocked: e.target.checked })} /> ITC blocked
+            </label>
             <Button type="submit">{cat.id ? "Update" : "Add"}</Button>
           </form>
           <table className="tbl">
@@ -70,9 +73,9 @@ export default function ExpenseSetupPage() {
             <tbody>
               {cats.map((c) => (
                 <tr key={c.id} className={c.is_active ? "" : "text-gray-400"}>
-                  <td>{c.name}</td><td>{c.kind === "DIRECT" ? "Direct" : "Indirect"}</td><td className="num">{money(c.total)}</td>
+                  <td>{c.name}{c.itc_blocked && <span className="ml-1.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-800">ITC blocked</span>}</td><td>{c.kind === "DIRECT" ? "Direct" : "Indirect"}</td><td className="num">{money(c.total)}</td>
                   <td className="whitespace-nowrap text-right">
-                    <button className="mr-2 text-gray-400 hover:text-gray-700" aria-label="Edit" onClick={() => setCat({ id: c.id, name: c.name, kind: c.kind })}><Pencil size={15} /></button>
+                    <button className="mr-2 text-gray-400 hover:text-gray-700" aria-label="Edit" onClick={() => setCat({ id: c.id, name: c.name, kind: c.kind, itc_blocked: c.itc_blocked })}><Pencil size={15} /></button>
                     <button className="text-gray-400 hover:text-red-600" aria-label="Delete" onClick={() => del(`/expenses/categories/${c.id}`, reloadCats)}><Trash2 size={15} /></button>
                   </td>
                 </tr>

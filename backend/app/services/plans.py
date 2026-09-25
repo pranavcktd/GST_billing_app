@@ -62,7 +62,7 @@ ADDON = dict(code="ADDON_BUSINESSES", name="5 extra businesses", businesses=5, y
 REPORT_MIN_PLAN = {
     **{s: "FREE" for s in ("sale", "purchase", "day-book", "payments", "party-statement", "all-parties", "low-stock")},
     **{s: "PROFESSIONAL" for s in ("party-ledger", "gstr2", "gst-transactions", "gstr9", "bill-profit", "party-pnl",
-                                   "item-pnl", "capital", "loan-statement", "loans", "tds-payable", "tds-receivable",
+                                   "item-pnl", "capital", "gstr4", "loan-statement", "loans", "tds-payable", "tds-receivable",
                                    "form-27eq")},
     **{s: "ENTERPRISE" for s in ("batch", "serial", "godown-stock", "pending-order-items")},
 }

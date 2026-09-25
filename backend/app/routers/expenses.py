@@ -19,7 +19,7 @@ DEFAULT_CATEGORIES = [
     ("Electricity", ExpenseKind.INDIRECT),
     ("Petrol & Fuel", ExpenseKind.INDIRECT),
     ("Transport & Travel", ExpenseKind.INDIRECT),
-    ("Tea & Refreshments", ExpenseKind.INDIRECT),
+    ("Tea & Refreshments", ExpenseKind.INDIRECT, True),
     ("Telephone & Internet", ExpenseKind.INDIRECT),
     ("Repairs & Maintenance", ExpenseKind.INDIRECT),
     ("Printing & Stationery", ExpenseKind.INDIRECT),
@@ -31,8 +31,8 @@ DEFAULT_CATEGORIES = [
 
 
 def seed_categories(db, business_id: str) -> None:
-    for name, kind in DEFAULT_CATEGORIES:
-        db.add(ExpenseCategory(business_id=business_id, name=name, kind=kind))
+    for name, kind, *blocked in DEFAULT_CATEGORIES:
+        db.add(ExpenseCategory(business_id=business_id, name=name, kind=kind, itc_blocked=bool(blocked and blocked[0])))
 
 
 def _owned(ctx: BCtx, model, obj_id: str, label: str):
@@ -71,7 +71,7 @@ def create_category(data: ExpenseCategoryIn, ctx: BCtx):
 def update_category(cat_id: str, data: ExpenseCategoryIn, ctx: BCtx):
     ctx.need("expenses", "edit")
     c = _owned(ctx, ExpenseCategory, cat_id, "Category")
-    c.name, c.kind = data.name, data.kind
+    c.name, c.kind, c.itc_blocked = data.name, data.kind, data.itc_blocked
     ctx.db.commit()
     return c
 

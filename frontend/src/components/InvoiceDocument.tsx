@@ -103,7 +103,9 @@ export function InvoiceDocument({ v, business, copy }: { v: VoucherDetail; busin
           <span className="text-gray-500">No.</span><span className="font-semibold">{v.number}</span>
           <span className="text-gray-500">Date</span><span>{fmtDate(v.date)}</span>
           {v.due_date && (<><span className="text-gray-500">Due date</span><span>{fmtDate(v.due_date)}</span></>)}
-          {showTax && (<><span className="text-gray-500">Place of supply</span><span>{v.place_of_supply}-{STATES[v.place_of_supply]}</span></>)}
+          {showTax && (<><span className="text-gray-500">Place of supply</span><span>{v.place_of_supply}-{STATES[v.place_of_supply] ?? "Outside India"}</span></>)}
+          {v.shipping_bill_no && (<><span className="text-gray-500">{v.export_type === "IMPORT" ? "Bill of entry" : "Shipping bill"}</span><span>{v.shipping_bill_no}{v.shipping_bill_date ? ` · ${fmtDate(v.shipping_bill_date)}` : ""}{v.port_code ? ` · ${v.port_code}` : ""}</span></>)}
+          {v.currency_code && v.exchange_rate && (<><span className="text-gray-500">Currency</span><span>{v.currency_code} @ ₹{v.exchange_rate} · {v.currency_code} {(v.grand_total / v.exchange_rate).toFixed(2)}</span></>)}
           {v.supplier_invoice_no && (<><span className="text-gray-500">Supplier bill</span><span>{v.supplier_invoice_no}{v.supplier_invoice_date ? ` · ${fmtDate(v.supplier_invoice_date)}` : ""}</span></>)}
           {v.original_number && (<><span className="text-gray-500">Against</span><span>{v.original_number}</span></>)}
           {v.reason && (<><span className="text-gray-500">Reason</span><span>{v.reason}</span></>)}
@@ -225,6 +227,14 @@ export function InvoiceDocument({ v, business, copy }: { v: VoucherDetail; busin
               </>
             )}
             {v.reverse_charge && <div className="pt-1 text-[10px]">Tax is payable on reverse charge basis.</div>}
+            {v.export_type && v.export_type !== "IMPORT" && (
+              <div className="pt-1 text-[10px] font-medium">
+                {v.export_type.startsWith("EXP") ? "Supply meant for export" : "Supply meant for SEZ unit / developer for authorised operations"}
+                {v.export_type.endsWith("WOP")
+                  ? ` under bond or Letter of Undertaking${business.lut_number ? ` (${business.lut_number})` : ""} without payment of integrated tax.`
+                  : " on payment of integrated tax."}
+              </div>
+            )}
           </div>
           {outward && ps.show_signature && (
             <div className="mt-10 text-right">

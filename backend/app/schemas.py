@@ -191,6 +191,9 @@ class BusinessIn(BaseModel):
     auto_backup: bool = True
     backup_email: Opt(200) = None
     transfer_prefix: Prefix = "ST"
+    lut_number: Opt(30) = None
+    lut_valid_till: dt.date | None = None
+    composition_type: Literal["TRADER", "MANUFACTURER", "RESTAURANT", "SERVICE"] = "TRADER"
     print_settings: PrintSettings = PrintSettings()
     einvoice_username: Opt(100) = None
     einvoice_password: Opt(100) = None  # write-only; stored encrypted
@@ -253,6 +256,9 @@ class BusinessOut(ORM):
     auto_backup: bool
     backup_email: str | None
     transfer_prefix: str
+    lut_number: str | None
+    lut_valid_till: dt.date | None
+    composition_type: str
     print_settings: PrintSettings | None
     einvoice_username: str | None
     einvoice_password_set: bool = False
@@ -456,6 +462,12 @@ class VoucherIn(BaseModel):
     payment_account_id: str | None = None  # defaults to cash in hand
     source_voucher_id: str | None = None   # estimate / order / challan being converted
     godown_id: str | None = None           # stock location; default godown when empty
+    export_with_payment: bool | None = None  # exports/SEZ: pay IGST (True) or under LUT (False); auto when empty
+    shipping_bill_no: Opt(20) = None         # shipping bill (exports) / bill of entry (imports)
+    shipping_bill_date: dt.date | None = None
+    port_code: Opt(10) = None
+    currency_code: Opt(3) = None
+    exchange_rate: Annotated[Decimal, Field(gt=0, max_digits=12, decimal_places=4)] | None = None
     transport: "TransportIn | None" = None
     extra_fields: dict[str, Annotated[str, StringConstraints(max_length=200)]] | None = None
 
@@ -533,6 +545,12 @@ class VoucherOut(ORM):
     source_voucher_id: str | None
     expense_category_id: str | None
     godown_id: str | None
+    export_type: str | None
+    shipping_bill_no: str | None
+    shipping_bill_date: dt.date | None
+    port_code: str | None
+    currency_code: str | None
+    exchange_rate: Num | None
     transport: dict | None
     extra_fields: dict | None
     irn: str | None
@@ -747,12 +765,14 @@ class LoanTxnOut(ORM):
 class ExpenseCategoryIn(BaseModel):
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
     kind: ExpenseKind = ExpenseKind.INDIRECT
+    itc_blocked: bool = False
 
 
 class ExpenseCategoryOut(ORM):
     id: str
     name: str
     kind: ExpenseKind
+    itc_blocked: bool
     is_active: bool
     total: Num = Decimal("0")
 

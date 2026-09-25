@@ -186,3 +186,42 @@ def gst_rate_report(r: RCtx):
     cols = [col("rate", "GST rate", "pct"), *money(("s_taxable", "Sales taxable"), ("s_tax", "Output tax"),
                                                     ("p_taxable", "Purchases taxable"), ("p_tax", "Input tax"))]
     return result("GST rate report", [section(cols, rows, total=totals(rows, ["s_taxable", "s_tax", "p_taxable", "p_tax"]))])
+
+
+# ---------------------------------------------------------------- composition scheme
+def cmp08(r: RCtx):
+    """Quarterly CMP-08 statement for a composition dealer."""
+    from ..services.gst_returns import cmp08 as build
+    d = build(r.db, r.biz, r.date_from, r.date_to)
+    rows = [
+        dict(label="1  Outward supplies (incl. exempt)", **d["outward"]),
+        dict(label="2  Inward supplies on reverse charge", **d["inward_rcm"]),
+        dict(label="3  Tax payable (1 + 2)", taxable=None, **{k: d["total"][k] for k in ("igst", "cgst", "sgst", "cess")},
+             _style="bold"),
+    ]
+    note = None if d["applicable"] else "This business is not registered under the composition scheme."
+    return result("CMP-08 (quarterly statement)", [section([col("label", "Table"), *TAX_COLS], rows, note=note)],
+                  subtitle=f"Choose a quarter as the period. Rate {d['rate']}% ({d['category'] or 'TRADER'}), "
+                           "split equally into CGST and SGST.",
+                  summary=[stat("Turnover", d["outward"]["taxable"]),
+                           stat("Tax payable", sum((d["total"][k] for k in ("igst", "cgst", "sgst", "cess")), ZERO))])
+
+
+def gstr4(r: RCtx):
+    """Annual return GSTR-4 for a composition dealer."""
+    from ..services.gst_returns import gstr4 as build
+    d = build(r.db, r.biz, r.date_from, r.date_to)
+    pcols = [col("gstin", "GSTIN"), col("name", "Supplier"), col("invoices", "Invoices", "int"), *TAX_COLS]
+    qcols = [col("period", "Quarter"), *money(("turnover", "Turnover"), ("tax", "Tax (CMP-08)"), ("rcm_tax", "RCM tax"))]
+    return result("GSTR-4 (annual return)", [
+        section(qcols, d["quarters"], "6 — Tax on outward supplies (from CMP-08)",
+                total=totals(d["quarters"], ("turnover", "tax", "rcm_tax"))),
+        section(pcols, d["inward_b2b"], "4A — Inward supplies from registered suppliers",
+                total=totals(d["inward_b2b"], TAX)),
+        section(pcols, d["inward_b2b_rcm"], "4B — Inward supplies from registered suppliers (reverse charge)",
+                total=totals(d["inward_b2b_rcm"], TAX)),
+        section([col("label", "Table"), *TAX_COLS], [
+            dict(label="4C — Inward supplies from unregistered suppliers", **d["inward_unregistered"]),
+            dict(label="4D — Import of services", **d["import_of_services"]),
+        ]),
+    ], subtitle="Choose the financial year as the period. Verify against filed CMP-08 statements before filing.")

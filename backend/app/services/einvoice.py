@@ -68,14 +68,15 @@ def einvoice_payload(db: Session, biz: Business, v: Voucher) -> dict:
         problems.append("e-Invoicing applies to regular GST registered businesses")
     if v.type not in EINVOICE_TYPES:
         problems.append("e-Invoice can be generated for sale invoices and credit notes only")
-    if not v.party_gstin:
-        problems.append("The buyer's GSTIN is required (e-Invoice is for B2B supplies)")
+    export = bool(v.export_type and v.export_type.startswith("EXP"))
+    if not v.party_gstin and not export:
+        problems.append("The buyer's GSTIN is required (e-Invoice is for B2B supplies and exports)")
     if not biz.address:
         problems.append("Business address (Settings)")
     if not _pin(biz.pincode):
         problems.append("Business 6-digit pincode (Settings)")
     party = _party(db, v)
-    if party is not None and not _pin(party.pincode):
+    if party is not None and not export and not _pin(party.pincode):
         problems.append(f"Pincode of {party.name} (Parties)")
     if party is not None and not (party.billing_address or party.city):
         problems.append(f"Address of {party.name} (Parties)")
@@ -87,7 +88,7 @@ def einvoice_payload(db: Session, biz: Business, v: Voucher) -> dict:
     if problems:
         raise PayloadError(problems)
 
-    sez = party is not None and party.gst_type.value == "SEZ"
+    sup_typ = v.export_type if v.export_type in ("EXPWP", "EXPWOP", "SEZWP", "SEZWOP") else "B2B"
     seller_addr1, seller_addr2 = _addr(biz.address)
     buyer_addr1, buyer_addr2 = _addr(party.billing_address if party else v.party_address)
     items = []
@@ -110,7 +111,7 @@ def einvoice_payload(db: Session, biz: Business, v: Voucher) -> dict:
 
     payload = {
         "Version": "1.1",
-        "TranDtls": {"TaxSch": "GST", "SupTyp": ("SEZWP" if sez and (v.igst or v.cgst) else "SEZWOP") if sez else "B2B",
+        "TranDtls": {"TaxSch": "GST", "SupTyp": sup_typ,
                      "RegRev": "Y" if v.reverse_charge else "N", "IgstOnIntra": "N"},
         "DocDtls": {"Typ": EINVOICE_TYPES[v.type], "No": v.number, "Dt": v.date.strftime("%d/%m/%Y")},
         "SellerDtls": {"Gstin": biz.gstin, "LglNm": biz.legal_name or biz.name, "TrdNm": biz.name,
@@ -119,17 +120,23 @@ def einvoice_payload(db: Session, biz: Business, v: Voucher) -> dict:
                        "Stcd": biz.state_code,
                        **({"Ph": "".join(c for c in biz.phone if c.isdigit())[-12:]} if biz.phone else {}),
                        **({"Em": biz.email} if biz.email else {})},
-        "BuyerDtls": {"Gstin": v.party_gstin, "LglNm": v.party_name, "TrdNm": v.party_name,
-                      "Pos": v.place_of_supply, "Addr1": buyer_addr1 or v.party_name,
+        "BuyerDtls": {"Gstin": "URP" if export else v.party_gstin, "LglNm": v.party_name, "TrdNm": v.party_name,
+                      "Pos": "96" if export else v.place_of_supply, "Addr1": buyer_addr1 or v.party_name,
                       **({"Addr2": buyer_addr2} if buyer_addr2 else {}),
                       "Loc": ((party.city if party else None) or buyer_addr1 or "NA")[:50],
-                      "Pin": _pin(party.pincode) if party else None, "Stcd": v.party_gstin[:2],
+                      "Pin": 999999 if export else (_pin(party.pincode) if party else None),
+                      "Stcd": "96" if export else v.party_gstin[:2],
                       **({"Ph": "".join(c for c in v.party_phone if c.isdigit())[-12:]} if v.party_phone else {})},
         "ItemList": items,
         "ValDtls": {"AssVal": _d(v.taxable), "CgstVal": _d(v.cgst), "SgstVal": _d(v.sgst), "IgstVal": _d(v.igst),
                     "CesVal": _d(v.cess), "StCesVal": 0, "Discount": 0, "OthChrg": _d(v.tcs_amount),
                     "RndOffAmt": _d(v.round_off), "TotInvVal": _d(v.grand_total)},
     }
+    if export:
+        payload["ExpDtls"] = {k: val for k, val in {
+            "ShipBNo": v.shipping_bill_no, "Port": v.port_code, "ForCur": v.currency_code,
+            "ShipBDt": v.shipping_bill_date.strftime("%d/%m/%Y") if v.shipping_bill_date else None,
+        }.items() if val}
     t = v.transport or {}
     if v.type == VoucherType.SALE and (t.get("vehicle_no") or t.get("transporter_id")) and t.get("distance_km") is not None:
         payload["EwbDtls"] = {k: val for k, val in {

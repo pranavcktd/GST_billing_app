@@ -112,9 +112,11 @@ def calc_invoice(
     round_off: bool = True,
     tcs_rate: Decimal = ZERO,
     reverse_charge: bool = False,
+    zero_rated: bool = False,
 ) -> InvoiceTotals:
     """`reverse_charge`: tax is computed (recipient pays it) but not added to the amount due to the supplier."""
-    outs = [calc_line(l, tax_applicable=tax_applicable, inter_state=inter_state) for l in lines]
+    # zero-rated (export / SEZ under LUT): rates stay on the lines for reporting, no tax is charged
+    outs = [calc_line(l, tax_applicable=tax_applicable and not zero_rated, inter_state=inter_state) for l in lines]
     buckets: dict[Decimal, TaxBucket] = {}
     for li, lo in zip(lines, outs):
         rate = li.gst_rate if tax_applicable else ZERO

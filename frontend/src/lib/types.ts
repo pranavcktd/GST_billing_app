@@ -53,6 +53,8 @@ export interface Business {
   challan_prefix: string; sale_order_prefix: string; purchase_order_prefix: string; expense_prefix: string;
   invoice_terms: string | null; auto_backup: boolean; backup_email: string | null; transfer_prefix: string;
   print_settings: PrintSettings | null; einvoice_username: string | null; einvoice_password_set: boolean;
+  lut_number: string | null; lut_valid_till: string | null;
+  composition_type: "TRADER" | "MANUFACTURER" | "RESTAURANT" | "SERVICE";
   plan: PlanInfo | null;
 }
 
@@ -92,6 +94,8 @@ export interface Voucher {
   extra_fields: Record<string, string> | null; irn: string | null; ack_no: string | null; ack_date: string | null;
   signed_qr: string | null; einvoice_status: "GENERATED" | "CANCELLED" | null; einvoice_sandbox: boolean;
   ewb_no: string | null; ewb_date: string | null; ewb_valid_till: string | null; paid: number; balance: number; status: string; title: string;
+  export_type: "EXPWP" | "EXPWOP" | "SEZWP" | "SEZWOP" | "IMPORT" | null; shipping_bill_no: string | null;
+  shipping_bill_date: string | null; port_code: string | null; currency_code: string | null; exchange_rate: number | null;
 }
 
 export interface TaxBucket { rate: number; taxable: number; cgst: number; sgst: number; igst: number; cess: number }
@@ -114,7 +118,7 @@ export interface Account {
   is_active: boolean; balance: number;
 }
 
-export interface ExpenseCategory { id: string; name: string; kind: "DIRECT" | "INDIRECT"; is_active: boolean; total: number }
+export interface ExpenseCategory { id: string; name: string; kind: "DIRECT" | "INDIRECT"; is_active: boolean; itc_blocked: boolean; total: number }
 export interface ExpenseItem {
   id: string; name: string; category_id: string | null; hsn_sac: string | null; rate: number; gst_rate: number; is_active: boolean;
 }
