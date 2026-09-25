@@ -11,6 +11,7 @@ from app.config import get_settings, to_sqlalchemy_url
 # otherwise against a throw-away SQLite file.
 _TEST_URL = get_settings().test_database_url
 os.environ.setdefault("DATABASE_URL", "sqlite://")
+os.environ["DISABLE_SCHEDULER"] = "1"
 
 from app.db import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402

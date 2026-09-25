@@ -121,6 +121,8 @@ class MyBusinessOut(BaseModel):
 class MeOut(BaseModel):
     user: UserOut
     platform_role: str | None = None
+    totp_enabled: bool = False
+    must_change_password: bool = False
     businesses: list[MyBusinessOut]
 
 

@@ -66,6 +66,14 @@ class User(Base):
     platform_role: Mapped[str | None] = mapped_column(String(12))  # SUPERADMIN / RESELLER
     reseller_commission_pct: Mapped[Decimal | None] = mapped_column(Rate)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # security
+    token_version: Mapped[int] = mapped_column(Integer, default=0)  # bump = sign out everywhere
+    failed_logins: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    totp_secret_enc: Mapped[str | None] = mapped_column(Text)
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_login_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     memberships: Mapped[list["Membership"]] = relationship(back_populates="user")
@@ -316,6 +324,7 @@ class Voucher(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     terms: Mapped[str | None] = mapped_column(Text)
     cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
+    share_token: Mapped[str | None] = mapped_column(String(40), unique=True)  # public view link
     converted_to_id: Mapped[str | None] = mapped_column(String(32))  # estimate -> invoice
     created_by_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -609,3 +618,53 @@ class LicenseSale(Base):
     payout_status: Mapped[str] = mapped_column(String(10), default="PENDING")  # PENDING / PAID
     paid_on: Mapped[dt.date | None] = mapped_column(Date)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class PasswordReset(Base):
+    __tablename__ = "password_resets"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    requested_ip: Mapped[str | None] = mapped_column(String(45))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class SmtpConfig(Base):
+    """Outgoing e-mail server. PLATFORM (one), RESELLER (per reseller user), BUSINESS (per business)."""
+
+    __tablename__ = "smtp_configs"
+    __table_args__ = (UniqueConstraint("scope", "owner_id", name="uq_smtp_scope_owner"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    scope: Mapped[str] = mapped_column(String(10))
+    owner_id: Mapped[str] = mapped_column(String(32), default="")  # "" for PLATFORM
+    host: Mapped[str] = mapped_column(String(200))
+    port: Mapped[int] = mapped_column(Integer, default=587)
+    security: Mapped[str] = mapped_column(String(10), default="STARTTLS")  # STARTTLS / SSL / NONE
+    username: Mapped[str | None] = mapped_column(String(200))
+    password_enc: Mapped[str | None] = mapped_column(Text)
+    from_email: Mapped[str] = mapped_column(String(200))
+    from_name: Mapped[str | None] = mapped_column(String(120))
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class PlatformBackup(Base):
+    """Super-admin backups: FULL (whole platform) or ACCOUNT (every business of one owner)."""
+
+    __tablename__ = "platform_backups"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    scope: Mapped[str] = mapped_column(String(10))  # FULL / ACCOUNT
+    ref_id: Mapped[str | None] = mapped_column(String(32))
+    label: Mapped[str] = mapped_column(String(200))
+    kind: Mapped[str] = mapped_column(String(10))  # AUTO / MANUAL / SAFETY
+    size: Mapped[int] = mapped_column(Integer)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    created_by_id: Mapped[str | None] = mapped_column(String(32))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class PlatformSetting(Base):
+    __tablename__ = "platform_settings"
+    key: Mapped[str] = mapped_column(String(50), primary_key=True)
+    value: Mapped[dict | None] = mapped_column(JSON)

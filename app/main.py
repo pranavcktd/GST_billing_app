@@ -1,3 +1,7 @@
+import logging
+import os
+import threading
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -13,8 +17,11 @@ from .routers import (
     businesses,
     einvoice,
     exports,
+    admin,
     godowns,
     platform,
+    sharing,
+    smtp,
     cashbank,
     expenses,
     items,
@@ -41,6 +48,39 @@ app.add_middleware(
 audit.install(app)
 
 
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return response
+
+
+def _backup_loop():
+    """Daily automatic full platform backup (checked hourly)."""
+    import time
+
+    from .db import SessionLocal
+    from .services.backup import maybe_auto_full_backup
+
+    while True:
+        time.sleep(3600)
+        db = SessionLocal()
+        try:
+            maybe_auto_full_backup(db)
+        except Exception:  # noqa: BLE001
+            logging.getLogger("gst_billing").exception("automatic full backup failed")
+        finally:
+            db.close()
+
+
+@app.on_event("startup")
+def _start_scheduler():
+    if os.environ.get("DISABLE_SCHEDULER") != "1":
+        threading.Thread(target=_backup_loop, daemon=True, name="auto-backup").start()
+
+
 @app.exception_handler(IntegrityError)
 async def integrity_error(_: Request, exc: IntegrityError):
     msg = "This record conflicts with an existing one"
@@ -50,7 +90,7 @@ async def integrity_error(_: Request, exc: IntegrityError):
 
 
 for r in (auth, businesses, parties, items, vouchers, payments, reports, uploads, cashbank, loans, expenses,
-          utilities, godowns, einvoice, billing, exports, platform):
+          utilities, godowns, einvoice, billing, exports, platform, admin, smtp, sharing):
     app.include_router(r.router, prefix="/api")
 
 
