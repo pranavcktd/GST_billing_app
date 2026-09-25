@@ -52,6 +52,12 @@ export function AdminIntegrations() {
           Adds a <b>Verify & autofill</b> button next to every GSTIN field (onboarding, business settings, parties, quick-add party on bills).
           The API is called only when a user clicks it; typing a GSTIN is free. Results are cached so the same GSTIN is not paid for twice.
         </p>
+        {!data.settings.enabled && (
+          <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Currently <b>off</b> — users don&apos;t see the button. {data.settings.api_key_set ? "Your API key is saved: tick Enabled and click Save." : "Enter your API key, tick Enabled and click Save."}
+          </div>
+        )}
+        {Object.keys(edit).length > 0 && <div className="mb-3 rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">You have unsaved changes — click Save.</div>}
         <ErrorBox message={err} />
         {msg && <div className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{msg}</div>}
         <div className="grid gap-4 md:grid-cols-3">
