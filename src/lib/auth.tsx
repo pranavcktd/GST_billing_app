@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api, session } from "./api";
-import type { Me, MyBusiness } from "./types";
+import type { Action, Me, Module, MyBusiness } from "./types";
 
 interface AuthState {
   me: Me | null;
@@ -90,4 +90,13 @@ export function useAuth(): AuthState {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
   return ctx;
+}
+
+/** Permission checks for the active business (mirror of the server's rules — the server always decides). */
+export function usePerms() {
+  const { business } = useAuth();
+  const p = business?.permissions;
+  const can = (module: Module, action: Action = "view") => !!p?.modules?.[module]?.includes(action);
+  const flag = (f: "view_cost" | "edit_past") => !!p?.flags?.includes(f);
+  return { can, flag, role: business?.role };
 }

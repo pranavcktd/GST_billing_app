@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { GlobalDialogs } from "@/components/GlobalDialogs";
 import { AuthProvider } from "@/lib/auth";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -9,5 +10,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
   }, []);
-  return <AuthProvider>{children}</AuthProvider>;
+  return (
+    <AuthProvider>
+      {children}
+      <GlobalDialogs />
+    </AuthProvider>
+  );
 }

@@ -28,14 +28,23 @@ export const session = {
 };
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(public status: number, message: string, public code?: string, public plan?: string) {
     super(message);
   }
 }
 
+type Structured = { message: string; code?: string; plan?: string; plan_name?: string };
+
+/** Hooks the UI registers: ask a manager for the approval PIN, and show the upgrade prompt. */
+export const uiHooks: {
+  askApprovalPin?: (message: string) => Promise<string | null>;
+  showUpgrade?: (message: string, plan?: string) => void;
+} = {};
+
 function errorMessage(body: unknown, status: number): string {
   const detail = (body as { detail?: unknown })?.detail;
   if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object" && "message" in (detail as object)) return (detail as Structured).message;
   if (Array.isArray(detail) && detail.length) {
     // FastAPI validation errors: [{loc, msg}]
     return detail
@@ -51,9 +60,10 @@ function errorMessage(body: unknown, status: number): string {
 
 export async function api<T = unknown>(
   path: string,
-  opts: { method?: string; body?: unknown; form?: FormData } = {},
+  opts: { method?: string; body?: unknown; form?: FormData; approvalPin?: string } = {},
 ): Promise<T> {
   const headers: Record<string, string> = {};
+  if (opts.approvalPin) headers["X-Approval-Pin"] = opts.approvalPin;
   const token = session.token();
   const bid = session.businessId();
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -72,7 +82,15 @@ export async function api<T = unknown>(
       session.setToken(null);
       window.location.href = "/login";
     }
-    throw new ApiError(res.status, errorMessage(body, res.status));
+    const detail = (body as { detail?: unknown })?.detail as Structured | undefined;
+    const structured = detail && typeof detail === "object" ? detail : undefined;
+    // an older entry needs a manager's approval: ask for the PIN and retry once
+    if (res.status === 403 && structured?.code === "APPROVAL_REQUIRED" && uiHooks.askApprovalPin && !opts.approvalPin) {
+      const pin = await uiHooks.askApprovalPin(structured.message);
+      if (pin) return api<T>(path, { ...opts, approvalPin: pin });
+    }
+    if (res.status === 402 && structured?.code === "UPGRADE") uiHooks.showUpgrade?.(structured.message, structured.plan);
+    throw new ApiError(res.status, errorMessage(body, res.status), structured?.code, structured?.plan);
   }
   return body as T;
 }

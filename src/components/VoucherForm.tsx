@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AccountSelect } from "@/components/AccountSelect";
 import { QuickPartyDialog } from "@/components/QuickPartyDialog";
+import { TransportFields } from "@/components/TransportFields";
 import { Button, Card, Combobox, ErrorBox, Field, Input, Loading, Select, Textarea } from "@/components/ui";
 import { api, qs } from "@/lib/api";
 import { GST_RATES, KINDS, type Kind, NON_LEDGER, PAYMENT_MODES, STATES, isOutward, stateLabel } from "@/lib/constants";
 import { money, today } from "@/lib/format";
 import { calcInvoice } from "@/lib/gst";
 import { useFetch } from "@/lib/useFetch";
-import type { Business, Item, Party, PaymentMode, Voucher, VoucherDetail } from "@/lib/types";
+import type { Business, Godown, Item, Party, PaymentMode, Transport, Voucher, VoucherDetail } from "@/lib/types";
 
 interface FormLine {
   key: number;
@@ -69,6 +70,7 @@ export function VoucherForm({
   const { data: business } = useFetch<Business>("/businesses/current");
   const { data: partiesData, setData: setParties } = useFetch<Party[]>(`/parties${qs({ type: meta.party })}`);
   const { data: items } = useFetch<Item[]>("/items");
+  const { data: godowns } = useFetch<Godown[]>(vtype === "EXPENSE" ? null : "/godowns");
   const parties = useMemo(() => partiesData ?? [], [partiesData]);
 
   const [partyId, setPartyId] = useState<string | null>(existing?.party_id ?? presetPartyId ?? null);
@@ -94,6 +96,10 @@ export function VoucherForm({
   const [fullyPaid, setFullyPaid] = useState(false);
   const [mode, setMode] = useState<PaymentMode>("CASH");
   const [accountId, setAccountId] = useState("");
+  const [godownId, setGodownId] = useState(existing?.godown_id ?? "");
+  const [extra, setExtra] = useState<Record<string, string>>(existing?.extra_fields ?? {});
+  const [transport, setTransport] = useState<Transport>(existing?.transport ?? {});
+  const [showTransport, setShowTransport] = useState(!!existing?.transport);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [quickParty, setQuickParty] = useState<string | null>(null);
@@ -126,6 +132,8 @@ export function VoucherForm({
   );
 
   if (!business || !partiesData || !items) return <Loading />;
+  const customFields = business.print_settings?.custom_fields ?? [];
+  const activeGodowns = (godowns ?? []).filter((g) => g.is_active);
 
   // ---- GST context (mirrors the backend) ----
   const taxApplicable = outward
@@ -183,6 +191,9 @@ export function VoucherForm({
         fully_paid: canPay && fullyPaid,
         payment_mode: mode,
         payment_account_id: accountId || null,
+        godown_id: godownId || null,
+        extra_fields: Object.keys(extra).length ? extra : null,
+        transport: Object.values(transport).some((x) => x !== undefined && x !== "") ? transport : null,
         source_voucher_id: sourceId || null,
       };
       const saved = existing
@@ -330,6 +341,30 @@ export function VoucherForm({
                 Reverse charge (RCM) — you pay the GST
               </label>
             )}
+          </div>
+        )}
+        {(customFields.length > 0 || activeGodowns.length > 1) && (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+            {activeGodowns.length > 1 && ["SALE", "SALE_RETURN", "PURCHASE", "PURCHASE_RETURN"].includes(vtype) && (
+              <Field label="Godown / location">
+                <Select value={godownId || activeGodowns.find((g) => g.is_default)?.id || ""} onChange={(e) => setGodownId(e.target.value)}>
+                  {activeGodowns.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </Select>
+              </Field>
+            )}
+            {customFields.map((f) => (
+              <Field key={f.key} label={f.label}>
+                <Input value={extra[f.key] ?? ""} onChange={(e) => setExtra({ ...extra, [f.key]: e.target.value })} />
+              </Field>
+            ))}
+          </div>
+        )}
+        {vtype !== "EXPENSE" && (
+          <div className="mt-4 border-t border-gray-100 pt-3">
+            <button type="button" className="text-sm font-medium text-brand-600 hover:underline" onClick={() => setShowTransport((x) => !x)}>
+              {showTransport ? "− Hide" : "+ Add"} transport & shipping details
+            </button>
+            {showTransport && <div className="mt-3"><TransportFields value={transport} onChange={setTransport} /></div>}
           </div>
         )}
       </Card>

@@ -1,4 +1,9 @@
-export type Role = "OWNER" | "ADMIN" | "STAFF" | "ACCOUNTANT";
+export type Role = "OWNER" | "ADMIN" | "MANAGER" | "BILLING" | "INVENTORY" | "ACCOUNTANT";
+export type Module =
+  | "sales" | "purchases" | "expenses" | "payments_in" | "payments_out" | "parties" | "items" | "cashbank"
+  | "reports_sales" | "reports_stock" | "reports_financial" | "reports_gst" | "settings" | "users" | "backup" | "audit";
+export type Action = "view" | "create" | "edit" | "delete" | "export";
+export interface Permissions { modules: Partial<Record<Module, Action[]>>; flags: ("view_cost" | "edit_past")[] }
 export type BusinessGstType = "REGULAR" | "COMPOSITION" | "UNREGISTERED";
 export type PartyType = "CUSTOMER" | "SUPPLIER" | "BOTH";
 export type PartyGstType = "REGISTERED" | "COMPOSITION" | "UNREGISTERED" | "CONSUMER" | "SEZ" | "OVERSEAS";
@@ -10,8 +15,30 @@ export type PaymentType = "IN" | "OUT";
 export type PaymentMode = "CASH" | "BANK" | "UPI" | "CHEQUE" | "CARD" | "OTHER";
 
 export interface User { id: string; name: string; email: string; phone: string | null }
-export interface MyBusiness { id: string; name: string; gstin: string | null; gst_type: BusinessGstType; role: Role }
-export interface Me { user: User; businesses: MyBusiness[] }
+export interface MyBusiness {
+  id: string; name: string; gstin: string | null; gst_type: BusinessGstType; role: Role; owned: boolean;
+  permissions: Permissions;
+}
+export interface Me { user: User; businesses: MyBusiness[]; platform_role: "SUPERADMIN" | "RESELLER" | null }
+
+export interface CustomField { key: string; label: string; print: boolean }
+export interface PrintSettings {
+  theme: "classic" | "modern" | "minimal"; accent: string; paper: "A4" | "A5" | "THERMAL_80" | "THERMAL_58";
+  copy_labels: ("ORIGINAL" | "DUPLICATE" | "TRIPLICATE")[]; show_hsn: boolean; show_discount: boolean;
+  show_tax_summary: boolean; show_bank: boolean; show_upi_qr: boolean; show_terms: boolean; show_signature: boolean;
+  show_item_description: boolean; show_transport: boolean; title_override: string | null; footer_note: string | null;
+  custom_fields: CustomField[];
+}
+export interface PlanInfo {
+  code: "FREE" | "STARTER" | "PROFESSIONAL" | "ENTERPRISE"; name: string; watermark: boolean; custom_themes: boolean;
+  barcode: boolean; einvoice: "JSON" | "API" | null; gst_json: boolean; gstr2b: boolean; audit_view: boolean;
+  custom_roles: boolean; tally: boolean;
+}
+export interface Transport {
+  mode?: "1" | "2" | "3" | "4"; vehicle_no?: string; vehicle_type?: "R" | "O"; transporter_name?: string;
+  transporter_id?: string; doc_no?: string; doc_date?: string; distance_km?: number; sub_supply_type?: string;
+  ship_to?: string;
+}
 
 export interface Business {
   id: string; name: string; legal_name: string | null; gst_type: BusinessGstType; gstin: string | null;
@@ -21,7 +48,9 @@ export interface Business {
   upi_id: string | null; invoice_prefix: string; credit_note_prefix: string; debit_note_prefix: string;
   estimate_prefix: string; purchase_prefix: string; receipt_prefix: string; payment_prefix: string;
   challan_prefix: string; sale_order_prefix: string; purchase_order_prefix: string; expense_prefix: string;
-  invoice_terms: string | null; auto_backup: boolean; backup_email: string | null;
+  invoice_terms: string | null; auto_backup: boolean; backup_email: string | null; transfer_prefix: string;
+  print_settings: PrintSettings | null; einvoice_username: string | null; einvoice_password_set: boolean;
+  plan: PlanInfo | null;
 }
 
 export interface Party {
@@ -56,7 +85,10 @@ export interface Voucher {
   sub_total: number; discount: number; taxable: number; cgst: number; sgst: number; igst: number; cess: number;
   tcs_rate: number; tcs_amount: number; round_off: number; grand_total: number; notes: string | null;
   terms: string | null; cancelled: boolean; converted_to_id: string | null; source_voucher_id: string | null;
-  expense_category_id: string | null; paid: number; balance: number; status: string; title: string;
+  expense_category_id: string | null; godown_id: string | null; transport: Transport | null;
+  extra_fields: Record<string, string> | null; irn: string | null; ack_no: string | null; ack_date: string | null;
+  signed_qr: string | null; einvoice_status: "GENERATED" | "CANCELLED" | null; einvoice_sandbox: boolean;
+  ewb_no: string | null; ewb_date: string | null; ewb_valid_till: string | null; paid: number; balance: number; status: string; title: string;
 }
 
 export interface TaxBucket { rate: number; taxable: number; cgst: number; sgst: number; igst: number; cess: number }
@@ -101,4 +133,6 @@ export interface ReportResult {
 }
 export interface ReportMeta {
   slug: string; category: string; title: string; description: string; filters: string[]; href: string | null;
+  module: Module; min_plan: string; locked: boolean;
 }
+export interface Godown { id: string; name: string; address: string | null; is_default: boolean; is_active: boolean; stock_value: number }
