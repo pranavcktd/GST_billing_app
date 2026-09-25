@@ -18,6 +18,7 @@ export const emptyBusiness: BusinessDraft = {
   receipt_prefix: "RCT", payment_prefix: "PAY", challan_prefix: "DC", sale_order_prefix: "SO",
   purchase_order_prefix: "PO", expense_prefix: "EXP", invoice_terms: null, auto_backup: true, backup_email: null,
   transfer_prefix: "ST", print_settings: null, einvoice_username: null,
+  lut_number: null, lut_valid_till: null, composition_type: "TRADER",
 };
 
 const GST_TYPES: { value: BusinessGstType; label: string; hint: string }[] = [
@@ -132,6 +133,32 @@ export function BusinessForm({
           </Field>
         </div>
       </Card>
+
+      {b.gst_type === "REGULAR" && (
+        <Card className="p-5">
+          <h2 className="mb-1 font-semibold text-gray-900">Exports & SEZ — Letter of Undertaking (LUT)</h2>
+          <p className="mb-4 text-xs text-gray-500">With a valid LUT, exports and SEZ supplies are billed without IGST (zero rated). Without it, IGST is charged and can be claimed as a refund.</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="LUT ARN / reference number"><Input maxLength={30} className="uppercase" {...text("lut_number")} /></Field>
+            <Field label="Valid till" hint="Usually 31 March of the financial year">
+              <Input type="date" value={b.lut_valid_till ?? ""} onChange={(e) => set("lut_valid_till", e.target.value || null)} />
+            </Field>
+          </div>
+        </Card>
+      )}
+      {b.gst_type === "COMPOSITION" && (
+        <Card className="p-5">
+          <h2 className="mb-4 font-semibold text-gray-900">Composition scheme</h2>
+          <Field label="Category (decides the CMP-08 tax rate)" className="max-w-md">
+            <Select value={b.composition_type} onChange={(e) => set("composition_type", e.target.value as BusinessDraft["composition_type"])}>
+              <option value="TRADER">Trader — 1%</option>
+              <option value="MANUFACTURER">Manufacturer — 1%</option>
+              <option value="RESTAURANT">Restaurant (no alcohol) — 5%</option>
+              <option value="SERVICE">Service provider — 6%</option>
+            </Select>
+          </Field>
+        </Card>
+      )}
 
       <Card className="p-5">
         <h2 className="mb-4 font-semibold text-gray-900">Bank & UPI (printed on invoices)</h2>

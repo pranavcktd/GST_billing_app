@@ -11,11 +11,11 @@ import { useFetch } from "@/lib/useFetch";
 
 type Tax = { taxable: number; igst: number; cgst: number; sgst: number; cess: number };
 type RateRow = Tax & { rate: number };
-interface Doc { id: string; number: string; date: string; party_name: string; gstin: string | null; pos: string; reverse_charge: boolean; value: number; rates: RateRow[]; original_number?: string | null }
+interface Doc { id: string; number: string; date: string; party_name: string; gstin: string | null; pos: string; reverse_charge: boolean; value: number; rates: RateRow[]; original_number?: string | null; type?: string; shipping_bill?: string | null; shipping_date?: string | null; port?: string | null }
 interface Gstr1 {
   applicable: boolean;
   b2b: Doc[]; b2b_total: Tax; b2cl: Doc[]; b2cl_total: Tax; b2cs: (Tax & { pos: string; rate: number })[]; b2cs_total: Tax;
-  cdnr: Doc[]; cdnr_total: Tax; nil: Record<string, number>;
+  cdnr: Doc[]; cdnr_total: Tax; exp: Doc[]; exp_total: Tax; cdnur: Doc[]; cdnur_total: Tax; nil: Record<string, number>;
   hsn: (Tax & { section: string; hsn: string; uqc: string; rate: number; qty: number; value: number })[];
   docs: { nature: string; from_number: string; to_number: string; total: number; cancelled: number; net_issued: number }[];
 }
@@ -38,13 +38,15 @@ function Section({ title, sub, onExport, children }: { title: string; sub?: stri
   );
 }
 
-function DocTable({ docs, total, showOriginal }: { docs: Doc[]; total: Tax; showOriginal?: boolean }) {
+const TYPE_LABEL: Record<string, string> = { SEWP: "SEZ with payment", SEWOP: "SEZ without payment", EXPWP: "With IGST", EXPWOP: "Under LUT" };
+
+function DocTable({ docs, total, showOriginal, showShipping }: { docs: Doc[]; total: Tax; showOriginal?: boolean; showShipping?: boolean }) {
   if (!docs.length) return <p className="px-5 pb-4 text-sm text-gray-500">None in this period.</p>;
   return (
     <table className="tbl">
       <thead>
         <tr>
-          <th>GSTIN</th><th>Party</th><th>Number</th><th>Date</th>{showOriginal && <th>Against</th>}<th>POS</th>
+          <th>GSTIN</th><th>Party</th><th>Number</th><th>Date</th>{showOriginal && <th>Against</th>}{showShipping ? <th>Shipping bill / port</th> : <th>POS</th>}
           <th className="num">Value</th><th className="num">Rate</th>{TAX_COLS.map((c) => <th key={c} className="num">{c}</th>)}
         </tr>
       </thead>
@@ -55,11 +57,16 @@ function DocTable({ docs, total, showOriginal }: { docs: Doc[]; total: Tax; show
               {i === 0 ? (
                 <>
                   <td rowSpan={d.rates.length} className="font-mono text-xs">{d.gstin ?? "—"}</td>
-                  <td rowSpan={d.rates.length}>{d.party_name}</td>
+                  <td rowSpan={d.rates.length}>
+                    {d.party_name}
+                    {d.type && TYPE_LABEL[d.type] && <span className="ml-1 rounded bg-sky-50 px-1.5 py-0.5 text-[10px] text-sky-700">{TYPE_LABEL[d.type]}</span>}
+                  </td>
                   <td rowSpan={d.rates.length}><Link href={`/doc/${d.id}`} className="text-brand-600 hover:underline">{d.number}</Link></td>
                   <td rowSpan={d.rates.length}>{fmtDate(d.date)}</td>
                   {showOriginal && <td rowSpan={d.rates.length}>{d.original_number ?? "—"}</td>}
-                  <td rowSpan={d.rates.length}>{d.pos}</td>
+                  <td rowSpan={d.rates.length}>
+                    {showShipping ? [d.shipping_bill, d.shipping_date && fmtDate(d.shipping_date), d.port].filter(Boolean).join(" · ") || "—" : d.pos}
+                  </td>
                   <td rowSpan={d.rates.length} className="num">{money(d.value)}</td>
                 </>
               ) : null}
@@ -123,6 +130,12 @@ export default function Gstr1Page() {
           </Section>
           <Section title="9B — Credit / debit notes (registered)" onExport={() => downloadCsv(`gstr1-cdnr-${tag}.csv`, DOC_HEAD, docRows(data.cdnr))}>
             <DocTable docs={data.cdnr} total={data.cdnr_total} showOriginal />
+          </Section>
+          <Section title="6A — Exports" sub="With payment of IGST or under LUT (zero rated)" onExport={() => downloadCsv(`gstr1-exp-${tag}.csv`, DOC_HEAD, docRows(data.exp))}>
+            <DocTable docs={data.exp} total={data.exp_total} showShipping />
+          </Section>
+          <Section title="9B — Credit / debit notes (unregistered)" sub="Against B2C Large invoices and exports" onExport={() => downloadCsv(`gstr1-cdnur-${tag}.csv`, DOC_HEAD, docRows(data.cdnur))}>
+            <DocTable docs={data.cdnur} total={data.cdnur_total} />
           </Section>
           <Section title="8 — Nil rated / exempt supplies">
             <table className="tbl">

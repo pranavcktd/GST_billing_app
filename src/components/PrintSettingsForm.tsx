@@ -18,6 +18,7 @@ const SAMPLE: VoucherDetail = {
   transport: { vehicle_no: "MH12AB1234", transporter_name: "VRL Logistics", distance_km: 840 },
   extra_fields: null, irn: null, ack_no: null, ack_date: null, signed_qr: null, einvoice_status: null,
   einvoice_sandbox: false, ewb_no: null, ewb_date: null, ewb_valid_till: null, paid: 0, balance: 2242,
+  export_type: null, shipping_bill_no: null, shipping_bill_date: null, port_code: null, currency_code: null, exchange_rate: null,
   status: "UNPAID", title: "Tax Invoice", amount_in_words: "Rupees Two Thousand Two Hundred Forty Two Only",
   original_number: null,
   lines: [

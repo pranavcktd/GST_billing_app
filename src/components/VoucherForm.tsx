@@ -100,6 +100,13 @@ export function VoucherForm({
   const [extra, setExtra] = useState<Record<string, string>>(existing?.extra_fields ?? {});
   const [transport, setTransport] = useState<Transport>(existing?.transport ?? {});
   const [showTransport, setShowTransport] = useState(!!existing?.transport);
+  const [exportPay, setExportPay] = useState<"" | "WP" | "WOP">(
+    existing?.export_type?.endsWith("WOP") ? "WOP" : existing?.export_type?.endsWith("WP") ? "WP" : "");
+  const [shipBill, setShipBill] = useState(existing?.shipping_bill_no ?? "");
+  const [shipDate, setShipDate] = useState(existing?.shipping_bill_date ?? "");
+  const [portCode, setPortCode] = useState(existing?.port_code ?? "");
+  const [currency, setCurrency] = useState(existing?.currency_code ?? "");
+  const [fxRate, setFxRate] = useState(existing?.exchange_rate ? String(existing.exchange_rate) : "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [quickParty, setQuickParty] = useState<string | null>(null);
@@ -138,16 +145,20 @@ export function VoucherForm({
   // ---- GST context (mirrors the backend) ----
   const taxApplicable = outward
     ? business.gst_type === "REGULAR"
-    : supplierCharged ?? (party ? party.gst_type === "REGISTERED" || party.gst_type === "SEZ" : false);
+    : supplierCharged ?? (party ? ["REGISTERED", "SEZ", "OVERSEAS"].includes(party.gst_type) : false);
+  const exportKind = outward && party ? (party.gst_type === "OVERSEAS" ? "EXP" : party.gst_type === "SEZ" ? "SEZ" : null) : null;
+  const isImport = !outward && party?.gst_type === "OVERSEAS";
+  const lutOk = !!business.lut_number && (!business.lut_valid_till || business.lut_valid_till >= date);
+  const zeroRated = !!exportKind && taxApplicable && (exportPay ? exportPay === "WOP" : lutOk);
   const placeOfSupply = outward ? pos || party?.state_code || business.state_code : pos || business.state_code;
   const supplierState = outward ? business.state_code : party?.state_code || business.state_code;
-  const interState = supplierState !== placeOfSupply;
+  const interState = !!exportKind || isImport || supplierState !== placeOfSupply;
 
   const calcLines = lines.map((l) => ({
     qty: toNum(l.qty), rate: toNum(l.rate), gst_rate: l.gst_rate, cess_rate: l.cess_rate,
     discount_pct: toNum(l.discount_pct), tax_inclusive: l.tax_inclusive,
   }));
-  const totals = calcInvoice(calcLines, taxApplicable, interState, roundOff, reverseCharge && !outward && taxApplicable, toNum(tcsRate));
+  const totals = calcInvoice(calcLines, taxApplicable && !zeroRated, interState, roundOff, reverseCharge && !outward && taxApplicable, toNum(tcsRate));
   const canPay = !existing && !NON_LEDGER.includes(vtype);
   const isOrder = NON_LEDGER.includes(vtype);
   const tracked = (l: FormLine) => items?.find((i) => i.id === l.item_id);
@@ -195,6 +206,12 @@ export function VoucherForm({
         extra_fields: Object.keys(extra).length ? extra : null,
         transport: Object.values(transport).some((x) => x !== undefined && x !== "") ? transport : null,
         source_voucher_id: sourceId || null,
+        export_with_payment: exportKind && exportPay ? exportPay === "WP" : null,
+        shipping_bill_no: (exportKind || isImport) && shipBill ? shipBill : null,
+        shipping_bill_date: (exportKind || isImport) && shipDate ? shipDate : null,
+        port_code: (exportKind || isImport) && portCode ? portCode.toUpperCase() : null,
+        currency_code: exportKind === "EXP" && currency ? currency.toUpperCase() : null,
+        exchange_rate: exportKind === "EXP" && toNum(fxRate) > 0 ? toNum(fxRate) : null,
       };
       const saved = existing
         ? await api<VoucherDetail>(`/vouchers/${existing.id}`, { method: "PUT", body })
@@ -295,7 +312,7 @@ export function VoucherForm({
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </Field>
           )}
-          {(taxApplicable || outward) && (
+          {(taxApplicable || outward) && exportKind !== "EXP" && !isImport && (
             <Field label="Place of supply" hint={interState ? "Inter-state → IGST" : "Intra-state → CGST + SGST"}>
               <Select value={placeOfSupply} onChange={(e) => setPos(e.target.value)}>
                 {Object.entries(STATES).map(([c, n]) => <option key={c} value={c}>{c} - {n}</option>)}
@@ -329,6 +346,40 @@ export function VoucherForm({
             </>
           )}
         </div>
+        {(exportKind || isImport) && (
+          <div className="mt-4 rounded-lg border border-sky-100 bg-sky-50/50 p-3">
+            <p className="mb-3 text-xs text-sky-800">
+              {isImport
+                ? "Import — IGST paid at customs (goods) or under reverse charge (services). Enter the bill of entry for ITC on imports (GSTR-3B 4A)."
+                : exportKind === "EXP"
+                  ? "Export of goods / services — zero rated, place of supply outside India (96)."
+                  : "Supply to an SEZ unit / developer — zero rated, treated as inter-state."}
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+              {exportKind && taxApplicable && (
+                <Field label="IGST" hint={lutOk ? `LUT ${business.lut_number}` : "No valid LUT in Settings"}>
+                  <Select value={exportPay || (lutOk ? "WOP" : "WP")} onChange={(e) => setExportPay(e.target.value as "WP" | "WOP")}>
+                    <option value="WOP" disabled={!lutOk}>Without payment (under LUT)</option>
+                    <option value="WP">With payment of IGST</option>
+                  </Select>
+                </Field>
+              )}
+              {vtype !== "ESTIMATE" && vtype !== "SALE_ORDER" && vtype !== "PURCHASE_ORDER" && (exportKind === "EXP" || isImport) && (
+                <>
+                  <Field label={isImport ? "Bill of entry no." : "Shipping bill no."}><Input maxLength={20} value={shipBill} onChange={(e) => setShipBill(e.target.value)} /></Field>
+                  <Field label={isImport ? "Bill of entry date" : "Shipping bill date"}><Input type="date" value={shipDate} onChange={(e) => setShipDate(e.target.value)} /></Field>
+                  <Field label="Port code" hint="6 characters, e.g. INNSA1"><Input maxLength={6} className="uppercase" value={portCode} onChange={(e) => setPortCode(e.target.value)} /></Field>
+                </>
+              )}
+              {exportKind === "EXP" && (
+                <>
+                  <Field label="Foreign currency" hint="e.g. USD"><Input maxLength={3} className="uppercase" value={currency} onChange={(e) => setCurrency(e.target.value)} /></Field>
+                  <Field label="Exchange rate (₹)"><Input inputMode="decimal" value={fxRate} onChange={(e) => setFxRate(e.target.value)} /></Field>
+                </>
+              )}
+            </div>
+          </div>
+        )}
         {!outward && (
           <div className="mt-4 flex flex-wrap gap-5 text-sm">
             <label className="flex items-center gap-2">
