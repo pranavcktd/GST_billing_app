@@ -1,7 +1,7 @@
 import { LegalPage } from "@/components/LegalPage";
 import { Company } from "@/lib/config";
 
-export const metadata = { title: "Refund & Cancellation Policy — GST Billing" };
+export const metadata = { title: "Refund & Cancellation Policy" };
 
 export default function Refund() {
   return (

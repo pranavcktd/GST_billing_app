@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { fmtDate, money } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
+import { APP_NAME } from "@/lib/brand";
 
 interface Status {
   plan: PlanOut & { businesses: number | null; users: number | null; api_quota: number; backup_mb: number; godowns: number | null; invoices_per_year: number | null };
@@ -71,7 +72,7 @@ export default function BillingPage() {
         await new Promise<void>((resolve, reject) => {
           const rzp = new window.Razorpay!({
             key: order.key_id, order_id: order.order_id, amount: order.amount_paise, currency: "INR",
-            name: "GST Billing", description: `${plan} plan — ${c.toLowerCase()}`,
+            name: APP_NAME, description: `${plan} plan — ${c.toLowerCase()}`,
             prefill: { email: order.email, contact: order.phone ?? "" }, theme: { color: "#1f65bb" },
             handler: async (r: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
               try {

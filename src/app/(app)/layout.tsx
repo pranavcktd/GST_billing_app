@@ -37,6 +37,7 @@ import { useEffect, useState } from "react";
 import { LinkButton, Loading } from "@/components/ui";
 import { useAuth, usePerms } from "@/lib/auth";
 import type { Action, Module } from "@/lib/types";
+import { BrandLogo } from "@/components/BrandLogo";
 
 type NavItem = { href: string; label: string; icon: React.ElementType; perm?: [Module, Action] | [Module, Action][] };
 
@@ -141,11 +142,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         className={`no-print fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-gray-200 bg-white transition-transform lg:static lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="flex h-14 items-center justify-between border-b border-gray-100 px-4">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icon.svg" alt="" className="h-7 w-7" />
-            <span className="font-semibold text-gray-900">GST Billing</span>
-          </Link>
+          <Link href="/dashboard"><BrandLogo size="sm" /></Link>
           <button className="lg:hidden" onClick={() => setOpen(false)} aria-label="Close menu">
             <X size={20} />
           </button>

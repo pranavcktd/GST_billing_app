@@ -9,6 +9,7 @@
  */
 
 import { createContext, useContext, useEffect, useState } from "react";
+import { APP_NAME, BY_LINE, COMPANY_NAME, TAGLINE } from "@/lib/brand";
 import { GST_RATES, STATES, UNITS } from "@/lib/constants";
 
 export interface AppConfig {
@@ -19,6 +20,7 @@ export interface AppConfig {
   uqc: Record<string, string>; states: Record<string, string>; credit_note_reasons: string[];
   blocked_itc_categories: string[]; subscription_gst_rate: number; trial_days: number;
   company: { name: string; email: string; address: string; phone: string; gstin?: string; website?: string };
+  brand: { app_name: string; by_line: string; tagline: string };
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -30,7 +32,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   credit_note_reasons: ["Sales return", "Post-sale discount", "Deficiency in services", "Correction in invoice",
     "Change in POS", "Finalization of provisional assessment", "Others"],
   blocked_itc_categories: ["Tea & Refreshments"], subscription_gst_rate: 18, trial_days: 14,
-  company: { name: "Core NexGen AI Pvt Ltd", email: "corenexgenaipvtltd@gmail.com",
+  brand: { app_name: APP_NAME, by_line: BY_LINE, tagline: TAGLINE },
+  company: { name: COMPANY_NAME, email: "corenexgenaipvtltd@gmail.com",
     address: "Registered office address — to be filled in", phone: "Phone — to be filled in" },
 };
 
@@ -95,4 +98,9 @@ export function Company({ field, link }: { field: keyof AppConfig["company"]; li
   const value = useConfig().company[field] ?? "";
   if (link && field === "email") return <a className="text-brand-600 hover:underline" href={`mailto:${value}`}>{value}</a>;
   return <>{value}</>;
+}
+
+/** The product name as configured by the super admin (defaults to SmartHisab). */
+export function BrandName() {
+  return <>{useConfig().brand?.app_name || APP_NAME}</>;
 }

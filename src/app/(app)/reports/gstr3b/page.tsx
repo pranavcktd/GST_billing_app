@@ -7,6 +7,7 @@ import { Button, Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
 import { downloadFile, qs } from "@/lib/api";
 import { monthRange, money } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
+import { ReviewNote } from "@/components/ReviewNote";
 
 type Tax = { taxable?: number; igst: number; cgst: number; sgst: number; cess: number };
 interface Gstr3b {
@@ -45,6 +46,7 @@ export default function Gstr3bPage() {
         </Button>
       } />
       <PeriodPicker value={period} onChange={setPeriod} />
+      <ReviewNote />
       <ErrorBox message={error} />
       {loading || !data ? <Loading /> : !data.applicable ? (
         <Card className="p-5 text-sm text-gray-600">GSTR-3B applies to regular GST registered businesses.</Card>

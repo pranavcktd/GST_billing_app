@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import { QR, upiLink } from "@/components/QR";
+import { BrandName } from "@/lib/config";
 import { STATES, stateLabel } from "@/lib/constants";
 import { fmtDate, money, qty } from "@/lib/format";
 import type { Business, PrintSettings, VoucherDetail } from "@/lib/types";
@@ -248,7 +249,7 @@ export function InvoiceDocument({ v, business, copy }: { v: VoucherDetail; busin
       {ps.footer_note && <div className="mt-4 text-center text-[11px] text-gray-600">{ps.footer_note}</div>}
       <div className="mt-6 border-t border-gray-200 pt-2 text-center text-[10px] text-gray-400">
         This is a computer generated document.
-        {business.plan?.watermark && <span className="ml-1 font-medium text-gray-500">Billed via GST Billing — free billing app</span>}
+        {business.plan?.watermark && <span className="ml-1 font-medium text-gray-500">Created with <BrandName /> — free billing software</span>}
       </div>
     </div>
   );

@@ -1,13 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Providers } from "@/components/Providers";
+import { APP_NAME, BY_LINE, DESCRIPTION } from "@/lib/brand";
 import "./globals.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "GST Billing",
-  description: "GST billing, inventory and accounting for small and medium businesses",
+  title: { default: `${APP_NAME} ${BY_LINE} — billing, stock & accounts`, template: `%s · ${APP_NAME}` },
+  description: DESCRIPTION,
+  applicationName: APP_NAME,
   icons: { icon: "/icon.svg" },
 };
 

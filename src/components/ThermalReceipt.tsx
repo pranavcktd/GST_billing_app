@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import { QR, upiLink } from "@/components/QR";
+import { BrandName } from "@/lib/config";
 import { fmtDate, money, qty } from "@/lib/format";
 import type { Business, VoucherDetail } from "@/lib/types";
 
@@ -52,7 +53,7 @@ export function ThermalReceipt({ v, business, width = 80 }: { v: VoucherDetail; 
         <div className="mt-2 flex flex-col items-center"><QR value={v.signed_qr} size={narrow ? 90 : 110} /><div className="break-all">IRN {v.irn?.slice(0, 16)}…</div></div>
       )}
       <div className="mt-2 text-center">Thank you! Visit again</div>
-      {business.plan?.watermark && <div className="mt-1 text-center" style={{ fontSize: 9 }}>Billed via GST Billing</div>}
+      {business.plan?.watermark && <div className="mt-1 text-center" style={{ fontSize: 9 }}>Created with <BrandName /></div>}
     </div>
   );
 }

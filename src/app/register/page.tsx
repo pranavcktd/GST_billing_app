@@ -52,6 +52,10 @@ export default function RegisterPage() {
         <Button type="submit" disabled={busy} className="w-full">
           {busy ? "Creating account…" : "Create account"}
         </Button>
+        <p className="text-center text-xs text-gray-500">
+          By creating an account you agree to the <Link href="/terms" className="underline">Terms of Service</Link>,{" "}
+          <Link href="/privacy" className="underline">Privacy Policy</Link> and <Link href="/disclaimer" className="underline">Disclaimer</Link>.
+        </p>
         <p className="text-center text-sm text-gray-600">
           Already have an account?{" "}
           <Link href="/login" className="font-medium text-brand-600 hover:underline">
