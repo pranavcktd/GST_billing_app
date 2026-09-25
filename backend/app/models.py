@@ -233,7 +233,7 @@ class StockTransfer(Base):
     __tablename__ = "stock_transfers"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
     business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
-    number: Mapped[str] = mapped_column(String(16))
+    number: Mapped[str] = mapped_column(String(30))
     date: Mapped[dt.date] = mapped_column(Date)
     from_godown_id: Mapped[str] = mapped_column(ForeignKey("godowns.id", ondelete="RESTRICT"))
     to_godown_id: Mapped[str] = mapped_column(ForeignKey("godowns.id", ondelete="RESTRICT"))
@@ -278,7 +278,7 @@ class Voucher(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
     business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"))
     type: Mapped[VoucherType] = mapped_column(_enum(VoucherType))
-    number: Mapped[str] = mapped_column(String(16))
+    number: Mapped[str] = mapped_column(String(30))
     date: Mapped[dt.date] = mapped_column(Date)
     due_date: Mapped[dt.date | None] = mapped_column(Date)
 
@@ -414,7 +414,7 @@ class Payment(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
     business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"))
     type: Mapped[PaymentType] = mapped_column(_enum(PaymentType))
-    number: Mapped[str] = mapped_column(String(16))
+    number: Mapped[str] = mapped_column(String(30))
     date: Mapped[dt.date] = mapped_column(Date)
     party_id: Mapped[str | None] = mapped_column(ForeignKey("parties.id", ondelete="RESTRICT"), index=True)
     amount: Mapped[Decimal] = mapped_column(Money)  # money that moved through the account
@@ -682,3 +682,46 @@ class PlatformSetting(Base):
     __tablename__ = "platform_settings"
     key: Mapped[str] = mapped_column(String(50), primary_key=True)
     value: Mapped[dict | None] = mapped_column(JSON)
+
+
+# ================================================================ platform compliance masters
+class MasterHsn(Base):
+    """Platform-wide HSN/SAC master maintained by super admins; businesses look codes up and copy from it."""
+
+    __tablename__ = "master_hsn"
+    code: Mapped[str] = mapped_column(String(8), primary_key=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    gst_rate: Mapped[Decimal] = mapped_column(Rate)
+    cess_rate: Mapped[Decimal] = mapped_column(Rate, default=Decimal("0"), server_default="0")
+    effective_from: Mapped[dt.date | None] = mapped_column(Date)
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class RateNotice(Base):
+    """A GST rate change (e.g. a CBIC notification) published to every business.
+
+    changes: [{"hsn_prefix": "8471", "description": "...", "new_rate": 18, "new_cess": 0}]
+    """
+
+    __tablename__ = "rate_notices"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    title: Mapped[str] = mapped_column(String(200))
+    reference: Mapped[str | None] = mapped_column(String(100))  # notification no.
+    effective_from: Mapped[dt.date] = mapped_column(Date)
+    changes: Mapped[list] = mapped_column(JSON, default=list)
+    note: Mapped[str | None] = mapped_column(Text)
+    published_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class RateNoticeAction(Base):
+    """What a business did with a rate notice (applied to its items, or dismissed)."""
+
+    __tablename__ = "rate_notice_actions"
+    notice_id: Mapped[str] = mapped_column(ForeignKey("rate_notices.id", ondelete="CASCADE"), primary_key=True)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True)
+    action: Mapped[str] = mapped_column(String(12))  # APPLIED | DISMISSED
+    items_changed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    by_name: Mapped[str | None] = mapped_column(String(200))
+    at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)

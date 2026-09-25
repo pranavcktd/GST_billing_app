@@ -39,6 +39,7 @@ from .accounts import resolve_account
 from .godowns import resolve_godown
 from .plans import check_invoice_limit
 from .numbering import allocate_number
+from . import config_store
 
 ZERO = Decimal("0")
 
@@ -135,6 +136,11 @@ def save_voucher(ctx: Ctx, data: VoucherIn, voucher: Voucher | None = None) -> V
             raise bad("The original document must be a bill of the same party")
 
     # ---- items ----
+    allowed = config_store.rates_on(data.date)
+    bad_rates = sorted({l.gst_rate for l in data.lines if l.gst_rate not in allowed})
+    if bad_rates:
+        raise bad(f"GST rate {', '.join(f'{r.normalize():f}%' for r in bad_rates)} is not valid on "
+                  f"{data.date:%d-%m-%Y}. Allowed: {', '.join(f'{r.normalize():f}%' for r in allowed)}")
     if vtype == VoucherType.EXPENSE and any(l.item_id for l in data.lines):
         raise bad("Expenses use expense items, not stock items")
     item_ids = {l.item_id for l in data.lines if l.item_id}
@@ -200,6 +206,9 @@ def save_voucher(ctx: Ctx, data: VoucherIn, voucher: Voucher | None = None) -> V
         voucher.lines.clear()
         db.execute(delete(StockMovement).where(StockMovement.voucher_id == voucher.id))
 
+    max_len = int(config_store.get("invoice_number_max_len", data.date))
+    if data.number and len(data.number) > max_len:
+        raise bad(f"Document number can be at most {max_len} characters")
     if data.number and number_exists(ctx, vtype, data.number, exclude_id=voucher.id if not is_new else None):
         raise bad(f"Number {data.number} is already used", 409)
 

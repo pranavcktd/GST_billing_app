@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from ..deps import BCtx
 from ..gst.constants import ExpenseKind, VoucherType
 from ..models import ExpenseCategory, ExpenseItem, Voucher, VoucherLine
+from ..services import config_store
 from ..schemas import ExpenseCategoryIn, ExpenseCategoryOut, ExpenseItemIn, ExpenseItemOut
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
@@ -31,8 +32,9 @@ DEFAULT_CATEGORIES = [
 
 
 def seed_categories(db, business_id: str) -> None:
-    for name, kind, *blocked in DEFAULT_CATEGORIES:
-        db.add(ExpenseCategory(business_id=business_id, name=name, kind=kind, itc_blocked=bool(blocked and blocked[0])))
+    blocked = {n.lower() for n in config_store.get("blocked_itc_categories")}
+    for name, kind, *_ in DEFAULT_CATEGORIES:
+        db.add(ExpenseCategory(business_id=business_id, name=name, kind=kind, itc_blocked=name.lower() in blocked))
 
 
 def _owned(ctx: BCtx, model, obj_id: str, label: str):

@@ -1,4 +1,5 @@
-import { COMPANY, LegalPage } from "@/components/LegalPage";
+import { LegalPage } from "@/components/LegalPage";
+import { Company } from "@/lib/config";
 
 export const metadata = { title: "Privacy Policy — GST Billing" };
 
@@ -24,7 +25,7 @@ export default function Privacy() {
       <h2>Your rights</h2>
       <p>You can access, correct, export or delete your data. Some records may be retained where the law requires (for example, GST record keeping for 72 months).</p>
       <h2>Contact / grievance officer</h2>
-      <p>{COMPANY.name} · {COMPANY.email}</p>
+      <p><Company field="name" /> · <Company field="email" /></p>
     </LegalPage>
   );
 }

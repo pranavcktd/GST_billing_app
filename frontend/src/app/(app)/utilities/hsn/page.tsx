@@ -1,6 +1,6 @@
 "use client";
 
-import { RefreshCw, Trash2 } from "lucide-react";
+import { Download, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ImportButton } from "@/components/ImportDialog";
 import { Button, Card, Empty, ErrorBox, Field, Input, Loading, PageHeader, Select } from "@/components/ui";
@@ -17,6 +17,7 @@ export default function HsnPage() {
   const [f, setF] = useState({ code: "", description: "", gst_rate: 18, cess_rate: "", effective_from: "" });
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const { data: masterHits } = useFetch<Omit<Hsn, "id">[]>(f.code.length >= 2 ? `/hsn-master${qs({ search: f.code })}` : null);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -26,6 +27,20 @@ export default function HsnPage() {
       setF({ code: "", description: "", gst_rate: 18, cess_rate: "", effective_from: "" });
       reload();
     } catch (x) { setErr((x as Error).message); }
+  }
+
+  async function copyMaster() {
+    try {
+      const r = await api<{ copied: number; not_found: string[] }>("/hsn-master/copy", { body: { codes: [] } });
+      setMsg(`${r.copied} code(s) copied from the official master with current rates.` +
+        (r.not_found.length ? ` Not in the master: ${r.not_found.slice(0, 10).join(", ")}${r.not_found.length > 10 ? "…" : ""}` : ""));
+      reload();
+    } catch (x) { setErr((x as Error).message); }
+  }
+
+  async function pickMaster(code: string) {
+    const hit = (masterHits ?? []).find((h) => h.code === code);
+    if (hit) setF({ code: hit.code, description: hit.description ?? "", gst_rate: hit.gst_rate, cess_rate: String(hit.cess_rate || ""), effective_from: hit.effective_from ?? "" });
   }
 
   async function apply() {
@@ -42,6 +57,7 @@ export default function HsnPage() {
         actions={
           <>
             <ImportButton entity="hsn" title="HSN / SAC codes (add or update)" onDone={reload} />
+            <Button variant="secondary" onClick={copyMaster} title="Copy the codes used on your items from the platform's official HSN master"><Download size={16} /> Sync from official master</Button>
             <Button variant="secondary" onClick={apply}><RefreshCw size={16} /> Apply rates to items</Button>
           </>
         } />
@@ -57,6 +73,16 @@ export default function HsnPage() {
           <Field label="Effective from"><Input type="date" value={f.effective_from} onChange={(e) => setF({ ...f, effective_from: e.target.value })} /></Field>
           <div className="flex items-end"><Button type="submit" className="w-full">Add / update</Button></div>
         </form>
+        {f.code.length >= 2 && (masterHits?.length ?? 0) > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+            From the official master:
+            {masterHits!.slice(0, 8).map((h) => (
+              <button key={h.code} type="button" onClick={() => pickMaster(h.code)} className="rounded border border-gray-200 px-1.5 py-0.5 hover:bg-gray-50" title={h.description ?? ""}>
+                <span className="font-mono">{h.code}</span> · {h.gst_rate}%
+              </button>
+            ))}
+          </div>
+        )}
       </Card>
       <Input placeholder="Search code or description" value={search} onChange={(e) => setSearch(e.target.value)} className="mb-3 max-w-xs" />
       <Card className="overflow-x-auto">

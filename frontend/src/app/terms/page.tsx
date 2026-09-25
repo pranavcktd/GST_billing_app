@@ -1,4 +1,5 @@
-import { COMPANY, LegalPage } from "@/components/LegalPage";
+import { LegalPage } from "@/components/LegalPage";
+import { Company } from "@/lib/config";
 
 export const metadata = { title: "Terms of Service — GST Billing" };
 
@@ -6,7 +7,7 @@ export default function Terms() {
   return (
     <LegalPage title="Terms of Service" updated="September 2026">
       <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-900">Template — have it reviewed by your legal advisor before going live.</p>
-      <p>These terms govern the use of GST Billing (the &quot;Service&quot;), provided by {COMPANY.name} (&quot;we&quot;). By creating an account you agree to them.</p>
+      <p>These terms govern the use of GST Billing (the &quot;Service&quot;), provided by <Company field="name" /> (&quot;we&quot;). By creating an account you agree to them.</p>
       <h2>1. The Service</h2>
       <p>GST Billing is online software for invoicing, inventory, accounting and GST compliance. You are responsible for the accuracy of the data you enter and for the returns you file; reports produced by the Service should be reviewed by you or your tax professional before filing.</p>
       <h2>2. Accounts</h2>
@@ -30,7 +31,7 @@ export default function Terms() {
       <h2>7. Governing law</h2>
       <p>These terms are governed by the laws of India. Courts at the location of our registered office have jurisdiction.</p>
       <h2>8. Contact</h2>
-      <p>{COMPANY.name} · {COMPANY.email}</p>
+      <p><Company field="name" /> · <Company field="email" /></p>
     </LegalPage>
   );
 }

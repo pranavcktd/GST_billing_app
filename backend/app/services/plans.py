@@ -19,11 +19,12 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..gst.constants import Role, VoucherType
 from ..gst.fy import fy_range
+from . import config_store
 from ..models import Backup, Business, Godown, Membership, Subscription, SubscriptionPayment, Voucher
 
 TRIAL_PLAN = "ENTERPRISE"
-TRIAL_DAYS = 14
-GST_RATE = Decimal("18")
+ADDON_CODE = "ADDON_BUSINESSES"
+# trial length and GST on fees come from the admin configuration (config_store)
 ORDER = ["FREE", "STARTER", "PROFESSIONAL", "ENTERPRISE"]
 
 PLANS: dict[str, dict] = {
@@ -56,7 +57,7 @@ PLANS: dict[str, dict] = {
         highlights=["Unlimited invoices & users", "10 businesses (+ add-on packs)", "High-volume e-invoice API",
                     "Custom roles & permissions", "Barcode labels, custom thermal", "Batch & serial reconciliation"]),
 }
-ADDON = dict(code="ADDON_BUSINESSES", name="5 extra businesses", businesses=5, yearly=Decimal("2999"))
+ADDON = dict(code=ADDON_CODE, name="5 extra businesses", businesses=5, yearly=Decimal("2999"))
 
 # lowest plan that includes each report (anything not listed needs STARTER)
 REPORT_MIN_PLAN = {
@@ -80,7 +81,8 @@ class UpgradeRequired(HTTPException):
 
 
 def with_gst(amount: Decimal) -> Decimal:
-    return (amount * (100 + GST_RATE) / 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    rate = config_store.get("subscription_gst_rate")
+    return (amount * (100 + rate) / 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def rank(plan: str) -> int:
@@ -104,7 +106,7 @@ def start_trial(db: Session, account_id: str) -> Subscription:
     sub = db.get(Subscription, account_id)
     if sub is None:
         sub = Subscription(account_id=account_id, plan=TRIAL_PLAN, status="TRIAL",
-                           valid_until=dt.date.today() + dt.timedelta(days=TRIAL_DAYS))
+                           valid_until=dt.date.today() + dt.timedelta(days=int(config_store.get("trial_days"))))
         db.add(sub)
         db.flush()
     return sub

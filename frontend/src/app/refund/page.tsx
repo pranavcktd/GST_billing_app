@@ -1,4 +1,5 @@
-import { COMPANY, LegalPage } from "@/components/LegalPage";
+import { LegalPage } from "@/components/LegalPage";
+import { Company } from "@/lib/config";
 
 export const metadata = { title: "Refund & Cancellation Policy — GST Billing" };
 
@@ -17,7 +18,7 @@ export default function Refund() {
         <li>Duplicate or failed-but-debited payments are refunded in full within 5–7 working days to the original payment method.</li>
       </ul>
       <h2>How to request</h2>
-      <p>E-mail {COMPANY.email} with your registered e-mail and the payment reference.</p>
+      <p>E-mail <Company field="email" /> with your registered e-mail and the payment reference.</p>
     </LegalPage>
   );
 }

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AccountSelect } from "@/components/AccountSelect";
 import { QuickPartyDialog } from "@/components/QuickPartyDialog";
 import { TransportFields } from "@/components/TransportFields";
+import { useConfig } from "@/lib/config";
 import { Button, Card, Combobox, ErrorBox, Field, Input, Loading, Select, Textarea } from "@/components/ui";
 import { api, qs } from "@/lib/api";
 import { GST_RATES, KINDS, type Kind, NON_LEDGER, PAYMENT_MODES, STATES, isOutward, stateLabel } from "@/lib/constants";
@@ -64,6 +65,7 @@ export function VoucherForm({
   const meta = KINDS[kind];
   const vtype = meta.type;
   const outward = isOutward(vtype);
+  const config = useConfig();
   const isReturn = vtype === "SALE_RETURN" || vtype === "PURCHASE_RETURN";
   const router = useRouter();
 
@@ -338,7 +340,7 @@ export function VoucherForm({
               <Field label="Reason">
                 <Select value={reason} onChange={(e) => setReason(e.target.value)}>
                   <option value="">Select</option>
-                  {["Sales return", "Post-sale discount", "Deficiency in services", "Correction in invoice", "Change in POS", "Finalization of provisional assessment", "Others"].map((r) => (
+                  {config.credit_note_reasons.map((r) => (
                     <option key={r}>{r}</option>
                   ))}
                 </Select>
