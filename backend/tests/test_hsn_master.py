@@ -179,3 +179,44 @@ def test_requests_strict_mode_and_checks(client, monkeypatch):
     # copying into the business list skips codes without a rate
     res = post(client, h, "/api/hsn-master/copy", {"codes": ["61091000", "0101", "7777"]}, 200)
     assert res == {"copied": 1, "without_rate": ["0101"], "not_found": ["7777"]}
+
+
+def test_pdf_layout_of_the_official_hsn_list(client, monkeypatch):
+    """Layout of the GST portal's HSN_master.pdf: chapter titles in mixed case or on their own line,
+    long descriptions below a code-only line, wrapped text starting with a number."""
+    root = superadmin(client, monkeypatch)
+    pdf = text_pdf([
+        "HSN_CD HSN_Description",
+        "01 LIVE ANIMALS",
+        "0101 LIVE HORSES, ASSES, MULES AND HINNIES.",
+        "01061200",
+        "WHALES, DOLPHINS AND PORPOISES (MAMMALS OF THE ORDER CETACEA), MANATEES AND DUGONGS (MAMMALS OF",
+        "THE ORDER SIRENIA)",
+        "02 Meat and edible meat offal",
+        "0201 MEAT OF BOVINE ANIMALS, FRESH AND CHILLED.",
+        "15",
+        "ANIMAL,VEGETABLE OR MICROBIAL FATS AND OILS",
+        "33021091",
+        "Other : Compound alcoholic preparations of a kind used for the manufacture of beverages, of an alcoholic",
+        "20 Degree Centigrade",
+        "33021099 Other : Other",
+    ])
+    rows = {r["code"]: r["description"] for r in upload(client, root, "HSN_master.pdf", pdf)["sample"]}
+    assert set(rows) == {"01", "0101", "01061200", "02", "0201", "15", "33021091", "33021099"}
+    assert rows["01061200"].endswith("(MAMMALS OF THE ORDER SIRENIA)")
+    assert rows["02"] == "Meat and edible meat offal" and rows["15"].startswith("ANIMAL,VEGETABLE")
+    assert rows["33021091"].endswith("alcoholic 20 Degree Centigrade")
+
+
+def test_excel_description_cleanup(client, monkeypatch):
+    root = superadmin(client, monkeypatch)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "HSN_MSTR"
+    ws.append(["HSN_CD", "HSN_Description"])
+    ws.append(["040210", "DAIRY PRODUCE _x000D_\nOF ANIMAL ORIGIN"])
+    ws.append(["0503", "-"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    rows = {r["code"]: r["description"] for r in upload(client, root, "x.xlsx", buf.getvalue())["sample"]}
+    assert rows == {"040210": "DAIRY PRODUCE OF ANIMAL ORIGIN", "0503": None}
