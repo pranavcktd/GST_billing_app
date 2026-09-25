@@ -1,14 +1,16 @@
 "use client";
 
-import { Download, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { notFound, useParams } from "next/navigation";
 import { useState } from "react";
+import { ExportMenu, simpleDoc } from "@/components/ExportMenu";
 import { ImportButton } from "@/components/ImportDialog";
-import { Button, Card, Empty, ErrorBox, Field, Input, LinkButton, Loading, PageHeader, Select, StatusBadge } from "@/components/ui";
+import { usePaged } from "@/components/Pager";
+import { Card, Empty, ErrorBox, Field, Input, LinkButton, Loading, PageHeader, Select, StatusBadge } from "@/components/ui";
 import { qs } from "@/lib/api";
 import { IMPORT_ENTITY, KINDS, type Kind, NON_LEDGER } from "@/lib/constants";
-import { downloadCsv, fmtDate, fyRange, money } from "@/lib/format";
+import { fmtDate, fyRange, money } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 import type { Voucher } from "@/lib/types";
 
@@ -22,18 +24,18 @@ export default function VoucherListPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const { data, error, loading, reload } = useFetch<Voucher[]>(
-    `/vouchers${qs({ type: meta.type, date_from: range.from, date_to: range.to, search, status, limit: 1000 })}`,
+    `/vouchers${qs({ type: meta.type, date_from: range.from, date_to: range.to, search, status, limit: 10000 })}`,
   );
 
   const live = data?.filter((v) => !v.cancelled) ?? [];
   const total = live.reduce((s, v) => s + v.grand_total, 0);
   const balance = live.reduce((s, v) => s + v.balance, 0);
 
-  const exportCsv = () =>
-    data &&
-    downloadCsv(`${kind}-${range.from}-to-${range.to}.csv`,
-      ["Date", "Number", "Party", "GSTIN", "Taxable", "CGST", "SGST", "IGST", "Cess", "Total", "Paid", "Balance", "Status"],
-      data.map((v) => [v.date, v.number, v.party_name, v.party_gstin, v.taxable, v.cgst, v.sgst, v.igst, v.cess, v.grand_total, v.paid, v.balance, v.status]));
+  const { rows, pager } = usePaged(data);
+  const buildDoc = () => data && simpleDoc(meta.plural,
+    ["Date", "Number", "Party", "GSTIN", "Taxable", "CGST", "SGST", "IGST", "Cess", "Total", "Paid", "Balance", "Status"],
+    data.map((v) => [v.date, v.number, v.party_name, v.party_gstin, v.taxable, v.cgst, v.sgst, v.igst, v.cess, v.grand_total, v.paid, v.balance, v.status]),
+    { subtitle: `${fmtDate(range.from)} to ${fmtDate(range.to)}`, filename: `${kind}-${range.from}-to-${range.to}` });
 
   return (
     <>
@@ -43,7 +45,7 @@ export default function VoucherListPage() {
         actions={
           <>
             <ImportButton entity={IMPORT_ENTITY[kind as Kind]} title={meta.plural} onDone={reload} />
-            <Button variant="secondary" onClick={exportCsv}><Download size={16} /> Export</Button>
+            <ExportMenu build={buildDoc} disabled={!data?.length} compact />
             <LinkButton href={`/v/${kind}/new`}><Plus size={16} /> New {meta.label}</LinkButton>
           </>
         }
@@ -76,7 +78,7 @@ export default function VoucherListPage() {
               </tr>
             </thead>
             <tbody>
-              {data.map((v) => (
+              {rows.map((v) => (
                 <tr key={v.id} className={v.cancelled ? "text-gray-400" : ""}>
                   <td className="whitespace-nowrap">{fmtDate(v.date)}</td>
                   <td><Link href={`/v/${kind}/${v.id}`} className="font-medium text-brand-600 hover:underline">{v.number}</Link></td>
@@ -92,7 +94,9 @@ export default function VoucherListPage() {
             </tbody>
           </table>
         )}
+        {pager}
       </Card>
+      {data?.length === 10000 && <p className="mt-2 text-xs text-amber-700">Showing the first 10,000 documents — narrow the dates to see the rest.</p>}
     </>
   );
 }

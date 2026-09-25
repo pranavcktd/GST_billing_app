@@ -38,6 +38,7 @@ import { LinkButton, Loading } from "@/components/ui";
 import { useAuth, usePerms } from "@/lib/auth";
 import type { Action, Module } from "@/lib/types";
 import { BrandLogo } from "@/components/BrandLogo";
+import { UserBar } from "@/components/UserBar";
 
 type NavItem = { href: string; label: string; icon: React.ElementType; perm?: [Module, Action] | [Module, Action][] };
 
@@ -139,7 +140,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen">
       {open && <div className="fixed inset-0 z-30 bg-black/30 lg:hidden" onClick={() => setOpen(false)} />}
       <aside
-        className={`no-print fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-gray-200 bg-white transition-transform lg:static lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
+        className={`no-print fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-gray-200 bg-white transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="flex h-14 items-center justify-between border-b border-gray-100 px-4">
           <Link href="/dashboard"><BrandLogo size="sm" /></Link>
@@ -215,6 +216,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Plus size={16} /> Sale
             </LinkButton>
           )}
+          <div className="ml-1 border-l border-gray-200 pl-3"><UserBar /></div>
         </header>
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">{children}</main>
       </div>

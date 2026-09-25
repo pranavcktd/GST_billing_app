@@ -46,7 +46,7 @@ def list_payments(
         q = q.where(Payment.date >= date_from)
     if date_to:
         q = q.where(Payment.date <= date_to)
-    return [payment_out(p) for p in ctx.db.scalars(q.limit(min(limit, 1000)).offset(offset))]
+    return [payment_out(p) for p in ctx.db.scalars(q.limit(min(limit, 10000)).offset(offset))]
 
 
 @router.get("/open-bills")

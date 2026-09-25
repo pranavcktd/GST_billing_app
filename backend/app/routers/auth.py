@@ -48,6 +48,8 @@ def me_payload(db, user: User) -> MeOut:
     return MeOut(
         user=UserOut.model_validate(user),
         platform_role=user.platform_role,
+        last_login_at=user.last_login_at,
+        previous_login_at=user.previous_login_at,
         totp_enabled=user.totp_enabled,
         must_change_password=user.must_change_password,
         businesses=[
@@ -94,7 +96,10 @@ def login(data: LoginWithOtp, db: DB, request: Request):
     if user and _aware(user.locked_until) and _aware(user.locked_until) > now():
         mins = int((_aware(user.locked_until) - now()).total_seconds() // 60) + 1
         raise HTTPException(status.HTTP_423_LOCKED, f"Too many wrong attempts — try again in {mins} minute(s) or reset your password")
-    if not user or not verify_password(data.password, user.password_hash):
+    temp_row = None
+    if user and not verify_password(data.password, user.password_hash):
+        temp_row = _match_temp_password(db, user, data.password)
+    if not user or (temp_row is None and not verify_password(data.password, user.password_hash)):
         if user:
             user.failed_logins = (user.failed_logins or 0) + 1
             locked = user.failed_logins >= MAX_FAILED
@@ -117,7 +122,14 @@ def login(data: LoginWithOtp, db: DB, request: Request):
             log(db, user, "LOGIN_FAIL", "login", f"Wrong 2FA code: {user.email}", entity_id=user.id, request=request)
             db.commit()
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, {"message": "The code is not correct", "code": "OTP_REQUIRED"})
-    user.failed_logins, user.locked_until, user.last_login_at = 0, None, now()
+    if temp_row is not None:
+        # the temporary password becomes the password until the user sets a new one (forced next)
+        user.password_hash, user.must_change_password = temp_row.temp_hash, True
+        user.token_version = (user.token_version or 0) + 1
+        temp_row.used_at = now()
+        log(db, user, "LOGIN", "password", f"Signed in with an e-mailed temporary password: {user.email}", entity_id=user.id, request=request)
+    user.failed_logins, user.locked_until = 0, None
+    user.previous_login_at, user.last_login_at = user.last_login_at, now()
     log(db, user, "LOGIN", "login", f"Signed in: {user.email}", entity_id=user.id, request=request)
     db.commit()
     return TokenOut(token=token_for(user), **me_payload(db, user).model_dump())
@@ -182,17 +194,60 @@ def issue_reset(db, user: User, request: Request, actor: User | None = None) -> 
     return link
 
 
+TEMP_MINUTES = 60
+
+
+def _match_temp_password(db, user: User, password: str) -> PasswordReset | None:
+    rows = db.scalars(select(PasswordReset).where(
+        PasswordReset.user_id == user.id, PasswordReset.temp_hash.is_not(None), PasswordReset.used_at.is_(None),
+        PasswordReset.expires_at > now()).order_by(PasswordReset.created_at.desc()).limit(3)).all()
+    return next((r for r in rows if verify_password(password, r.temp_hash)), None)
+
+
+def _temp_password() -> str:
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"  # no look-alikes (0/O, 1/l/I)
+    return "-".join("".join(secrets.choice(alphabet) for _ in range(4)) for _ in range(3))
+
+
 @router.post("/forgot")
 def forgot(data: ForgotIn, db: DB, request: Request):
-    """Always answers the same way, so it never reveals whether an e-mail is registered."""
+    """E-mails a temporary password from the platform (super admin) mailbox; the user must set a new
+    password after signing in with it. The current password keeps working until the temporary one is
+    used, so nobody can lock a user out just by knowing their e-mail. Always answers the same way,
+    so it never reveals whether an e-mail is registered."""
     user = db.scalar(select(User).where(func.lower(User.email) == data.email.lower()))
-    out: dict = {"ok": True, "message": "If this e-mail is registered, a reset link has been sent."}
-    if user and user.is_active:
-        link = issue_reset(db, user, request)
-        log(db, user, "ACTION", "password", f"Password reset requested: {user.email}", entity_id=user.id, request=request)
-        db.commit()
-        if get_settings().is_dev and not mailer.system_smtp(db):
-            out["dev_link"] = link  # local development without SMTP
+    out: dict = {"ok": True, "message": "If this e-mail is registered, a temporary password has been sent to it. "
+                                        "Sign in with it — you will then be asked to choose a new password."}
+    if not (user and user.is_active):
+        return out
+    recent = db.scalar(select(func.count(PasswordReset.id)).where(
+        PasswordReset.user_id == user.id, PasswordReset.created_at >= now() - dt.timedelta(hours=1))) or 0
+    if recent >= 3:
+        return out  # quietly rate-limited (same answer)
+    temp = _temp_password()
+    db.add(PasswordReset(user_id=user.id, token_hash=hashlib.sha256(secrets.token_bytes(32)).hexdigest(),
+                         temp_hash=hash_password(temp), expires_at=now() + dt.timedelta(minutes=TEMP_MINUTES),
+                         requested_ip=request.client.host if request.client else None))
+    log(db, user, "ACTION", "password", f"Temporary password e-mailed (forgot password): {user.email}", entity_id=user.id, request=request)
+    db.commit()
+    app = config_store.app_name()
+    body = mailer.layout("Your temporary password", f"""
+        <p>Hello {user.name},</p>
+        <p>We received a request to reset the password of your {app} account. Use this temporary password to sign in:</p>
+        <p style="text-align:center;margin:24px 0"><span style="font-family:monospace;font-size:22px;letter-spacing:2px;background:#f3f4f6;padding:10px 16px;border-radius:6px">{temp}</span></p>
+        <p>It works once and expires in {TEMP_MINUTES} minutes. After signing in you will be asked to set a new password.</p>
+        <p>If you did not ask for this, ignore this e-mail — your current password keeps working.</p>
+        <p><a href="{frontend_url(request)}/login">Sign in to {app}</a></p>""")
+    cfg = mailer.system_smtp(db)
+    if cfg:
+        try:
+            mailer.send(cfg, [user.email], f"Your {app} temporary password", body)
+        except Exception:  # noqa: BLE001
+            logger.exception("Could not e-mail the temporary password to %s", user.email)
+    elif get_settings().is_dev:
+        out["dev_temp_password"] = temp  # local development without SMTP
+    else:
+        logger.warning("SMTP not configured — temporary password for %s could not be sent", user.email)
     return out
 
 

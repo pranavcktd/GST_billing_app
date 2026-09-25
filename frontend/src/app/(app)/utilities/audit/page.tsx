@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { Button, Card, Empty, ErrorBox, Field, Input, Loading, PageHeader } from "@/components/ui";
 import { qs } from "@/lib/api";
-import { downloadCsv } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
+import { ExportMenu, simpleDoc } from "@/components/ExportMenu";
 
 interface Row { id: string; created_at: string; user: string | null; action: string; entity: string; entity_id: string | null; summary: string; ip: string | null }
 const PAGE = 100;
@@ -19,7 +19,7 @@ export default function AuditPage() {
   return (
     <>
       <PageHeader title="Audit trail" sub="Every change — who made it and when. Entries cannot be edited or deleted (MCA audit-trail requirement)."
-        actions={data && <Button variant="secondary" onClick={() => downloadCsv("audit-trail.csv", ["When", "User", "Action", "What", "IP"], data.rows.map((r) => [new Date(r.created_at).toLocaleString("en-IN"), r.user, r.action, r.summary, r.ip]))}>Export</Button>} />
+        actions={data && <ExportMenu compact build={() => simpleDoc("Audit trail", ["When", "User", "Action", "What", "IP"], data.rows.map((r) => [new Date(r.created_at).toLocaleString("en-IN"), r.user, r.action, r.summary, r.ip]), { filename: "audit-trail" })} />} />
       <div className="mb-3 flex flex-wrap items-end gap-2">
         <Field label="Search type"><Input placeholder="invoice, payment, party…" value={f.entity} onChange={(e) => { setPage(0); setF({ ...f, entity: e.target.value }); }} /></Field>
         <Field label="From"><Input type="date" value={f.date_from} onChange={(e) => { setPage(0); setF({ ...f, date_from: e.target.value }); }} /></Field>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePaged } from "@/components/Pager";
 import { Card } from "@/components/ui";
 import { fmtDate, money, qty } from "@/lib/format";
 import type { ColType, ReportResult, ReportRow, ReportSection } from "@/lib/types";
@@ -58,8 +59,15 @@ export function ReportSections({ data }: { data: ReportResult }) {
           ))}
         </div>
       )}
-      {data.sections.map((sec, si) => (
-        <Card key={si} className="mb-5 overflow-x-auto print:border-0 print:shadow-none">
+      {data.sections.map((sec, si) => <SectionCard key={si} sec={sec} />)}
+    </>
+  );
+}
+
+function SectionCard({ sec }: { sec: ReportSection }) {
+  const { rows, pager } = usePaged(sec.rows, 100);
+  return (
+        <Card className="mb-5 overflow-x-auto print:border-0 print:shadow-none">
           {sec.title && <h2 className="px-5 pt-4 pb-2 font-semibold text-gray-900">{sec.title}</h2>}
           {sec.rows.length === 0 ? (
             <p className="px-5 py-6 text-sm text-gray-500">No records for the selected filters.</p>
@@ -69,7 +77,7 @@ export function ReportSections({ data }: { data: ReportResult }) {
                 <tr>{sec.columns.map((c) => <th key={c.key} className={numeric(c.type) ? "num" : ""}>{c.label}</th>)}</tr>
               </thead>
               <tbody>
-                {sec.rows.map((r, i) => <Row key={i} row={r} section={sec} />)}
+                {rows.map((r, i) => <Row key={i} row={r} section={sec} />)}
               </tbody>
               {sec.total && (
                 <tfoot>
@@ -84,10 +92,9 @@ export function ReportSections({ data }: { data: ReportResult }) {
               )}
             </table>
           )}
+          {pager}
           {sec.note && <p className="px-5 py-3 text-xs text-gray-500">{sec.note}</p>}
         </Card>
-      ))}
-    </>
   );
 }
 

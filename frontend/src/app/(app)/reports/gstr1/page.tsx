@@ -3,6 +3,7 @@
 import { Download } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { type DocColumn, type DocSection, ExportMenu, type TableDoc } from "@/components/ExportMenu";
 import { PeriodPicker } from "@/components/PeriodPicker";
 import { Button, Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
 import { downloadFile, qs } from "@/lib/api";
@@ -88,6 +89,43 @@ const docRows = (docs: Doc[]) =>
   docs.flatMap((d) => d.rates.map((r) => [d.gstin, d.party_name, d.number, d.date, d.original_number ?? "", d.pos, d.reverse_charge ? "Y" : "N", d.value, r.rate, ...taxCells(r)]));
 const DOC_HEAD = ["GSTIN", "Party", "Number", "Date", "Against", "Place of supply", "Reverse charge", "Invoice value", "Rate", ...TAX_COLS];
 
+const TAXC: DocColumn[] = [
+  { key: "taxable", label: "Taxable", type: "money" }, { key: "igst", label: "IGST", type: "money" }, { key: "cgst", label: "CGST", type: "money" },
+  { key: "sgst", label: "SGST", type: "money" }, { key: "cess", label: "Cess", type: "money" },
+];
+const docSection = (title: string, docs: Doc[], total: Tax): DocSection => ({
+  title,
+  columns: [{ key: "gstin", label: "GSTIN", type: "text" }, { key: "party_name", label: "Party", type: "text" }, { key: "number", label: "Number", type: "text" },
+    { key: "date", label: "Date", type: "date" }, { key: "pos", label: "POS", type: "text" }, { key: "value", label: "Value", type: "money" },
+    { key: "rate", label: "Rate %", type: "pct" }, ...TAXC],
+  rows: docs.flatMap((d) => d.rates.map((r, i) => ({
+    ...(i === 0 ? { gstin: d.gstin, party_name: d.party_name, number: d.number, date: d.date, pos: d.pos, value: d.value } : {}),
+    rate: r.rate, taxable: r.taxable, igst: r.igst, cgst: r.cgst, sgst: r.sgst, cess: r.cess,
+  }))),
+  total: { ...total },
+});
+
+function gstr1Doc(d: Gstr1, from: string, to: string): TableDoc {
+  return {
+    title: "GSTR-1 — outward supplies", subtitle: `${fmtDate(from)} to ${fmtDate(to)} · prepared from your books for review`, filename: `GSTR1-${from}-to-${to}`,
+    sections: [
+      docSection("4A — B2B invoices", d.b2b, d.b2b_total),
+      docSection("5 — B2C Large", d.b2cl, d.b2cl_total),
+      { title: "7 — B2C Others", columns: [{ key: "pos", label: "Place of supply", type: "text" }, { key: "rate", label: "Rate %", type: "pct" }, ...TAXC], rows: d.b2cs, total: { ...d.b2cs_total } },
+      docSection("6A — Exports", d.exp, d.exp_total),
+      docSection("9B — Credit / debit notes (registered)", d.cdnr, d.cdnr_total),
+      docSection("9B — Credit / debit notes (unregistered)", d.cdnur, d.cdnur_total),
+      { title: "8 — Nil rated / exempt", columns: [{ key: "k", label: "Description", type: "text" }, { key: "v", label: "Value", type: "money" }],
+        rows: Object.entries(d.nil).map(([k, v]) => ({ k: k.replace("_", " "), v })) },
+      { title: "12 — HSN summary", columns: [{ key: "section", label: "Section", type: "text" }, { key: "hsn", label: "HSN", type: "text" }, { key: "uqc", label: "UQC", type: "text" },
+        { key: "qty", label: "Qty", type: "qty" }, { key: "rate", label: "Rate %", type: "pct" }, { key: "value", label: "Value", type: "money" }, ...TAXC], rows: d.hsn },
+      { title: "13 — Documents issued", columns: [{ key: "nature", label: "Nature", type: "text" }, { key: "from_number", label: "From", type: "text" },
+        { key: "to_number", label: "To", type: "text" }, { key: "total", label: "Total", type: "int" }, { key: "cancelled", label: "Cancelled", type: "int" },
+        { key: "net_issued", label: "Net issued", type: "int" }], rows: d.docs },
+    ],
+  };
+}
+
 export default function Gstr1Page() {
   const [period, setPeriod] = useState(monthRange(0));
   const { data, error, loading } = useFetch<Gstr1>(`/reports/gstr1${qs({ date_from: period.from, date_to: period.to })}`);
@@ -97,6 +135,7 @@ export default function Gstr1Page() {
     <>
       <PageHeader title="GSTR-1" sub="Details of outward supplies" actions={
         <>
+          <ExportMenu compact build={() => (data ? gstr1Doc(data, period.from, period.to) : null)} disabled={!data?.applicable} />
           <Button variant="secondary" onClick={() => downloadFile(`/einvoice/bulk-json${qs({ date_from: period.from, date_to: period.to })}`).catch((e) => alert(e.message))}>
             <Download size={16} /> e-Invoice bulk JSON
           </Button>

@@ -74,6 +74,7 @@ class User(Base):
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     last_login_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    previous_login_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))  # shown as 'last login'
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     memberships: Mapped[list["Membership"]] = relationship(back_populates="user")
@@ -639,6 +640,7 @@ class PasswordReset(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    temp_hash: Mapped[str | None] = mapped_column(String(100))  # bcrypt hash of an e-mailed temporary password
     expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
     used_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     requested_ip: Mapped[str | None] = mapped_column(String(45))
@@ -752,6 +754,7 @@ class GstinLookup(Base):
     gstin: Mapped[str] = mapped_column(String(15), index=True)
     user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     business_id: Mapped[str | None] = mapped_column(ForeignKey("businesses.id", ondelete="SET NULL"), index=True)
+    account_id: Mapped[str | None] = mapped_column(String(32), index=True)  # subscriber account (owner user id)
     source: Mapped[str] = mapped_column(String(8))  # LIVE | CACHE
     ok: Mapped[bool] = mapped_column(Boolean, default=False)
     http_status: Mapped[int | None] = mapped_column(Integer)

@@ -47,6 +47,7 @@ class SettingsIn(BaseModel):
     daily_limit_business: int | None = Field(None, ge=0, le=100000)
     daily_limit_user: int | None = Field(None, ge=0, le=100000)
     min_plan: Literal["FREE", "STARTER", "PROFESSIONAL", "ENTERPRISE"] | None = None
+    trial_live_limit: int | None = Field(None, ge=0, le=1000)  # paid lookups per trial / free account (lifetime)
 
 
 @router.get("/admin/gstin-api")

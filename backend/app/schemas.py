@@ -121,6 +121,8 @@ class MyBusinessOut(BaseModel):
 class MeOut(BaseModel):
     user: UserOut
     platform_role: str | None = None
+    last_login_at: dt.datetime | None = None       # this session
+    previous_login_at: dt.datetime | None = None   # the sign-in before this one ("last login")
     totp_enabled: bool = False
     must_change_password: bool = False
     businesses: list[MyBusinessOut]

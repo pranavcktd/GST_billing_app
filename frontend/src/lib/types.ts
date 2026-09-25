@@ -21,6 +21,7 @@ export interface MyBusiness {
 }
 export interface Me {
   user: User; businesses: MyBusiness[]; platform_role: "SUPERADMIN" | "RESELLER" | null;
+  last_login_at: string | null; previous_login_at: string | null;
   totp_enabled: boolean; must_change_password: boolean;
 }
 

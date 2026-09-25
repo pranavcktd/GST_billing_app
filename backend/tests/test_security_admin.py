@@ -64,15 +64,31 @@ def test_lockout_and_session_revocation(client):
     _ = h
 
 
-def test_forgot_and_reset_password(client):
+def test_forgot_password_temporary_password(client):
     signup(client, "forgot@x.in")
     r = client.post("/api/auth/forgot", json={"email": "forgot@x.in"}).json()
-    assert r["dev_link"]  # no SMTP configured in dev → link returned for testing
-    assert client.post("/api/auth/forgot", json={"email": "nobody@x.in"}).json()["ok"]  # same answer, no leak
-    token = r["dev_link"].split("token=")[1]
-    assert client.post("/api/auth/reset", json={"token": token, "new_password": "brandnew99"}).status_code == 200
-    assert client.post("/api/auth/reset", json={"token": token, "new_password": "again1234"}).status_code == 400  # one-time
-    assert login(client, "forgot@x.in", "brandnew99").status_code == 200
+    temp = r["dev_temp_password"]  # no SMTP configured in dev → returned for testing
+    assert len(temp) == 14 and "temporary password" in r["message"]
+    miss = client.post("/api/auth/forgot", json={"email": "nobody@x.in"}).json()
+    assert miss["ok"] and miss["message"] == r["message"] and "dev_temp_password" not in miss  # same answer, no leak
+    # the old password still works until the temporary one is used (no lock-out by strangers)
+    first = login(client, "forgot@x.in")
+    assert first.status_code == 200 and not first.json()["must_change_password"]
+    # sign in with the temporary password → must set a new one
+    r2 = login(client, "forgot@x.in", temp)
+    assert r2.status_code == 200 and r2.json()["must_change_password"]
+    assert r2.json()["previous_login_at"] is not None  # the earlier sign-in above
+    assert login(client, "forgot@x.in").status_code == 401  # old password replaced
+    assert login(client, "forgot@x.in", temp).status_code == 200  # (now the current password until changed)
+    h = {"Authorization": f"Bearer {login(client, 'forgot@x.in', temp).json()['token']}"}
+    ok = client.put("/api/auth/password", headers=h, json={"current_password": temp, "new_password": "brandnew99"})
+    assert ok.status_code == 200
+    me = login(client, "forgot@x.in", "brandnew99").json()
+    assert not me["must_change_password"]
+    # rate limit: at most 3 e-mails an hour, same answer
+    for _ in range(3):
+        client.post("/api/auth/forgot", json={"email": "forgot@x.in"})
+    assert "dev_temp_password" not in client.post("/api/auth/forgot", json={"email": "forgot@x.in"}).json()
 
 
 def test_two_factor_login(client):
@@ -200,7 +216,8 @@ def test_smtp_levels_and_invoice_email(client, monkeypatch):
     # forgot password now goes out through the platform SMTP
     signup(client, "someone@x.in")
     out = client.post("/api/auth/forgot", json={"email": "someone@x.in"}).json()
-    assert "dev_link" not in out and "noreply@platform.in" in SENT[-1]["From"]
+    assert "dev_temp_password" not in out and "noreply@platform.in" in SENT[-1]["From"]
+    assert "temporary password" in SENT[-1]["Subject"]
 
 
 def test_hierarchy_resets(client, monkeypatch):

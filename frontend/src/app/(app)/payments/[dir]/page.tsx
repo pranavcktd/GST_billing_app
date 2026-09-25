@@ -1,17 +1,19 @@
 "use client";
 
-import { Download, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { notFound, useParams } from "next/navigation";
 import { useState } from "react";
 import { ImportButton } from "@/components/ImportDialog";
-import { Button, Card, Empty, ErrorBox, Field, Input, LinkButton, Loading, PageHeader } from "@/components/ui";
+import { Card, Empty, ErrorBox, Field, Input, LinkButton, Loading, PageHeader } from "@/components/ui";
 import { api, qs } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { PAYMENT_MODES } from "@/lib/constants";
-import { downloadCsv, fmtDate, fyRange, money } from "@/lib/format";
+import { fmtDate, fyRange, money } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 import type { Payment } from "@/lib/types";
+import { ExportMenu, simpleDoc } from "@/components/ExportMenu";
+import { usePaged } from "@/components/Pager";
 
 export default function PaymentsPage() {
   const { dir } = useParams<{ dir: string }>();
@@ -20,9 +22,14 @@ export default function PaymentsPage() {
   const { business } = useAuth();
   const [range, setRange] = useState(fyRange());
   const { data, error, loading, reload } = useFetch<Payment[]>(
-    `/payments${qs({ type, date_from: range.from, date_to: range.to, limit: 1000 })}`,
+    `/payments${qs({ type, date_from: range.from, date_to: range.to, limit: 10000 })}`,
   );
   const total = data?.reduce((s, p) => s + p.amount, 0) ?? 0;
+  const { rows, pager } = usePaged(data);
+  const buildDoc = () => data && simpleDoc(type === "IN" ? "Payments received" : "Payments made",
+    ["Date", "Number", "Party", "Mode", "Account", "Reference", "Amount", "TDS", "Allocated"],
+    data.map((p) => [p.date, p.number, p.party_name, PAYMENT_MODES[p.mode], p.account_name, p.reference, p.amount, p.tds_amount, p.allocated]),
+    { subtitle: `${fmtDate(range.from)} to ${fmtDate(range.to)}`, filename: `payments-${dir}-${range.from}-to-${range.to}` });
   const canDelete = business?.role === "OWNER" || business?.role === "ADMIN";
 
   async function remove(p: Payment) {
@@ -38,13 +45,7 @@ export default function PaymentsPage() {
         sub={`${data?.length ?? 0} payments · ${money(total)}`}
         actions={
           <>
-            <Button
-              variant="secondary"
-              onClick={() => data && downloadCsv(`payments-${dir}.csv`, ["Date", "Number", "Party", "Mode", "Reference", "Amount", "Allocated"],
-                data.map((p) => [p.date, p.number, p.party_name, p.mode, p.reference, p.amount, p.allocated]))}
-            >
-              <Download size={16} /> Export
-            </Button>
+            <ExportMenu build={buildDoc} disabled={!data?.length} compact />
             <ImportButton entity={`payments-${dir}`} title={type === "IN" ? "payments received" : "payments made"} onDone={reload} />
             <LinkButton href={`/payments/${dir}/new`}><Plus size={16} /> {type === "IN" ? "Receive payment" : "Make payment"}</LinkButton>
           </>
@@ -66,7 +67,7 @@ export default function PaymentsPage() {
               <tr><th>Date</th><th>Number</th><th>Party</th><th>Mode</th><th>Settled bills</th><th className="num">Amount</th><th /></tr>
             </thead>
             <tbody>
-              {data.map((p) => (
+              {rows.map((p) => (
                 <tr key={p.id}>
                   <td>{fmtDate(p.date)}</td>
                   <td className="font-medium">{p.number}</td>
@@ -102,6 +103,7 @@ export default function PaymentsPage() {
             </tbody>
           </table>
         )}
+        {pager}
       </Card>
     </>
   );

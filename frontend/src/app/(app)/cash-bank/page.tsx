@@ -6,9 +6,10 @@ import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Button, Card, ErrorBox, Field, Input, Loading, PageHeader, Select } from "@/components/ui";
 import { api, qs } from "@/lib/api";
-import { downloadCsv, fmtDate, fyRange, money, today } from "@/lib/format";
+import { fmtDate, fyRange, money, today } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 import type { Account } from "@/lib/types";
+import { ExportMenu, simpleDoc } from "@/components/ExportMenu";
 
 interface Statement {
   opening: number; closing: number;
@@ -119,8 +120,14 @@ export default function CashBankPage() {
               <Field label="From"><Input type="date" value={range.from} onChange={(e) => setRange({ ...range, from: e.target.value })} /></Field>
               <Field label="To"><Input type="date" value={range.to} onChange={(e) => setRange({ ...range, to: e.target.value })} /></Field>
               {st && (
-                <Button variant="secondary" onClick={() => downloadCsv(`${current.name}-statement.csv`, ["Date", "Type", "Ref", "Party / note", "In", "Out", "Balance"],
-                  st.entries.map((e) => [e.date, e.kind, e.number, e.party ?? e.note, e.deposit || "", e.withdrawal || "", e.balance]))}>Export</Button>
+                <ExportMenu compact build={() => ({
+                  ...simpleDoc(`${current.name} — statement`, ["Date", "Type", "Ref", "Party / note", "Money in", "Money out", "Balance"],
+                    [[range.from, "Opening balance", "", "", null, null, st.opening],
+                     ...st.entries.map((e) => [e.date, e.kind, e.number, e.party ?? e.note ?? "", e.deposit || null, e.withdrawal || null, e.balance])],
+                    { subtitle: `${fmtDate(range.from)} to ${fmtDate(range.to)}`, filename: `${current.name}-statement-${range.from}-to-${range.to}`,
+                      types: ["date", "text", "text", "text", "money", "money", "money"] }),
+                  summary: [{ label: "Closing balance", value: st.closing, type: "money" }],
+                })} />
               )}
             </div>
           </div>

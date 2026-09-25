@@ -10,6 +10,8 @@ import { qs } from "@/lib/api";
 import { money } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 import type { Party } from "@/lib/types";
+import { ExportMenu, simpleDoc } from "@/components/ExportMenu";
+import { usePaged } from "@/components/Pager";
 
 export default function PartiesPage() {
   const [search, setSearch] = useState("");
@@ -22,6 +24,11 @@ export default function PartiesPage() {
     if (gstins.length) gstinStatuses(gstins).then(setVerified).catch(() => {});
   }, [data]);
 
+  const { rows, pager } = usePaged(data);
+  const buildDoc = () => data && simpleDoc("Parties",
+    ["Name", "Type", "GST type", "GSTIN", "Phone", "Email", "City", "State", "Balance (+ to collect / − to pay)"],
+    data.map((p) => [p.name, p.type, p.gst_type, p.gstin, p.phone, p.email, p.city, p.state_code, p.balance]),
+    { filename: "parties" });
   const receivable = data?.filter((p) => p.balance > 0).reduce((s, p) => s + p.balance, 0) ?? 0;
   const payable = data?.filter((p) => p.balance < 0).reduce((s, p) => s - p.balance, 0) ?? 0;
 
@@ -32,6 +39,7 @@ export default function PartiesPage() {
         sub={`To collect ${money(receivable)} · To pay ${money(payable)}`}
         actions={
           <>
+            <ExportMenu build={buildDoc} disabled={!data?.length} compact />
             <ImportButton entity="parties" title="parties" onDone={reload} />
             <LinkButton href="/parties/new"><Plus size={16} /> Add party</LinkButton>
           </>
@@ -57,7 +65,7 @@ export default function PartiesPage() {
               <tr><th>Name</th><th>GSTIN</th><th>Phone</th><th>Type</th><th className="num">Balance</th></tr>
             </thead>
             <tbody>
-              {data.map((p) => (
+              {rows.map((p) => (
                 <tr key={p.id}>
                   <td><Link href={`/parties/${p.id}`} className="font-medium text-brand-600 hover:underline">{p.name}</Link></td>
                   <td className="font-mono text-xs">{p.gstin ?? "—"}{p.gstin && <div><GstinBadge s={verified[p.gstin]} /></div>}</td>
@@ -72,6 +80,7 @@ export default function PartiesPage() {
             </tbody>
           </table>
         )}
+        {pager}
       </Card>
     </>
   );

@@ -2,14 +2,17 @@
 
 import datetime as dt
 import json
+import re
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, Response, UploadFile
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from ..deps import BCtx
+from ..deps import DB, BCtx, CurrentUser
 from ..gst.constants import BusinessGstType
-from ..models import AuditLog
-from ..services import gst_returns, gstr1_json, gstr2b, tally
+from ..models import AuditLog, Membership
+from ..services import config_store, gst_returns, gstr1_json, gstr2b, table_export, tally
 from ..services.plans import require_feature
 
 router = APIRouter(tags=["exports"])
@@ -75,3 +78,34 @@ async def reconcile_2b(ctx: BCtx, file: UploadFile = File(...), date_from: dt.da
     if len(content) > 20 * 1024 * 1024:
         raise HTTPException(400, "File too large")
     return gstr2b.reconcile(ctx.db, ctx.business, content, date_from, date_to)
+
+
+# ---------------------------------------------------------------- any table → Excel / PDF
+class TableDoc(BaseModel):
+    title: str = Field(max_length=200)
+    subtitle: str | None = Field(None, max_length=500)
+    filename: str | None = Field(None, max_length=120)
+    summary: list[dict] = Field(default_factory=list, max_length=50)
+    sections: list[dict] = Field(default_factory=list, max_length=60)
+
+
+XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+@router.post("/export/table")
+def export_table(doc: TableDoc, db: DB, user: CurrentUser, format: Literal["xlsx", "pdf"] = "xlsx",
+                 x_business_id: Annotated[str | None, Header()] = None):
+    """Turns the table the user is looking at into an Excel or PDF file (the data comes from the page)."""
+    rows = sum(len(s.get("rows") or []) for s in doc.sections)
+    if rows > table_export.MAX_ROWS:
+        raise HTTPException(413, f"Too many rows to export at once ({rows}); narrow the filters")
+    business = None
+    if x_business_id:
+        m = db.scalar(select(Membership).where(Membership.user_id == user.id, Membership.business_id == x_business_id))
+        business = m.business.name + (f" · GSTIN {m.business.gstin}" if m and m.business.gstin else "") if m else None
+    data = doc.model_dump()
+    brand = config_store.app_name()
+    content = table_export.to_pdf(data, business, brand) if format == "pdf" else table_export.to_xlsx(data, business, brand)
+    name = re.sub(r"[^\w.-]+", "-", doc.filename or doc.title).strip("-")[:100] or "export"
+    return Response(content, media_type="application/pdf" if format == "pdf" else XLSX_TYPE,
+                    headers={"Content-Disposition": f'attachment; filename="{name}.{format}"'})

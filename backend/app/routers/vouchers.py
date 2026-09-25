@@ -59,7 +59,7 @@ def list_vouchers(
     if search:
         like = f"%{search}%"
         q = q.where(or_(Voucher.number.ilike(like), Voucher.party_name.ilike(like)))
-    rows = [to_out(v) for v in ctx.db.scalars(q.limit(min(limit, 1000)).offset(offset))]
+    rows = [to_out(v) for v in ctx.db.scalars(q.limit(min(limit, 10000)).offset(offset))]
     if status:
         rows = [r for r in rows if r.status == status]
     return rows
