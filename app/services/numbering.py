@@ -1,7 +1,7 @@
 """Sequential document numbering per series and financial year.
 
 GST (Rule 46) requires invoice numbers to be unique within a financial year, consecutive,
-at most 16 characters, using only letters, digits, '-' and '/'.
+at most 16 characters (configurable by super admin), using only letters, digits, '-' and '/'.
 Format: PREFIX/YY-YY/0001, e.g. INV/26-27/0001.
 """
 
@@ -12,12 +12,13 @@ from sqlalchemy.orm import Session
 
 from ..gst.fy import fy_short
 from ..models import Counter
+from . import config_store
 
 
 def format_number(prefix: str, d: dt.date, seq: int) -> str:
     fy = fy_short(d)
     number = f"{prefix}/{fy}/{seq:04d}"
-    if len(number) > 16:
+    if len(number) > int(config_store.get("invoice_number_max_len", d)):
         number = f"{prefix}{fy.replace('-', '')}{seq}"
     return number
 

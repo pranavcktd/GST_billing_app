@@ -2,19 +2,19 @@ import logging
 import os
 import threading
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
 from .config import get_settings
-from .gst.constants import GST_RATES, UQC
-from .gst.states import STATES
 from . import audit
+from .services import config_store
 from .routers import (
     auth,
     billing,
     businesses,
+    compliance,
     einvoice,
     exports,
     admin,
@@ -34,7 +34,7 @@ from .routers import (
     vouchers,
 )
 
-app = FastAPI(title="GST Billing API", version="0.1.0")
+app = FastAPI(title="GST Billing API", version="0.1.0", dependencies=[Depends(config_store.refresh_dep)])
 
 app.add_middleware(
     CORSMiddleware,
@@ -89,17 +89,19 @@ async def integrity_error(_: Request, exc: IntegrityError):
     return JSONResponse(status_code=409, content={"detail": msg})
 
 
-for r in (auth, businesses, parties, items, vouchers, payments, reports, uploads, cashbank, loans, expenses,
+for r in (auth, businesses, compliance, parties, items, vouchers, payments, reports, uploads, cashbank, loans, expenses,
           utilities, godowns, einvoice, billing, exports, platform, admin, smtp, sharing):
     app.include_router(r.router, prefix="/api")
 
 
 @app.get("/api/meta")
 def meta():
+    cfg = config_store.public()
     return {
-        "states": [{"code": c, "name": n} for c, n in STATES.items()],
-        "gst_rates": [float(r) for r in GST_RATES],
-        "units": [{"code": c, "name": n} for c, n in UQC.items()],
+        "states": [{"code": c, "name": n} for c, n in cfg["states"].items()],
+        "gst_rates": cfg["gst_rates"],
+        "units": [{"code": c, "name": n} for c, n in cfg["uqc"].items()],
+        "config": cfg,
     }
 
 

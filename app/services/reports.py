@@ -7,9 +7,10 @@ from decimal import Decimal
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, selectinload
 
-from ..gst.constants import B2CL_LIMIT, ItemType, PaymentType, VoucherType
+from ..gst.constants import ItemType, PaymentType, VoucherType
 from ..gst.states import state_label
 from ..models import Account, Business, ExpenseCategory, Item, Party, Payment, StockMovement, Voucher
+from . import config_store
 from .ledger import item_stock, party_balances
 from .vouchers import to_out
 
@@ -87,7 +88,7 @@ def gstr1(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) -> d
         elif is_sale:
             if registered:
                 b2b.append(doc)
-            elif v.inter_state and v.grand_total > B2CL_LIMIT:
+            elif v.inter_state and v.grand_total > config_store.get("b2cl_limit", v.date):
                 b2cl.append(doc)
             else:
                 for rate, vals in rows.items():

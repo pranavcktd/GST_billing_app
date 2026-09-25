@@ -10,6 +10,7 @@ from ..config import get_settings
 from ..deps import DB, BCtx
 from ..gst.constants import Role
 from ..models import SubscriptionPayment
+from ..services import config_store
 from ..services import plans as P
 
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -28,8 +29,8 @@ def _plan_out(code: str) -> dict:
 @router.get("/plans")
 def plans():
     """Public — used by the landing / pricing page."""
-    return {"plans": [_plan_out(c) for c in P.ORDER], "trial_days": P.TRIAL_DAYS, "trial_plan": P.TRIAL_PLAN,
-            "gst_rate": float(P.GST_RATE),
+    return {"plans": [_plan_out(c) for c in P.ORDER], "trial_days": int(config_store.get("trial_days")), "trial_plan": P.TRIAL_PLAN,
+            "gst_rate": float(config_store.get("subscription_gst_rate")),
             "addon": {"code": P.ADDON["code"], "name": P.ADDON["name"], "yearly": float(P.ADDON["yearly"]),
                       "yearly_with_gst": float(P.with_gst(P.ADDON["yearly"]))}}
 

@@ -11,7 +11,8 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from ..gst.constants import B2CL_LIMIT, VoucherType
+from ..gst.constants import VoucherType
+from . import config_store
 from ..models import Business, Voucher
 
 ZERO = Decimal("0")
@@ -102,7 +103,7 @@ def build(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) -> d
                    "itms": items}
             if reg:
                 b2b[v.party_gstin].append({**inv, "rchrg": "Y" if v.reverse_charge else "N", "inv_typ": {"SEZWP": "SEWP", "SEZWOP": "SEWOP"}.get(v.export_type or "", "R")})
-            elif v.inter_state and v.grand_total > B2CL_LIMIT:
+            elif v.inter_state and v.grand_total > config_store.get("b2cl_limit", v.date):
                 b2cl[v.place_of_supply].append({k: inv[k] for k in ("inum", "idt", "val", "itms")})
             else:
                 for it in items:
@@ -117,7 +118,7 @@ def build(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) -> d
                 cdnr[v.party_gstin].append({**note, "rchrg": "N", "inv_typ": {"SEZWP": "SEWP", "SEZWOP": "SEWOP"}.get(v.export_type or "", "R")})
             else:
                 orig = originals.get(v.original_voucher_id)
-                if orig and orig.inter_state and orig.grand_total > B2CL_LIMIT:
+                if orig and orig.inter_state and orig.grand_total > config_store.get("b2cl_limit", orig.date):
                     cdnur.append({**note, "typ": "B2CL"})
                 else:
                     for it in items:  # other credit notes to consumers reduce B2CS
@@ -144,7 +145,7 @@ def build(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) -> d
                 "cancel": sum(1 for v in ds if v.cancelled), "net_issue": sum(1 for v in ds if not v.cancelled)}]})
 
     out = {
-        "gstin": biz.gstin, "fp": date_to.strftime("%m%Y"), "version": "GST3.2", "hash": "hash",
+        "gstin": biz.gstin, "fp": date_to.strftime("%m%Y"), "version": config_store.get("gstr1_json_version", date_to), "hash": "hash",
         "b2b": [{"ctin": k, "inv": v} for k, v in sorted(b2b.items())],
         "b2cl": [{"pos": k, "inv": v} for k, v in sorted(b2cl.items())],
         "b2cs": [{"sply_ty": k[0], "pos": k[1], "typ": "OE", "rt": k[2],

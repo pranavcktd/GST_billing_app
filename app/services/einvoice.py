@@ -27,6 +27,7 @@ from ..gst.constants import BusinessGstType, VoucherType
 from ..gst.fy import fy_label
 from ..models import Business, Item, Party, Voucher
 from ..security import decrypt_secret
+from . import config_store
 
 EINVOICE_TYPES = {VoucherType.SALE: "INV", VoucherType.SALE_RETURN: "CRN"}
 EWB_DOC_TYPES = {VoucherType.SALE: "INV", VoucherType.DELIVERY_CHALLAN: "CHL", VoucherType.PURCHASE: "BIL"}
@@ -110,7 +111,7 @@ def einvoice_payload(db: Session, biz: Business, v: Voucher) -> dict:
         items.append(item)
 
     payload = {
-        "Version": "1.1",
+        "Version": config_store.get("einvoice_schema_version", v.date),
         "TranDtls": {"TaxSch": "GST", "SupTyp": sup_typ,
                      "RegRev": "Y" if v.reverse_charge else "N", "IgstOnIntra": "N"},
         "DocDtls": {"Typ": EINVOICE_TYPES[v.type], "No": v.number, "Dt": v.date.strftime("%d/%m/%Y")},

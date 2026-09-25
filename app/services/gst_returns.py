@@ -24,10 +24,10 @@ from ..gst.constants import BusinessGstType, PartyGstType, VoucherType
 from ..gst.states import state_label
 from ..models import Business, Party, Voucher
 from ..reports.accounting import itc_claimable
+from . import config_store
 
 ZERO = Decimal("0")
 HEADS = ("igst", "cgst", "sgst", "cess")
-COMPOSITION_RATE = {"TRADER": Decimal("1"), "MANUFACTURER": Decimal("1"), "RESTAURANT": Decimal("5"), "SERVICE": Decimal("6")}
 ZERO_RATED = {"EXPWP", "EXPWOP", "SEZWP", "SEZWOP"}
 
 
@@ -162,7 +162,7 @@ def gstr3b_json(db: Session, biz: Business, date_from: dt.date, date_to: dt.date
 # ================================================================ composition scheme
 def cmp08(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) -> dict:
     """Quarterly statement CMP-08: tax on turnover at the composition rate + reverse-charge tax."""
-    rate = COMPOSITION_RATE.get(biz.composition_type or "TRADER", Decimal("1"))
+    rate = config_store.composition_rate(biz.composition_type, date_from)
     turnover = ZERO
     for v in _docs(db, biz.id, [VoucherType.SALE, VoucherType.SALE_RETURN], date_from, date_to):
         turnover += (1 if v.type == VoucherType.SALE else -1) * v.taxable

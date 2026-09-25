@@ -58,7 +58,7 @@ def Opt(max_len: int = 200):
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 Prefix = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[A-Za-z0-9-]{1,5}$")]
-DocNumber = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[A-Za-z0-9/-]{1,16}$")]
+DocNumber = Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[A-Za-z0-9/-]{1,30}$")]
 NonNeg = Annotated[Decimal, Field(ge=0, max_digits=14, decimal_places=2)]
 
 
