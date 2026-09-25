@@ -14,11 +14,11 @@ interface Status {
   plan: PlanOut & { businesses: number | null; users: number | null; api_quota: number; backup_mb: number; godowns: number | null; invoices_per_year: number | null };
   status: "TRIAL" | "ACTIVE" | "EXPIRED"; valid_until: string | null; extra_businesses: number; is_owner: boolean;
   usage: { invoices_this_month: number; invoices_this_year: number; businesses: number; users: number; godowns: number; api_calls_this_month: number; backup_mb: number };
-  payments_live: boolean; dev_mode: boolean;
-  payments: { id: string; plan: string; cycle: string; amount: number; status: string; payment_id: string | null; created_at: string }[];
+  payments_live: boolean; dev_mode: boolean; test_mode: boolean;
+  payments: { id: string; plan: string; cycle: string; amount: number; status: string; payment_id: string | null; mode: string | null; method: string | null; created_at: string }[];
 }
 interface Plans { plans: PlanOut[]; trial_days: number; addon: { code: string; name: string; yearly: number; yearly_with_gst: number } }
-interface Order { order_id: string; amount: number; amount_paise: number; key_id: string | null; live: boolean; business_name: string; email: string; phone: string | null }
+interface Order { order_id: string; amount: number; amount_paise: number; key_id: string | null; live: boolean; test_mode: boolean; business_name: string; email: string; phone: string | null }
 
 declare global {
   interface Window { Razorpay?: new (opts: Record<string, unknown>) => { open: () => void } }
@@ -81,7 +81,10 @@ export default function BillingPage() {
               } catch (e) { reject(e); }
             },
             modal: { ondismiss: () => reject(new Error("Payment was cancelled")) },
+            notes: { plan, cycle: c },
           });
+          (rzp as unknown as { on?: (ev: string, cb: (r: { error?: { description?: string } }) => void) => void }).on?.(
+            "payment.failed", (r) => setErr(`Payment failed: ${r.error?.description ?? "please try again"}`));
           rzp.open();
         });
         setMsg("Payment successful — your plan is active.");
@@ -111,6 +114,12 @@ export default function BillingPage() {
             {st.status === "EXPIRED" && <span className="rounded bg-red-50 px-2 py-0.5 text-red-700">Paid plan expired — you are on Free</span>}
           </div>
           {st.dev_mode && <p className="mt-3 text-xs text-amber-700">Development mode: payments are simulated until Razorpay keys are configured.</p>}
+          {st.test_mode && (
+            <p className="mt-3 rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
+              <b>Razorpay TEST mode</b> — no real money is charged. Use UPI ID <code>success@razorpay</code> (or <code>failure@razorpay</code> to see a failure),
+              or a Razorpay test card.
+            </p>
+          )}
           {!st.is_owner && <p className="mt-3 text-xs text-gray-500">Only the account owner can change the plan.</p>}
         </Card>
         <Card className="space-y-3 p-5 lg:col-span-2">
@@ -157,7 +166,7 @@ export default function BillingPage() {
               {st.payments.map((x) => (
                 <tr key={x.id}>
                   <td>{new Date(x.created_at).toLocaleDateString("en-IN")}</td><td>{x.plan}</td><td>{x.cycle}</td>
-                  <td className="num">{money(x.amount)}</td><td>{x.status}</td><td className="font-mono text-xs">{x.payment_id}</td>
+                  <td className="num">{money(x.amount)}</td><td>{x.status}{x.mode === "TEST" ? " · test" : x.mode === "DEV" ? " · simulated" : ""}{x.method ? ` · ${x.method}` : ""}</td><td className="font-mono text-xs">{x.payment_id}</td>
                 </tr>
               ))}
             </tbody>
