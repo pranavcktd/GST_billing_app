@@ -61,6 +61,13 @@ def clean_code(value, numeric_cell: bool = False) -> str | None:
     return s if 2 <= len(s) <= 8 else None
 
 
+def clean_desc(v) -> str | None:
+    if v in (None, ""):
+        return None
+    s = re.sub(r"\s+", " ", str(v).replace("_x000D_", " ")).strip()
+    return None if s in ("", "-", "--", "NA", "N/A") else s
+
+
 def _num(v) -> Decimal | None:
     if v is None or str(v).strip() in ("", "-", "NIL", "Nil", "nil"):
         return None
@@ -113,13 +120,29 @@ def _table_rows(table, numeric_codes: bool, errors: list, sheet: str):
                 errors.append({"row": f"{sheet} {n}".strip(), "error": f"'{raw}' is not a 2-8 digit HSN/SAC code"})
             continue
         try:
-            yield dict(code=code, description=(str(cell("description")).strip() if cell("description") not in (None, "") else None),
+            yield dict(code=code, description=clean_desc(cell("description")),
                        gst_rate=_num(cell("gst_rate")), cess_rate=_num(cell("cess_rate")),
                        effective_from=_date(cell("effective_from")))
         except ValueError as e:
             errors.append({"row": f"{sheet} {n}".strip(), "error": f"{code}: {e}"})
     if header is None:
         errors.append({"row": sheet or "file", "error": "No header row with an HSN/SAC code column was found"})
+
+
+_PDF_NOISE = re.compile(r"(page )?\d+( of \d+)?|hsn_cd hsn_description|sac_cd sac_description")
+
+
+def _pdf_code_ok(code: str, desc: str, current: str | None) -> bool:
+    """Only code shapes that exist: HSN 2/4/6/8 digits, SAC 99 + 2/4/5/6 digits. A 2-digit HSN
+    chapter must come after the chapter being read (chapters are in order) and have a title, so a
+    wrapped line such as '20 Degree Centigrade' inside chapter 33 is not taken for chapter 20."""
+    if code.startswith("99"):
+        return len(code) in (2, 4, 5, 6)
+    if len(code) not in (2, 4, 6, 8):
+        return False
+    if len(code) == 2:
+        return (not desc or desc[:1].isalpha()) and (current is None or current.startswith("99") or code > current[:2])
+    return True
 
 
 def _pdf_rows(content: bytes, errors: list):
@@ -149,14 +172,19 @@ def _pdf_rows(content: bytes, errors: list):
                     break
             code = clean_code("".join(code_parts)) if code_parts else None
             desc = " ".join(tokens[i:]).lstrip("-–— :").strip()
-            if code and desc and not re.fullmatch(r"[\d\s.%]+", desc):
+            if code and not _pdf_code_ok(code, desc, current["code"] if current else None):
+                code = None  # e.g. a wrapped line starting "20 Degree Centigrade"
+            if code and (not desc or not re.fullmatch(r"[\d\s.%]+", desc)):
+                # a code, with its description on the same line or (long descriptions) on the next lines
                 if current:
+                    current["description"] = clean_desc(current["description"])
                     yield current
                 current = dict(code=code, description=desc, gst_rate=None, cess_rate=None, effective_from=None)
-            elif current and not code and len(line) > 2 and not re.fullmatch(r"(page )?\d+( of \d+)?", line.lower()):
+            elif current and len(line) > 2 and not _PDF_NOISE.fullmatch(line.lower()):
                 if len(current["description"]) < 1500:
-                    current["description"] += " " + line
+                    current["description"] = f"{current['description']} {line}".strip()
     if current:
+        current["description"] = clean_desc(current["description"])
         yield current
     if not reader.pages:
         errors.append({"row": "file", "error": "The PDF has no pages"})
