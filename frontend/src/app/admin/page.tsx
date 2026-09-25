@@ -4,6 +4,12 @@ import { CheckCircle2, XCircle } from "lucide-react";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { PlatformShell } from "@/components/PlatformShell";
+import { SmtpForm } from "@/components/SmtpForm";
+import { AdminAudit } from "@/components/admin/AdminAudit";
+import { AdminBackups } from "@/components/admin/AdminBackups";
+import { AdminBusinesses } from "@/components/admin/AdminBusinesses";
+import { AdminHierarchy } from "@/components/admin/AdminHierarchy";
+import { AdminUsers } from "@/components/admin/AdminUsers";
 import { Button, Card, ErrorBox, Field, Input, Loading, Select, Textarea } from "@/components/ui";
 import { api, qs } from "@/lib/api";
 import { fmtDate, money } from "@/lib/format";
@@ -19,7 +25,7 @@ interface Reseller { id: string; name: string; email: string; commission_pct: nu
 interface License { id: string; created_at: string; reseller: string; account: string; plan: string; months: number; amount: number; commission: number; payout_status: string }
 interface Health { app_env: string; database: boolean; database_engine: string; einvoice_provider: string; gsp_configured: boolean; razorpay_live: boolean; razorpay_webhook: boolean; email_configured: boolean; cloudinary_configured: boolean }
 
-const TABS = ["Overview", "Accounts", "Resellers", "Payouts", "System"] as const;
+const TABS = ["Overview", "Users", "Hierarchy", "Plans", "Businesses", "Resellers", "Payouts", "Backups", "Audit", "Email", "System"] as const;
 
 export default function AdminPage() {
   return <PlatformShell need="SUPERADMIN"><Admin /></PlatformShell>;
@@ -29,7 +35,7 @@ function Admin() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
   const [search, setSearch] = useState("");
   const { data: stats } = useFetch<Stats>("/admin/stats");
-  const { data: accounts, reload: reloadAcc } = useFetch<Account[]>(tab === "Accounts" ? `/admin/accounts${qs({ search })}` : null);
+  const { data: accounts, reload: reloadAcc } = useFetch<Account[]>(tab === "Plans" ? `/admin/accounts${qs({ search })}` : null);
   const { data: resellers, reload: reloadRes } = useFetch<Reseller[]>(tab === "Resellers" ? "/admin/resellers" : null);
   const { data: licenses, reload: reloadLic } = useFetch<License[]>(tab === "Payouts" ? "/admin/licenses" : null);
   const { data: health } = useFetch<Health>(tab === "System" ? "/admin/health" : null);
@@ -44,7 +50,7 @@ function Admin() {
 
   return (
     <>
-      <div className="mb-5 flex flex-wrap gap-1 rounded-lg border border-gray-200 bg-white p-1 text-sm w-fit">
+      <div className="mb-5 flex flex-wrap gap-1 rounded-lg border border-gray-200 bg-white p-1 text-sm">
         {TABS.map((t) => <button key={t} onClick={() => setTab(t)} className={`rounded-md px-4 py-1.5 ${tab === t ? "bg-brand-600 text-white" : "text-gray-700"}`}>{t}</button>)}
       </div>
       <ErrorBox message={err} />
@@ -67,7 +73,17 @@ function Admin() {
         </>
       ))}
 
-      {tab === "Accounts" && (
+      {tab === "Users" && <AdminUsers />}
+      {tab === "Hierarchy" && <AdminHierarchy />}
+      {tab === "Businesses" && <AdminBusinesses />}
+      {tab === "Backups" && <AdminBackups />}
+      {tab === "Audit" && <AdminAudit />}
+      {tab === "Email" && (
+        <SmtpForm base="/admin/smtp" title="Platform e-mail"
+          help="Used for system e-mails — password resets, new account details — and as the fallback for resellers and businesses that have not set up their own." />
+      )}
+
+      {tab === "Plans" && (
         <>
           <Input placeholder="Search name, email, phone" value={search} onChange={(e) => setSearch(e.target.value)} className="mb-3 max-w-xs" />
           <Card className="overflow-x-auto">

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { EInvoicePanel } from "@/components/EInvoicePanel";
+import { CopyLinkButton, EmailButton, getShareLink } from "@/components/ShareDialog";
 import { InvoiceDocument } from "@/components/InvoiceDocument";
 import { Button, ErrorBox, LinkButton, Loading, PageHeader, StatusBadge } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -41,13 +42,17 @@ export default function VoucherViewPage() {
     }
   }
 
-  function share() {
+  async function share() {
     const phone = (v!.party_phone ?? "").replace(/\D/g, "").slice(-10);
+    const win = window.open("", "_blank");
+    const link = await getShareLink(v!.id).catch(() => null);
     const text =
       `${v!.title} ${v!.number} dated ${fmtDate(v!.date)} from ${business!.name}\n` +
       `Amount: ${money(v!.grand_total)}` + (v!.balance > 0 ? `\nBalance due: ${money(v!.balance)}` : "") +
-      (business!.upi_id ? `\nPay via UPI: ${business!.upi_id}` : "");
-    window.open(`https://wa.me/${phone ? "91" + phone : ""}?text=${encodeURIComponent(text)}`, "_blank");
+      (business!.upi_id ? `\nPay via UPI: ${business!.upi_id}` : "") + (link ? `\nView / download: ${link}` : "");
+    const url = `https://wa.me/${phone ? "91" + phone : ""}?text=${encodeURIComponent(text)}`;
+    if (win) win.location.href = url;
+    else window.open(url, "_blank");
   }
 
   return (
@@ -60,6 +65,8 @@ export default function VoucherViewPage() {
             <LinkButton href={`/print/${v.id}`} variant="secondary"><Printer size={16} /> Print / PDF</LinkButton>
             {v.type === "SALE" && <LinkButton href={`/print/${v.id}?format=THERMAL_80`} variant="secondary"><Receipt size={16} /> Thermal</LinkButton>}
             <Button variant="secondary" onClick={share}><MessageCircle size={16} /> WhatsApp</Button>
+            {!v.cancelled && <EmailButton v={v} />}
+            {!v.cancelled && <CopyLinkButton id={v.id} />}
             {!v.cancelled && convertTo && !v.converted_to_id && can(convertTo === "purchases" ? "purchases" : "sales", "create") && (
               <LinkButton href={`/v/${convertTo}/new?from=${v.id}`} variant="secondary">
                 <ArrowRightLeft size={16} /> Convert to {KINDS[convertTo].label.toLowerCase()}

@@ -90,6 +90,29 @@ GST billing, inventory and accounting SaaS for small and medium Indian businesse
 - **Approval PIN:** staff without `edit_past` need a manager's approval PIN to change older entries.
 - **Audit trail:** every change is logged automatically.
 
+**Super Admin console** (`/admin`)
+- **Users at every level:** super admin, reseller, account owner, staff. You can create, edit, reset passwords (e-mail link or temporary password), lock/unlock, reset two-factor, activate/deactivate, sign out everywhere, change platform role, and delete.
+  - Deletion is guarded: you cannot delete yourself or the last super admin, and an owner's businesses are backed up before deletion.
+- **Hierarchy tree:** super admins → resellers → accounts → businesses → staff. Businesses can be transferred to a new owner.
+- **Platform audit trail:** sign-ins, failed sign-ins and lockouts, and every admin or reseller action, plus every business's audit trail. Exportable to CSV.
+- **Backups:** full platform, one account, or one business. All can be downloaded, imported and restored.
+  - Account and business backups restore as new businesses.
+  - A full backup replaces everything, after a typed confirmation and an automatic safety backup; the acting super admin keeps access.
+  - A daily automatic full backup keeps the last 7.
+- **Email (SMTP) per level:** platform (password resets and new-account mails), reseller, and business (invoices and backups). Each level falls back to the one above.
+
+**Sign-in security**
+- Forgot/reset password by e-mail link (one-time, 30 minutes).
+- Accounts lock for 15 minutes after 5 wrong passwords.
+- Optional two-factor sign-in (Google or Microsoft Authenticator).
+- Temporary passwords must be changed at first sign-in.
+- Changing a password or choosing "sign out everywhere" ends all other sessions immediately.
+- Security headers on every response.
+
+**Sharing:** e-mail an invoice to the customer, or share a public view link (also added to WhatsApp messages) that shows the document without a login. Links can be revoked.
+
+**Public pages:** Terms, Privacy, Refund and Contact templates, which Razorpay needs before it activates payments. Have them reviewed before going live.
+
 **Utilities**
 - **Bulk import** for parties, items (add or update), stock, HSN/SAC, expense items, every document type (sales, estimates, orders, challans, credit/debit notes, purchases, expenses) and payments.
   - Each has an Excel template with an instructions sheet.
@@ -124,9 +147,9 @@ cd backend
 python -m venv .venv && .venv\Scripts\activate      # Windows
 pip install -r requirements.txt
 copy .env.example .env                              # SQLite works out of the box
-alembic upgrade head
+alembic upgrade head                                # incremental migrations — existing data is kept
 uvicorn app.main:app --reload --port 8000           # API docs: http://localhost:8000/docs
-pytest                                              # 37 tests (uses TEST_DATABASE_URL if set)
+pytest                                              # 44 tests (uses TEST_DATABASE_URL if set)
 
 # frontend (Node 20+)
 cd frontend
@@ -144,7 +167,7 @@ npm run dev                                         # http://localhost:3000
    - `JWT_SECRET`: a long random string
    - `CORS_ORIGINS`: your frontend URL
    - `CLOUDINARY_URL`
-   - `APP_ENV=production` and `SUPERADMIN_EMAILS`
+   - `APP_ENV=production`, `SUPERADMIN_EMAILS` and `APP_URL` (the public web address used in e-mailed links)
    - `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET` (webhook URL `/api/billing/webhook`, events `payment.captured` and `order.paid`)
    - `EINVOICE_PROVIDER` plus the `GSP_*` settings once you have a GSP
    - optionally `SMTP_*` for emailed backups
