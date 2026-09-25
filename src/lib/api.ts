@@ -1,4 +1,5 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Empty = same origin (/api is proxied by Next.js, see next.config.ts). Set only to call the API directly.
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 const TOKEN_KEY = "gb_token";
 const BUSINESS_KEY = "gb_business";
