@@ -742,3 +742,20 @@ class HsnRequest(Base):
     requested_by: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
     resolved_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class GstinLookup(Base):
+    """Every GSTIN verification: live API calls (billed by the provider) and answers from the cache."""
+
+    __tablename__ = "gstin_lookups"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    gstin: Mapped[str] = mapped_column(String(15), index=True)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    business_id: Mapped[str | None] = mapped_column(ForeignKey("businesses.id", ondelete="SET NULL"), index=True)
+    source: Mapped[str] = mapped_column(String(8))  # LIVE | CACHE
+    ok: Mapped[bool] = mapped_column(Boolean, default=False)
+    http_status: Mapped[int | None] = mapped_column(Integer)
+    error: Mapped[str | None] = mapped_column(String(300))
+    data: Mapped[dict | None] = mapped_column(JSON)
+    credits_remaining: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
