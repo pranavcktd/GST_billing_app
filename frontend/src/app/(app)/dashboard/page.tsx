@@ -10,17 +10,18 @@ import { useFetch } from "@/lib/useFetch";
 import type { Voucher } from "@/lib/types";
 
 interface Dashboard {
-  inventory: { items: number; value: number; sale_value: number; low: number; out: number };
-  cash_bank: { total: number; cheques_in: number; cheques_out: number; accounts: { id: string; name: string; type: string; balance: number }[] };
-  expenses: { month: number; top: { category: string; amount: number }[] };
-  sales_today: number; sales_month: number; purchases_month: number; received_month: number;
-  receivable: number; payable: number;
-  trend: { month: string; sales: number; purchases: number; expenses: number }[];
+  inventory: { items: number; value: number | null; sale_value: number; low: number; out: number };
+  cash_bank: { total: number; cheques_in: number; cheques_out: number; accounts: { id: string; name: string; type: string; balance: number }[] } | null;
+  expenses: { month: number; top: { category: string; amount: number }[] } | null;
+  sales_today: number | null; sales_month: number | null; purchases_month: number | null; received_month: number | null;
+  receivable: number | null; payable: number | null;
+  trend: { month: string; sales: number; purchases: number | null; expenses: number | null }[];
   low_stock: { id: string; name: string; stock: number; unit: string; level: number }[];
   recent: Voucher[];
 }
 
-function Tile({ label, value, href, sub }: { label: string; value: number; href?: string; sub?: string }) {
+function Tile({ label, value, href, sub }: { label: string; value: number | null; href?: string; sub?: string }) {
+  if (value === null) return null;
   const body = (
     <Card className="h-full p-4 transition-colors hover:border-gray-300">
       <div className="text-xs font-medium text-gray-500">{label}</div>
@@ -50,7 +51,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-3">
-        <Card className="p-5">
+        {data.cash_bank && <Card className="p-5">
           <h2 className="mb-3 flex items-center justify-between font-semibold text-gray-900">
             <span className="flex items-center gap-2"><Landmark size={16} className="text-gray-500" aria-hidden /> Cash & bank</span>
             <span className="tabular-nums">{money(data.cash_bank.total)}</span>
@@ -70,14 +71,14 @@ export default function DashboardPage() {
               Open cheques: {money(data.cash_bank.cheques_in)} to receive · {money(data.cash_bank.cheques_out)} to pay
             </Link>
           )}
-        </Card>
+        </Card>}
         <Card className="p-5">
           <h2 className="mb-3 flex items-center justify-between font-semibold text-gray-900">
             <span className="flex items-center gap-2"><Boxes size={16} className="text-gray-500" aria-hidden /> Inventory</span>
             <Link href="/reports/r/stock-summary" className="text-xs font-normal text-brand-600 hover:underline">Stock summary</Link>
           </h2>
           <dl className="grid grid-cols-2 gap-3 text-sm">
-            <div><dt className="text-xs text-gray-500">Stock value (cost)</dt><dd className="font-semibold tabular-nums">{money(data.inventory.value)}</dd></div>
+            <div><dt className="text-xs text-gray-500">Stock value (cost)</dt><dd className="font-semibold tabular-nums">{data.inventory.value === null ? "—" : money(data.inventory.value)}</dd></div>
             <div><dt className="text-xs text-gray-500">At sale price</dt><dd className="font-semibold tabular-nums">{money(data.inventory.sale_value)}</dd></div>
             <div><dt className="text-xs text-gray-500">Items in stock list</dt><dd className="font-semibold">{data.inventory.items}</dd></div>
             <div>
@@ -90,7 +91,7 @@ export default function DashboardPage() {
             </div>
           </dl>
         </Card>
-        <Card className="p-5">
+        {data.expenses && <Card className="p-5">
           <h2 className="mb-3 flex items-center justify-between font-semibold text-gray-900">
             <span className="flex items-center gap-2"><Receipt size={16} className="text-gray-500" aria-hidden /> Expenses this month</span>
             <span className="tabular-nums">{money(data.expenses.month)}</span>
@@ -103,19 +104,19 @@ export default function DashboardPage() {
                 <li key={e.category}>
                   <div className="flex justify-between"><span className="text-gray-700">{e.category}</span><span className="tabular-nums">{money(e.amount)}</span></div>
                   <div className="mt-1 h-1.5 rounded-full bg-gray-100">
-                    <div className="h-1.5 rounded-full bg-gray-400" style={{ width: `${Math.max(4, (e.amount / data.expenses.month) * 100)}%` }} />
+                    <div className="h-1.5 rounded-full bg-gray-400" style={{ width: `${Math.max(4, (e.amount / (data.expenses?.month || 1)) * 100)}%` }} />
                   </div>
                 </li>
               ))}
             </ul>
           )}
-        </Card>
+        </Card>}
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-3">
         <Card className="p-5 lg:col-span-2">
           <h2 className="mb-3 font-semibold text-gray-900">Sales, purchases & expenses — last 6 months</h2>
-          <TrendChart data={data.trend} />
+          {data.trend.length ? <TrendChart data={data.trend.map((t) => ({ ...t, purchases: t.purchases ?? 0, expenses: t.expenses ?? 0 }))} /> : <p className="text-sm text-gray-500">Not available for your role.</p>}
         </Card>
         <Card className="p-5">
           <h2 className="mb-3 flex items-center gap-2 font-semibold text-gray-900">

@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { ImageUpload } from "@/components/ImageUpload";
+import { DEFAULT_PRINT } from "@/components/InvoiceDocument";
 import { Button, Card, ErrorBox, Field, Input, Select, Textarea } from "@/components/ui";
 import { STATES } from "@/lib/constants";
 import { gstinError } from "@/lib/gst";
 import type { Business, BusinessGstType } from "@/lib/types";
 
-export type BusinessDraft = Omit<Business, "id">;
+export type BusinessDraft = Omit<Business, "id" | "plan" | "einvoice_password_set"> & { einvoice_password?: string | null };
 
 export const emptyBusiness: BusinessDraft = {
   name: "", legal_name: null, gst_type: "REGULAR", gstin: "", pan: null, state_code: "", address: null,
@@ -16,6 +17,7 @@ export const emptyBusiness: BusinessDraft = {
   credit_note_prefix: "CN", debit_note_prefix: "DN", estimate_prefix: "EST", purchase_prefix: "PUR",
   receipt_prefix: "RCT", payment_prefix: "PAY", challan_prefix: "DC", sale_order_prefix: "SO",
   purchase_order_prefix: "PO", expense_prefix: "EXP", invoice_terms: null, auto_backup: true, backup_email: null,
+  transfer_prefix: "ST", print_settings: null, einvoice_username: null,
 };
 
 const GST_TYPES: { value: BusinessGstType; label: string; hint: string }[] = [
@@ -58,7 +60,7 @@ export function BusinessForm({
     setBusy(true);
     setError(null);
     try {
-      await onSubmit({ ...b, gstin: registered ? b.gstin : null });
+      await onSubmit({ ...b, gstin: registered ? b.gstin : null, print_settings: b.print_settings ?? DEFAULT_PRINT });
     } catch (err) {
       setError((err as Error).message);
     } finally {

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { PeriodPicker } from "@/components/PeriodPicker";
 import { Button, Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
-import { qs } from "@/lib/api";
+import { downloadFile, qs } from "@/lib/api";
 import { downloadCsv, fmtDate, monthRange, money, qty } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 
@@ -87,7 +87,16 @@ export default function Gstr1Page() {
 
   return (
     <>
-      <PageHeader title="GSTR-1" sub="Details of outward supplies" />
+      <PageHeader title="GSTR-1" sub="Details of outward supplies" actions={
+        <>
+          <Button variant="secondary" onClick={() => downloadFile(`/einvoice/bulk-json${qs({ date_from: period.from, date_to: period.to })}`).catch((e) => alert(e.message))}>
+            <Download size={16} /> e-Invoice bulk JSON
+          </Button>
+          <Button onClick={() => downloadFile(`/exports/gstr1-json${qs({ date_from: period.from, date_to: period.to })}`).catch((e) => alert(e.message))}>
+            <Download size={16} /> GSTR-1 JSON for portal
+          </Button>
+        </>
+      } />
       <PeriodPicker value={period} onChange={setPeriod} />
       <ErrorBox message={error} />
       {loading || !data ? (

@@ -1,4 +1,4 @@
-import { Building2, Calculator, DatabaseBackup, FileUp, Percent, Tags } from "lucide-react";
+import { Building2, Calculator, DatabaseBackup, FileSpreadsheet, FileUp, History, Percent, Tags } from "lucide-react";
 import Link from "next/link";
 
 const TOOLS = [
@@ -8,6 +8,8 @@ const TOOLS = [
   { href: "/utilities/hsn", title: "HSN / SAC master", desc: "Import, update or delete HSN/SAC codes with current GST rates", icon: Tags },
   { href: "/utilities/tax-slab", title: "Update tax slab", desc: "Change GST rate on many items at once after a rate change", icon: Percent },
   { href: "/utilities/gst-calculator", title: "GST calculator", desc: "Add or remove GST, split into CGST / SGST / IGST", icon: Calculator },
+  { href: "/utilities/tally", title: "Export to Tally", desc: "Ledgers and vouchers as Tally XML for your CA", icon: FileSpreadsheet },
+  { href: "/utilities/audit", title: "Audit trail", desc: "Who created, changed or deleted what — and when", icon: History },
 ];
 
 export default function UtilitiesPage() {

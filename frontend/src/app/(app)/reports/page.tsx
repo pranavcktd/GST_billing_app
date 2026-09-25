@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Search } from "lucide-react";
+import { BookOpen, Lock, Search } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Card, Input, Loading } from "@/components/ui";
@@ -36,12 +36,22 @@ export default function ReportsIndex() {
             <ul className="-mx-2">
               {list.filter((r) => r.category === cat).map((r) => (
                 <li key={r.slug}>
-                  <Link href={r.href ?? `/reports/r/${r.slug}`} className="block rounded-lg px-2 py-1.5 hover:bg-brand-50">
-                    <span className="text-sm font-medium text-gray-900">{r.title}</span>
+                  <Link href={r.locked ? `/billing?plan=${r.min_plan}` : r.href ?? `/reports/r/${r.slug}`} className="block rounded-lg px-2 py-1.5 hover:bg-brand-50">
+                    <span className={`flex items-center gap-1.5 text-sm font-medium ${r.locked ? "text-gray-400" : "text-gray-900"}`}>
+                      {r.title}{r.locked && <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 text-[10px] font-medium text-amber-800"><Lock size={10} /> {r.min_plan.charAt(0) + r.min_plan.slice(1).toLowerCase()}</span>}
+                    </span>
                     <span className="block text-xs text-gray-500">{r.description}</span>
                   </Link>
                 </li>
               ))}
+              {cat === "GST" && (
+                <li>
+                  <Link href="/reports/gstr2b" className="block rounded-lg px-2 py-1.5 hover:bg-brand-50">
+                    <span className="text-sm font-medium text-gray-900">GSTR-2B reconciliation</span>
+                    <span className="block text-xs text-gray-500">Match portal 2B with your purchase bills</span>
+                  </Link>
+                </li>
+              )}
               {cat === "Party" && extra && (
                 <li>
                   <Link href="/reports/outstanding" className="block rounded-lg px-2 py-1.5 hover:bg-brand-50">

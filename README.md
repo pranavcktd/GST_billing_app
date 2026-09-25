@@ -55,6 +55,41 @@ GST billing, inventory and accounting SaaS for small and medium Indian businesse
 - Expenses this month by category.
 - Six-month sales/purchases/expenses chart.
 
+**Compliance & integrations**
+- **e-Invoice (IRN) and e-Way bill.** NIC schema v1.1 JSON for the portal or its bulk upload. Generation runs through a switchable provider: `sandbox` for local testing, or `gsp` (add your GSP's API in `backend/app/services/einvoice.py`). IRN cancellation is allowed within 24 hours. Transport details (vehicle, LR, distance, ship-to) are printed on the bill.
+- **GSTR-1 JSON** for the portal (B2B, B2CL, B2CS, CDNR/CDNUR, nil-rated, HSN B2B/B2C, documents issued) and **GSTR-2B reconciliation** (matched, mismatched, missing in books, not in 2B).
+- **Tally XML export** of ledgers and balanced vouchers.
+
+**Printing & POS**
+- Invoice themes (classic, modern, minimal), accent colour, A4/A5 and thermal 80/58 mm, and Original/Duplicate/Triplicate copies.
+- Custom fields, a UPI "scan to pay" QR, and the e-invoice signed QR.
+- POS counter with barcode scanning (F9 saves and prints). Barcode label sheets with auto-generated in-store EAN-13 codes.
+
+**Multi-location:** godowns with stock transfers, a stock-by-godown report, and a godown chosen on each bill.
+
+**Subscription tiers** (per account, covering all of the owner's businesses; edit `backend/app/services/plans.py`)
+
+| | Free | Starter | Professional | Enterprise |
+|---|---|---|---|---|
+| Invoices | 30/month, 300/year | 250/month | Unlimited | Unlimited |
+| Businesses | 1 | 1 | 3 | 10 + add-on packs |
+| Users | 1 | 2 | 5 | Unlimited |
+| e-Invoice / e-Way bill | — | JSON | Direct API (500/month) | Direct API (5000/month) |
+| Reports | Day book, sales and basic | + P&L, balance sheet, inventory, GST | + ledgers, audit trail, 2B matching, profit reports | + batch/serial, godown stock |
+| Branding | Watermark | No watermark | Custom themes and logo | + barcode labels, custom roles |
+| Cloud backup | 100 MB | 1 GB | 5 GB | 20 GB |
+
+- New accounts get a 14-day Enterprise trial.
+- Hitting a limit shows an in-app upgrade prompt. Payment is through Razorpay (UPI, card, net banking), with signature and webhook verification.
+- With `APP_ENV=development` and no Razorpay keys, payments are simulated.
+
+**Roles**
+- **Platform:** a **Super Admin** (emails listed in `SUPERADMIN_EMAILS`) gets the `/admin` console: KPIs, accounts, plan and feature-flag overrides, resellers, payouts and system health.
+- **Resellers** get `/reseller`: register owners, issue licence packs, see commission. They never see business data.
+- **Staff roles:** Owner, Business admin, Store manager, Billing operator, Inventory manager, Accountant/CA (read-only). Each role is a matrix of modules × view/create/edit/delete/export, plus the `view_cost` and `edit_past` flags. Custom per-person matrices are an Enterprise feature.
+- **Approval PIN:** staff without `edit_past` need a manager's approval PIN to change older entries.
+- **Audit trail:** every change is logged automatically.
+
 **Utilities**
 - **Bulk import** for parties, items (add or update), stock, HSN/SAC, expense items, every document type (sales, estimates, orders, challans, credit/debit notes, purchases, expenses) and payments.
   - Each has an Excel template with an instructions sheet.
@@ -79,6 +114,11 @@ The test suite checks that the balance sheet balances exactly across a month of 
 ## Local development
 
 ```bash
+# database: PostgreSQL 17 in Docker (same engine as production)
+docker run -d --name gst-billing-db -e POSTGRES_USER=gst -e POSTGRES_PASSWORD=<pw> -e POSTGRES_DB=gst_billing   -p 5433:5432 -v gst_billing_pg:/var/lib/postgresql/data postgres:17-alpine
+#   .env: DATABASE_URL=postgresql://gst:<pw>@localhost:5433/gst_billing
+#         TEST_DATABASE_URL=postgresql://gst:<pw>@localhost:5433/gst_billing_test
+
 # backend (Python 3.12)
 cd backend
 python -m venv .venv && .venv\Scripts\activate      # Windows
@@ -86,7 +126,7 @@ pip install -r requirements.txt
 copy .env.example .env                              # SQLite works out of the box
 alembic upgrade head
 uvicorn app.main:app --reload --port 8000           # API docs: http://localhost:8000/docs
-pytest                                              # 24 tests
+pytest                                              # 37 tests (uses TEST_DATABASE_URL if set)
 
 # frontend (Node 20+)
 cd frontend
@@ -103,12 +143,13 @@ npm run dev                                         # http://localhost:3000
    - `JWT_SECRET`: a long random string
    - `CORS_ORIGINS`: your frontend URL
    - `CLOUDINARY_URL`
+   - `APP_ENV=production` and `SUPERADMIN_EMAILS`
+   - `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET` (webhook URL `/api/billing/webhook`, events `payment.captured` and `order.paid`)
+   - `EINVOICE_PROVIDER` plus the `GSP_*` settings once you have a GSP
    - optionally `SMTP_*` for emailed backups
 3. **Frontend:** add a service with root directory `frontend` (or deploy on Vercel). Set `NEXT_PUBLIC_API_URL`.
 
 ## Roadmap
-- e-Invoice (IRN + QR via IRP/GSP) and e-Way Bill.
-- GSTR-1 JSON export for the portal.
-- UPI QR on invoices; thermal (80mm) print.
-- Multiple godowns, barcode POS mode, audit log, Tally export.
-- Subscription billing (Razorpay), offline mode, React Native app.
+- Plug in a GSP's API for live IRN and e-way bill generation (the adapter is ready).
+- SMS/WhatsApp gateway (OTP approvals, invoice sending).
+- Offline mode and a React Native app.
