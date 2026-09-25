@@ -131,8 +131,9 @@ pytest                                              # 37 tests (uses TEST_DATABA
 # frontend (Node 20+)
 cd frontend
 npm install
-echo NEXT_PUBLIC_API_URL=http://localhost:8000 > .env.local
 npm run dev                                         # http://localhost:3000
+# /api is proxied by Next.js to the backend (next.config.ts), so other PCs on the network can use
+# http://<this-pc-ip>:3000 — only port 3000 needs to be reachable; the API stays on 127.0.0.1.
 ```
 
 ## Deploying to Railway
@@ -147,7 +148,7 @@ npm run dev                                         # http://localhost:3000
    - `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET` (webhook URL `/api/billing/webhook`, events `payment.captured` and `order.paid`)
    - `EINVOICE_PROVIDER` plus the `GSP_*` settings once you have a GSP
    - optionally `SMTP_*` for emailed backups
-3. **Frontend:** add a service with root directory `frontend` (or deploy on Vercel). Set `NEXT_PUBLIC_API_URL`.
+3. **Frontend:** add a service with root directory `frontend` (or deploy on Vercel). Set `API_PROXY_TARGET` to the backend's URL (the browser calls `/api` on the frontend's own domain, so no CORS setup is needed).
 
 ## Roadmap
 - Plug in a GSP's API for live IRN and e-way bill generation (the adapter is ready).
