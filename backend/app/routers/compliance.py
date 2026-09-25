@@ -6,20 +6,18 @@ new rates in one click; search / copy codes from the platform HSN master.
 """
 
 import datetime as dt
-import io
 import re
 from decimal import Decimal
 
-from fastapi import APIRouter, File, HTTPException, Request, Response, UploadFile
-from openpyxl import Workbook
+from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, select
 
 from ..deps import DB, BCtx, SuperAdmin
-from ..models import HsnCode, Item, MasterHsn, RateNotice, RateNoticeAction
+from ..models import Business, HsnCode, HsnRequest, Item, MasterHsn, RateNotice, RateNoticeAction
 from ..services import config_store as C
 from ..services import plans as P
-from ..services.importer import F, read_rows
+from ..services import hsn_master as H
 from ..services.platform_audit import log
 
 router = APIRouter(tags=["compliance"])
@@ -102,33 +100,52 @@ def update_plan(code: str, values: dict, db: DB, admin: SuperAdmin, request: Req
 
 # ================================================================ HSN / SAC master (platform)
 class MasterHsnIn(BaseModel):
-    code: str = Field(pattern=r"^\d{4,8}$")
-    description: str | None = Field(None, max_length=1000)
-    gst_rate: Decimal
+    code: str = Field(pattern=r"^\d{2,8}$")
+    description: str | None = Field(None, max_length=3000)
+    gst_rate: Decimal | None = None
     cess_rate: Decimal = Decimal("0")
     effective_from: dt.date | None = None
 
 
 def _m_out(h: MasterHsn) -> dict:
-    return dict(code=h.code, description=h.description, gst_rate=float(h.gst_rate), cess_rate=float(h.cess_rate),
-                effective_from=h.effective_from)
+    return dict(code=h.code, kind=H.kind_of(h.code), description=h.description,
+                gst_rate=float(h.gst_rate) if h.gst_rate is not None else None,
+                cess_rate=float(h.cess_rate or 0), effective_from=h.effective_from)
 
 
-def _search(db, search: str | None, limit: int):
-    q = select(MasterHsn).order_by(MasterHsn.code)
+def _search_q(search: str | None, kind: str | None = None, missing_rate: bool = False):
+    q = select(MasterHsn)
     if search:
         s = search.strip()
-        q = q.where(or_(MasterHsn.code.like(f"{s}%"), MasterHsn.description.ilike(f"%{s}%")))
-    return [_m_out(h) for h in db.scalars(q.limit(limit))]
+        digits = re.sub(r"\D", "", s)
+        q = q.where(MasterHsn.code.like(f"{digits}%") if digits and digits == s.replace(" ", "")
+                    else MasterHsn.description.ilike(f"%{s}%"))
+    if kind == "SAC":
+        q = q.where(MasterHsn.code.like("99%"))
+    elif kind == "HSN":
+        q = q.where(~MasterHsn.code.like("99%"))
+    if missing_rate:
+        q = q.where(MasterHsn.gst_rate.is_(None))
+    return q
+
+
+def _search(db, search: str | None, limit: int, kind: str | None = None, offset: int = 0, missing_rate: bool = False):
+    q = _search_q(search, kind, missing_rate).order_by(func.length(MasterHsn.code), MasterHsn.code) if search and not search.strip().isdigit() \
+        else _search_q(search, kind, missing_rate).order_by(MasterHsn.code)
+    return [_m_out(h) for h in db.scalars(q.offset(offset).limit(limit))]
 
 
 @router.get("/admin/hsn")
-def admin_hsn(db: DB, admin: SuperAdmin, search: str | None = None, limit: int = 200):
-    return {"total": db.scalar(select(func.count()).select_from(MasterHsn)), "rows": _search(db, search, min(limit, 1000))}
+def admin_hsn(db: DB, admin: SuperAdmin, search: str | None = None, kind: str | None = None, missing_rate: bool = False,
+              limit: int = 200, offset: int = 0):
+    matches = db.scalar(select(func.count()).select_from(_search_q(search, kind, missing_rate).subquery()))
+    return {**H.stats(db), "matches": matches,
+            "rows": _search(db, search, min(limit, 1000), kind, offset, missing_rate),
+            "pending_requests": db.scalar(select(func.count()).select_from(HsnRequest).where(HsnRequest.status == "PENDING"))}
 
 
-def _check_rate(rate: Decimal) -> None:
-    if rate not in C.all_rates():
+def _check_rate(rate: Decimal | None) -> None:
+    if rate is not None and rate not in C.all_rates():
         raise HTTPException(422, f"GST rate {rate}% is not a configured slab")
 
 
@@ -139,7 +156,8 @@ def admin_hsn_upsert(data: MasterHsnIn, db: DB, admin: SuperAdmin, request: Requ
     for k, v in data.model_dump().items():
         setattr(h, k, v)
     db.add(h)
-    log(db, admin, "UPDATE", "hsn-master", f"HSN {data.code} at {data.gst_rate}%", entity_id=data.code, request=request)
+    log(db, admin, "UPDATE", "hsn-master", f"HSN/SAC {data.code} at {data.gst_rate if data.gst_rate is not None else '—'}%",
+        entity_id=data.code, request=request)
     db.commit()
     return _m_out(h)
 
@@ -150,87 +168,166 @@ def admin_hsn_delete(code: str, db: DB, admin: SuperAdmin, request: Request):
     if h is None:
         raise HTTPException(404, "Not found")
     db.delete(h)
-    log(db, admin, "DELETE", "hsn-master", f"HSN {code}", entity_id=code, request=request)
+    log(db, admin, "DELETE", "hsn-master", f"HSN/SAC {code}", entity_id=code, request=request)
     db.commit()
 
 
-HSN_FIELDS = [
-    F("code", "HSN/SAC Code", True, "4-8 digits", "7323"),
-    F("description", "Description", False, "", "Table, kitchen or other household articles of iron or steel"),
-    F("gst_rate", "GST %", True, "", "18"),
-    F("cess_rate", "Cess %", False, "", "0"),
-    F("effective_from", "Effective From", False, "YYYY-MM-DD or DD/MM/YYYY", "2025-09-22"),
-]
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
-def _xlsx(rows: list[dict]) -> bytes:
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "HSN master"
-    ws.append([f.header for f in HSN_FIELDS])
-    for r in rows:
-        ws.append([r["code"], r["description"], r["gst_rate"], r["cess_rate"],
-                   r["effective_from"].isoformat() if r["effective_from"] else None])
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+@router.get("/admin/hsn/template")
+def admin_hsn_template(admin: SuperAdmin):
+    return Response(H.template(), media_type=XLSX, headers={"Content-Disposition": 'attachment; filename="hsn-sac-template.xlsx"'})
 
 
 @router.get("/admin/hsn/export")
 def admin_hsn_export(db: DB, admin: SuperAdmin):
-    rows = [_m_out(h) for h in db.scalars(select(MasterHsn).order_by(MasterHsn.code))]
-    return Response(_xlsx(rows or [dict(code="7323", description="Sample", gst_rate=18, cess_rate=0, effective_from=None)]),
-                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    headers={"Content-Disposition": 'attachment; filename="hsn-master.xlsx"'})
+    return Response(H.export(db), media_type=XLSX,
+                    headers={"Content-Disposition": f'attachment; filename="hsn-sac-master-{dt.date.today()}.xlsx"'})
 
 
 @router.post("/admin/hsn/import")
-async def admin_hsn_import(db: DB, admin: SuperAdmin, request: Request, file: UploadFile = File(...)):
+async def admin_hsn_import(db: DB, admin: SuperAdmin, request: Request, file: UploadFile = File(...),
+                           dry_run: bool = Form(True)):
+    """Preview (dry_run) or import an Excel / CSV / PDF list of codes."""
     content = await file.read()
-    if len(content) > 20 * 1024 * 1024:
-        raise HTTPException(413, "File is larger than 20 MB")
-    from ..services.importer import date as parse_date
-    from ..services.importer import num
-    rates = C.all_rates()
-    created = updated = 0
-    errors = []
+    if len(content) > 40 * 1024 * 1024:
+        raise HTTPException(413, "File is larger than 40 MB")
     try:
-        rows = read_rows(file.filename or "hsn.xlsx", content, HSN_FIELDS)
-    except Exception as e:  # noqa: BLE001
+        rows, errors, fmt = H.parse_file(file.filename or "", content)
+    except ValueError as e:
         _err(e)
-    existing = {h.code: h for h in db.scalars(select(MasterHsn))}
-    for n, r in rows:
-        try:
-            code = re.sub(r"\D", "", str(r.get("code") or ""))
-            if not 4 <= len(code) <= 8:
-                raise ValueError("HSN/SAC must be 4-8 digits")
-            rate = num(r.get("gst_rate"), "GST %")
-            if rate not in rates:
-                raise ValueError(f"GST {rate}% is not a configured slab")
-            h = existing.get(code)
-            if h is None:
-                h = existing[code] = MasterHsn(code=code)
-                db.add(h)
-                created += 1
-            else:
-                updated += 1
-            h.description = r.get("description") or h.description
+    except Exception as e:  # noqa: BLE001 — a damaged file
+        raise HTTPException(422, f"Could not read the file: {e}") from e
+    rows = H.validate_rates(rows, errors)
+    result = H.apply_rows(db, rows, dry_run)
+    sample = [dict(code=r["code"], kind=H.kind_of(r["code"]), description=r["description"],
+                   gst_rate=float(r["gst_rate"]) if r["gst_rate"] is not None else None) for r in rows[:40]]
+    if not dry_run:
+        log(db, admin, "IMPORT", "hsn-master",
+            f"HSN/SAC import ({fmt}, {file.filename}): {result['created']} added, {result['updated']} updated", request=request)
+        db.commit()
+    return {**result, "format": fmt, "rows": len(rows), "hsn": sum(1 for r in rows if not r["code"].startswith("99")),
+            "sac": sum(1 for r in rows if r["code"].startswith("99")),
+            "with_rate": sum(1 for r in rows if r["gst_rate"] is not None), "errors": errors[:300],
+            "error_count": len(errors), "sample": sample, "dry_run": dry_run, **({"stats": H.stats(db)} if not dry_run else {})}
+
+
+class BulkRateIn(BaseModel):
+    prefix: str = Field(pattern=r"^\d{2,8}$")
+    gst_rate: Decimal | None
+    cess_rate: Decimal | None = None
+    effective_from: dt.date | None = None
+    only_missing: bool = True  # don't overwrite codes that already have a rate
+
+
+@router.post("/admin/hsn/bulk-rate")
+def admin_hsn_bulk_rate(data: BulkRateIn, db: DB, admin: SuperAdmin, request: Request):
+    """Set the suggested rate of every code under a chapter / heading (e.g. all of 61 → 5%)."""
+    _check_rate(data.gst_rate)
+    q = select(MasterHsn).where(MasterHsn.code.like(f"{data.prefix}%"), func.length(MasterHsn.code) >= 4)
+    if data.only_missing:
+        q = q.where(MasterHsn.gst_rate.is_(None))
+    n = 0
+    for h in db.scalars(q):
+        h.gst_rate = data.gst_rate
+        if data.cess_rate is not None:
+            h.cess_rate = data.cess_rate
+        if data.effective_from:
+            h.effective_from = data.effective_from
+        n += 1
+    log(db, admin, "UPDATE", "hsn-master", f"Bulk rate {data.gst_rate}% for {data.prefix}* ({n} codes)", request=request)
+    db.commit()
+    return {"updated": n}
+
+
+# ---- missing-code requests
+class RequestIn(BaseModel):
+    code: str = Field(pattern=r"^\d{4,8}$")
+    description: str = Field(min_length=3, max_length=1000)
+    gst_rate: Decimal | None = None
+    note: str | None = Field(None, max_length=1000)
+
+
+def _r_out(r: HsnRequest, business_name: str | None = None) -> dict:
+    return dict(id=r.id, code=r.code, kind=H.kind_of(r.code), description=r.description,
+                gst_rate=float(r.gst_rate) if r.gst_rate is not None else None, note=r.note, status=r.status,
+                admin_note=r.admin_note, requested_by=r.requested_by, created_at=r.created_at, resolved_at=r.resolved_at,
+                business=business_name)
+
+
+@router.post("/hsn-master/requests", status_code=201)
+def request_code(data: RequestIn, ctx: BCtx):
+    ctx.need("items", "create")
+    if ctx.db.get(MasterHsn, data.code):
+        raise HTTPException(409, f"{data.code} is already in the official master")
+    dup = ctx.db.scalar(select(HsnRequest).where(HsnRequest.business_id == ctx.bid, HsnRequest.code == data.code,
+                                                 HsnRequest.status == "PENDING"))
+    if dup:
+        raise HTTPException(409, "You have already requested this code")
+    r = HsnRequest(business_id=ctx.bid, code=data.code, description=data.description, gst_rate=data.gst_rate,
+                   note=data.note, requested_by=f"{ctx.user.name} <{ctx.user.email}>")
+    ctx.db.add(r)
+    ctx.db.commit()
+    return _r_out(r)
+
+
+@router.get("/hsn-master/requests")
+def my_requests(ctx: BCtx):
+    return [_r_out(r) for r in ctx.db.scalars(select(HsnRequest).where(HsnRequest.business_id == ctx.bid)
+                                              .order_by(HsnRequest.created_at.desc()).limit(100))]
+
+
+@router.get("/admin/hsn-requests")
+def admin_requests(db: DB, admin: SuperAdmin, status: str = "PENDING"):
+    q = select(HsnRequest, Business.name).join(Business, Business.id == HsnRequest.business_id)
+    if status != "ALL":
+        q = q.where(HsnRequest.status == status)
+    return [_r_out(r, name) for r, name in db.execute(q.order_by(HsnRequest.created_at.desc()).limit(300))]
+
+
+class ResolveIn(BaseModel):
+    approve: bool
+    description: str | None = Field(None, max_length=3000)
+    gst_rate: Decimal | None = None
+    admin_note: str | None = Field(None, max_length=1000)
+
+
+@router.post("/admin/hsn-requests/{request_id}")
+def admin_resolve(request_id: str, data: ResolveIn, db: DB, admin: SuperAdmin, request: Request):
+    r = db.get(HsnRequest, request_id)
+    if r is None:
+        raise HTTPException(404, "Request not found")
+    if r.status != "PENDING":
+        raise HTTPException(400, "Already resolved")
+    if data.approve:
+        rate = data.gst_rate if data.gst_rate is not None else r.gst_rate
+        _check_rate(rate)
+        h = db.get(MasterHsn, r.code) or MasterHsn(code=r.code, cess_rate=Decimal("0"))
+        h.description = data.description or h.description or r.description
+        if rate is not None:
             h.gst_rate = rate
-            h.cess_rate = num(r.get("cess_rate"), "Cess %", Decimal("0"))
-            h.effective_from = parse_date(r.get("effective_from"), "Effective From")
-        except Exception as e:  # noqa: BLE001
-            if len(errors) < 200:
-                errors.append({"row": n, "error": getattr(e, "detail", None) or str(e)})
-    log(db, admin, "IMPORT", "hsn-master", f"HSN master import: {created} added, {updated} updated, {len(errors)} errors",
+        db.add(h)
+        # other businesses waiting for the same code are answered too
+        for other in db.scalars(select(HsnRequest).where(HsnRequest.code == r.code, HsnRequest.status == "PENDING")):
+            other.status, other.resolved_at, other.admin_note = "APPROVED", dt.datetime.now(dt.UTC), data.admin_note
+    else:
+        r.status, r.resolved_at, r.admin_note = "REJECTED", dt.datetime.now(dt.UTC), data.admin_note
+    log(db, admin, "APPROVE" if data.approve else "REJECT", "hsn-request", f"HSN/SAC request {r.code}", entity_id=r.id,
         request=request)
     db.commit()
-    return {"created": created, "updated": updated, "errors": errors}
+    return _r_out(r)
 
 
-# business side: search the platform master and copy codes into the business's own master
+# ---- business side: search / look up the platform master and copy codes into the business's favourites
 @router.get("/hsn-master")
-def hsn_master_search(ctx: BCtx, search: str | None = None):
-    return _search(ctx.db, search, 50)
+def hsn_master_search(ctx: BCtx, search: str | None = None, kind: str | None = None):
+    return _search(ctx.db, search, 50, kind)
+
+
+@router.get("/hsn-master/lookup/{code}")
+def hsn_master_lookup(code: str, ctx: BCtx):
+    return H.lookup(ctx.db, code)
 
 
 class CopyIn(BaseModel):
@@ -245,13 +342,17 @@ def hsn_master_copy(data: CopyIn, ctx: BCtx):
     masters = ctx.db.scalars(select(MasterHsn).where(MasterHsn.code.in_(codes))).all() if codes else []
     mine = {h.code: h for h in ctx.db.scalars(select(HsnCode).where(HsnCode.business_id == ctx.bid))}
     n = 0
+    no_rate = []
     for m in masters:
+        if m.gst_rate is None:
+            no_rate.append(m.code)
+            continue
         h = mine.get(m.code) or HsnCode(business_id=ctx.bid, code=m.code)
         h.description, h.gst_rate, h.cess_rate, h.effective_from = m.description, m.gst_rate, m.cess_rate, m.effective_from
         ctx.db.add(h)
         n += 1
     ctx.db.commit()
-    return {"copied": n, "not_found": sorted(codes - {m.code for m in masters})}
+    return {"copied": n, "without_rate": sorted(no_rate), "not_found": sorted(codes - {m.code for m in masters})}
 
 
 # ================================================================ rate-change notices

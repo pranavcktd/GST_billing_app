@@ -689,9 +689,9 @@ class MasterHsn(Base):
     """Platform-wide HSN/SAC master maintained by super admins; businesses look codes up and copy from it."""
 
     __tablename__ = "master_hsn"
-    code: Mapped[str] = mapped_column(String(8), primary_key=True)
+    code: Mapped[str] = mapped_column(String(8), primary_key=True)  # 2-8 digits; SAC codes start with 99
     description: Mapped[str | None] = mapped_column(Text)
-    gst_rate: Mapped[Decimal] = mapped_column(Rate)
+    gst_rate: Mapped[Decimal | None] = mapped_column(Rate, nullable=True)  # suggested rate; blank until set
     cess_rate: Mapped[Decimal] = mapped_column(Rate, default=Decimal("0"), server_default="0")
     effective_from: Mapped[dt.date | None] = mapped_column(Date)
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
@@ -725,3 +725,20 @@ class RateNoticeAction(Base):
     items_changed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     by_name: Mapped[str | None] = mapped_column(String(200))
     at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class HsnRequest(Base):
+    """A business asks the platform to add an HSN/SAC code missing from the master."""
+
+    __tablename__ = "hsn_requests"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(8))
+    description: Mapped[str] = mapped_column(Text)
+    gst_rate: Mapped[Decimal | None] = mapped_column(Rate, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(10), default="PENDING", server_default="PENDING")
+    admin_note: Mapped[str | None] = mapped_column(Text)
+    requested_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    resolved_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))

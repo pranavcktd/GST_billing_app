@@ -7,7 +7,7 @@ import { api, qs } from "@/lib/api";
 import { fmtDate } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 
-type FieldType = "money" | "int" | "number" | "text" | "rates" | "list" | "map_text" | "map_number";
+type FieldType = "money" | "int" | "number" | "text" | "bool" | "rates" | "list" | "map_text" | "map_number";
 interface ConfigField { key: string; group: string; label: string; type: FieldType; default: unknown; help: string }
 interface Version { id: string; effective_from: string; values: Record<string, unknown>; note: string | null; by: string; at: string }
 interface ConfigData { fields: ConfigField[]; effective: Record<string, unknown>; on: string; versions: Version[] }
@@ -38,6 +38,7 @@ function fromText(type: FieldType, t: string): unknown {
     return out;
   }
   if (type === "text") return t;
+  if (type === "bool") return t === "true";
   return t === "" ? null : Number(t);
 }
 
@@ -119,7 +120,12 @@ export function AdminConfig() {
               const hint = f.type === "rates" ? "Comma separated, e.g. 0, 5, 18, 40" : multi ? (f.type === "list" ? "One per line" : "One per line: CODE = value") : undefined;
               return (
                 <Field key={f.key} label={f.label + (dirty ? " •" : "")} hint={[f.help, hint].filter(Boolean).join(" ")} className={multi ? "md:col-span-2" : ""}>
-                  {multi ? (
+                  {f.type === "bool" ? (
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={value === "true"} onChange={(e) => setEdits({ ...edits, [f.key]: String(e.target.checked) })} />
+                      {value === "true" ? "On" : "Off"}
+                    </label>
+                  ) : multi ? (
                     <Textarea rows={Math.min(10, Math.max(3, value.split("\n").length))} className={`font-mono text-xs ${dirty ? "!border-amber-400" : ""}`}
                       value={value} onChange={(e) => setEdits({ ...edits, [f.key]: e.target.value })} />
                   ) : (
