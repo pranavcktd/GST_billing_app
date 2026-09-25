@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ImageUpload } from "@/components/ImageUpload";
 import { DEFAULT_PRINT } from "@/components/InvoiceDocument";
+import { GstinVerify, type GstinInfo } from "@/components/GstinVerify";
 import { Button, Card, ErrorBox, Field, Input, Select, Textarea } from "@/components/ui";
 import { STATES } from "@/lib/constants";
 import { gstinError } from "@/lib/gst";
@@ -55,6 +56,19 @@ export function BusinessForm({
     setB((prev) => ({ ...prev, gstin: g, state_code: g.length >= 2 && STATES[g.slice(0, 2)] ? g.slice(0, 2) : prev.state_code }));
   }
 
+  const [filled, setFilled] = useState<string[]>([]);
+
+  function applyGstin(d: GstinInfo) {
+    const done = ["legal name", "state", "GST registration type"];
+    const next: BusinessDraft = { ...b, legal_name: d.legal_name ?? b.legal_name, state_code: d.state_code, gst_type: d.business_gst_type };
+    if (!b.name.trim() && (d.trade_name || d.legal_name)) { next.name = (d.trade_name || d.legal_name)!; done.unshift("business name"); }
+    if (d.address) { next.address = d.address; done.push("address"); }
+    if (d.city) { next.city = d.city; done.push("city"); }
+    if (d.pincode) { next.pincode = d.pincode; done.push("pincode"); }
+    setB(next);
+    setFilled(done);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (gstErr) return setError(`GSTIN: ${gstErr}`);
@@ -99,6 +113,7 @@ export function BusinessForm({
           {registered && (
             <Field label="GSTIN" required error={gstErr}>
               <Input required maxLength={15} value={b.gstin ?? ""} onChange={(e) => onGstin(e.target.value)} className="uppercase" />
+              <GstinVerify gstin={b.gstin} onResult={applyGstin} filled={filled} />
             </Field>
           )}
           <Field label="State" required hint={registered ? "Filled from GSTIN" : undefined}>

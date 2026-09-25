@@ -10,6 +10,7 @@ import { AdminBackups } from "@/components/admin/AdminBackups";
 import { AdminBusinesses } from "@/components/admin/AdminBusinesses";
 import { AdminConfig } from "@/components/admin/AdminConfig";
 import { AdminHsnMaster } from "@/components/admin/AdminHsnMaster";
+import { AdminIntegrations } from "@/components/admin/AdminIntegrations";
 import { AdminPlanConfig } from "@/components/admin/AdminPlanConfig";
 import { AdminRateNotices } from "@/components/admin/AdminRateNotices";
 import { AdminHierarchy } from "@/components/admin/AdminHierarchy";
@@ -29,7 +30,7 @@ interface Reseller { id: string; name: string; email: string; commission_pct: nu
 interface License { id: string; created_at: string; reseller: string; account: string; plan: string; months: number; amount: number; commission: number; payout_status: string }
 interface Health { app_env: string; database: boolean; database_engine: string; einvoice_provider: string; gsp_configured: boolean; razorpay_live: boolean; razorpay_webhook: boolean; email_configured: boolean; cloudinary_configured: boolean }
 
-const TABS = ["Overview", "Users", "Hierarchy", "Plans", "Businesses", "Resellers", "Payouts", "GST config", "HSN master", "Rate notices", "Pricing", "Backups", "Audit", "Email", "System"] as const;
+const TABS = ["Overview", "Users", "Hierarchy", "Plans", "Businesses", "Resellers", "Payouts", "GST config", "HSN master", "Rate notices", "Pricing", "Integrations", "Backups", "Audit", "Email", "System"] as const;
 
 export default function AdminPage() {
   return <PlatformShell need="SUPERADMIN"><Admin /></PlatformShell>;
@@ -84,6 +85,7 @@ function Admin() {
       {tab === "HSN master" && <AdminHsnMaster />}
       {tab === "Rate notices" && <AdminRateNotices />}
       {tab === "Pricing" && <AdminPlanConfig />}
+      {tab === "Integrations" && <AdminIntegrations />}
       {tab === "Backups" && <AdminBackups />}
       {tab === "Audit" && <AdminAudit />}
       {tab === "Email" && (

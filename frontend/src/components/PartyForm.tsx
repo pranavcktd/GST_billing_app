@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { GstinVerify, type GstinInfo } from "@/components/GstinVerify";
 import { Button, Card, ErrorBox, Field, Input, Select, Textarea } from "@/components/ui";
 import { PARTY_GST_TYPES, STATES } from "@/lib/constants";
 import { gstinError } from "@/lib/gst";
@@ -48,6 +49,23 @@ export function PartyForm({
     }));
   }
 
+  const [filled, setFilled] = useState<string[]>([]);
+  const [names, setNames] = useState<string[]>([]);
+
+  /** Autofill basic details from the GST portal; the user completes the rest. */
+  function applyGstin(d: GstinInfo) {
+    const name = d.trade_name || d.legal_name || "";
+    const next: PartyDraft = { ...p, gst_type: d.party_gst_type as PartyGstType, state_code: d.state_code, pan: d.pan };
+    const done = ["GST type", "state", "PAN"];
+    if (name && !p.name.trim()) { next.name = name; done.unshift("name"); }
+    if (d.address) { next.billing_address = d.address; done.push("address"); }
+    if (d.city) { next.city = d.city; done.push("city"); }
+    if (d.pincode) { next.pincode = d.pincode; done.push("pincode"); }
+    setP(next);
+    setFilled(done);
+    setNames([d.trade_name, d.legal_name].filter((x, i, a): x is string => !!x && a.indexOf(x) === i));
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (gstErr) return setError(`GSTIN: ${gstErr}`);
@@ -83,6 +101,13 @@ export function PartyForm({
           </Field>
           <Field label="GSTIN" error={gstErr} hint="Fills state and GST type automatically">
             <Input maxLength={15} className="uppercase" value={p.gstin ?? ""} onChange={(e) => onGstin(e.target.value)} required={needsGstin} />
+            <GstinVerify gstin={p.gstin} onResult={applyGstin} filled={filled} />
+            {names.length > 0 && (
+              <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-gray-500">
+                Use as party name:
+                {names.map((n) => <button key={n} type="button" onClick={() => set("name", n)} className="rounded border border-gray-200 px-1.5 py-0.5 hover:bg-gray-50">{n}</button>)}
+              </div>
+            )}
           </Field>
           <Field label="GST type">
             <Select value={p.gst_type} onChange={(e) => set("gst_type", e.target.value as PartyGstType)}>
