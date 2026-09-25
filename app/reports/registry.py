@@ -46,6 +46,7 @@ CATALOG = [
     R("item-pnl", ITEM, "Item wise profit & loss", "Sales, cost and profit per item", ["period"], items.item_pnl),
     R("item-by-party", ITEM, "Item report by party", "Who bought / supplied an item", ["period", "item*"], items.item_by_party),
     R("item-details", ITEM, "Item details", "Day-wise movement of one item", ["period", "item*"], items.item_details),
+    R("godown-stock", ITEM, "Stock by godown", "Quantity of every item in each godown", ["as_of"], items.godown_stock),
     R("low-stock", ITEM, "Low stock summary", "Items at or below minimum level", ["as_of"], items.low_stock),
     R("category-sales", ITEM, "Sale / purchase by item category", "Totals per item category", ["period"], items.sale_purchase_by_category),
     R("category-stock", ITEM, "Stock summary by item category", "Quantity and value per category", ["as_of"], items.stock_by_category),

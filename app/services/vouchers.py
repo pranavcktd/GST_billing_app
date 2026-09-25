@@ -36,6 +36,8 @@ from ..models import (
 )
 from ..schemas import TaxBucketOut, VoucherDetailOut, VoucherIn, VoucherLineOut, VoucherOut
 from .accounts import resolve_account
+from .godowns import resolve_godown
+from .plans import check_invoice_limit
 from .numbering import allocate_number
 
 ZERO = Decimal("0")
@@ -82,6 +84,8 @@ def save_voucher(ctx: Ctx, data: VoucherIn, voucher: Voucher | None = None) -> V
             raise bad("Document type cannot be changed")
         if voucher.cancelled:
             raise bad("A cancelled document cannot be edited")
+        if voucher.einvoice_status == "GENERATED":
+            raise bad("An e-invoice (IRN) exists for this document — cancel the IRN before editing")
 
     # ---- party ----
     party: Party | None = _get_owned(ctx, Party, data.party_id, "Party") if data.party_id else None
@@ -155,6 +159,12 @@ def save_voucher(ctx: Ctx, data: VoucherIn, voucher: Voucher | None = None) -> V
         if source.cancelled or source.converted_to_id:
             raise bad("The source document is cancelled or already converted")
 
+    godown = resolve_godown(db, ctx.bid, data.godown_id) if meta["stock"] else None
+    if voucher is None and vtype == VoucherType.SALE:
+        check_invoice_limit(db, ctx.bid)
+    custom_keys = {f["key"] for f in ((biz.print_settings or {}).get("custom_fields") or [])}
+    extra = {k: v for k, v in (data.extra_fields or {}).items() if k in custom_keys and v} or None
+
     # ---- header ----
     is_new = voucher is None
     if is_new:
@@ -190,6 +200,9 @@ def save_voucher(ctx: Ctx, data: VoucherIn, voucher: Voucher | None = None) -> V
     voucher.reverse_charge = reverse_charge
     voucher.expense_category_id = category.id if category else None
     voucher.tcs_rate = data.tcs_rate
+    voucher.godown_id = godown.id if godown else None
+    voucher.transport = data.transport.model_dump(mode="json", exclude_none=True) if data.transport else None
+    voucher.extra_fields = extra
     voucher.tcs_amount = totals.tcs
     voucher.supplier_invoice_no = data.supplier_invoice_no
     voucher.supplier_invoice_date = data.supplier_invoice_date
@@ -223,7 +236,7 @@ def save_voucher(ctx: Ctx, data: VoucherIn, voucher: Voucher | None = None) -> V
                 db.add(StockMovement(
                     business_id=ctx.bid, item_id=item.id, date=data.date, type=StockMoveType(vtype.value),
                     qty=meta["stock"] * li.qty, rate=(lo.taxable / li.qty).quantize(Decimal("0.01")),
-                    voucher_id=voucher.id, batch_no=li.batch_no,
+                    voucher_id=voucher.id, batch_no=li.batch_no, godown_id=godown.id,
                 ))
 
     # ---- payment received / paid on the spot ----

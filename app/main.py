@@ -6,9 +6,14 @@ from sqlalchemy.exc import IntegrityError
 from .config import get_settings
 from .gst.constants import GST_RATES, UQC
 from .gst.states import STATES
+from . import audit
 from .routers import (
     auth,
+    billing,
     businesses,
+    einvoice,
+    exports,
+    godowns,
     cashbank,
     expenses,
     items,
@@ -32,6 +37,9 @@ app.add_middleware(
 )
 
 
+audit.install(app)
+
+
 @app.exception_handler(IntegrityError)
 async def integrity_error(_: Request, exc: IntegrityError):
     msg = "This record conflicts with an existing one"
@@ -41,7 +49,7 @@ async def integrity_error(_: Request, exc: IntegrityError):
 
 
 for r in (auth, businesses, parties, items, vouchers, payments, reports, uploads, cashbank, loans, expenses,
-          utilities):
+          utilities, godowns, einvoice, billing, exports):
     app.include_router(r.router, prefix="/api")
 
 

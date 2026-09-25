@@ -109,6 +109,8 @@ def item_details(r: RCtx):
     opening = ZERO
     for m in r.db.scalars(select(StockMovement).where(StockMovement.item_id == it.id,
                                                       StockMovement.date <= r.date_to).order_by(StockMovement.date)):
+        if m.type == StockMoveType.TRANSFER:
+            continue  # moves between godowns do not change the item's total
         if m.date < r.date_from:
             opening += m.qty
             continue
@@ -266,3 +268,29 @@ def item_discount(r: RCtx):
 
 
 
+
+
+def godown_stock(r: RCtx):
+    from ..models import Godown
+    from ..services.godowns import stock_by_godown
+
+    godowns = r.db.scalars(select(Godown).where(Godown.business_id == r.bid).order_by(Godown.is_default.desc(),
+                                                                                       Godown.name)).all()
+    qty = stock_by_godown(r.db, r.bid, as_of=r.as_of)
+    costs = avg_costs(r.db, r.bid, r.as_of)
+    rows = []
+    for it in _items(r):
+        row = dict(_link=f"/items/{it.id}", item=it.name, unit=it.unit)
+        total = ZERO
+        for g in godowns:
+            q = qty.get((it.id, g.id), ZERO)
+            row[g.id] = q
+            total += q
+        if not total and not any(row[g.id] for g in godowns):
+            continue
+        row["total"] = total
+        row["value"] = (max(total, ZERO) * costs.get(it.id, ZERO)).quantize(PAISE)
+        rows.append(row)
+    cols = [col("item", "Item"), col("unit", "Unit"), *[col(g.id, g.name, "qty") for g in godowns],
+            col("total", "Total", "qty"), col("value", "Value", "money")]
+    return result("Stock by godown", [section(cols, rows, total=totals(rows, ["value"]))])
