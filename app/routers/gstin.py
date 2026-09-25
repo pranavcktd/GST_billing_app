@@ -67,3 +67,14 @@ def put_settings(data: SettingsIn, db: DB, admin: SuperAdmin, request: Request):
 @router.post("/admin/gstin-api/test")
 def test_connection(db: DB, admin: SuperAdmin):
     return G.provider_stats(db)
+
+
+class StatusIn(BaseModel):
+    gstins: list[str] = Field(default_factory=list, max_length=500)
+
+
+@router.post("/gstin/status")
+def status(data: StatusIn, db: DB, user: CurrentUser):
+    """Free: has this GSTIN been verified on this platform before, and what was the result?"""
+    found = G.last_status(db, data.gstins)
+    return {g.strip().upper(): found.get(g.strip().upper(), {"verified": False}) for g in data.gstins if g}

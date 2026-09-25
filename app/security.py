@@ -49,7 +49,7 @@ def totp_new_secret() -> str:
 def totp_uri(secret: str, email: str) -> str:
     import pyotp
 
-    return pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name="GST Billing")
+    return pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name="SmartHisab")
 
 
 def totp_ok(secret: str, code: str) -> bool:

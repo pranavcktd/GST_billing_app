@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
+from . import config_store
 from ..models import SmtpConfig, Subscription
 from ..security import decrypt_secret
 
@@ -105,4 +106,4 @@ def layout(title: str, body_html: str, footer: str = "") -> str:
     return f"""<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;color:#1c2430">
 <div style="background:#1f65bb;color:#fff;padding:14px 20px;border-radius:8px 8px 0 0;font-size:18px;font-weight:bold">{title}</div>
 <div style="border:1px solid #e5e7eb;border-top:0;padding:20px;border-radius:0 0 8px 8px;font-size:14px;line-height:1.6">{body_html}</div>
-<div style="color:#9ca3af;font-size:12px;text-align:center;padding:10px">{footer or "Sent by GST Billing"}</div></div>"""
+<div style="color:#9ca3af;font-size:12px;text-align:center;padding:10px">{footer or f"Sent by {config_store.app_name()} · {config_store.effective()['company'].get('name', '')}"}</div></div>"""

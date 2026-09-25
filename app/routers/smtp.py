@@ -9,7 +9,7 @@ from sqlalchemy import select
 from ..deps import DB, BCtx, Reseller, SuperAdmin
 from ..models import SmtpConfig
 from ..security import encrypt_secret
-from ..services import mailer
+from ..services import config_store, mailer
 from ..services.platform_audit import log
 from ..services.plans import account_of
 
@@ -61,7 +61,7 @@ def _remove(db, scope: str, owner_id: str) -> None:
 
 
 def _test(cfg: mailer.Smtp | None, to: str, who: str) -> dict:
-    mailer.send(cfg, [to], "Test e-mail from GST Billing",
+    mailer.send(cfg, [to], f"Test e-mail from {config_store.app_name()}",
                 mailer.layout("It works!", f"<p>This test e-mail was sent using the <b>{cfg.source.lower() if cfg else ''}</b> "
                                            f"mail settings of {who}.</p>"))
     return {"sent": True, "via": cfg.source if cfg else None}

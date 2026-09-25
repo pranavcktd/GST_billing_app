@@ -85,8 +85,12 @@ FIELDS: list[Field] = [
     # ---- billing & brand
     Field("subscription_gst_rate", "Subscription & company", "GST on subscription fees (%)", "number", 18),
     Field("trial_days", "Subscription & company", "Free trial days", "int", 14),
+    Field("brand", "Subscription & company", "Product brand", "map_text",
+          {"app_name": "SmartHisab", "by_line": "by Corenexgen",
+           "tagline": "Billing, stock and accounts — made simple for Indian businesses"},
+          "Shown in the app, website, e-mails and on bills of Free-plan users."),
     Field("company", "Subscription & company", "Company details (legal pages, footer)", "map_text",
-          {"name": "Core NexGen AI Pvt Ltd", "email": "corenexgenaipvtltd@gmail.com",
+          {"name": "Corenexgen AI Technologies Pvt Ltd", "email": "corenexgenaipvtltd@gmail.com",
            "address": "Registered office address — to be filled in", "phone": "Phone — to be filled in",
            "gstin": "", "website": ""}),
 ]
@@ -140,6 +144,10 @@ def all_rates() -> set[Decimal]:
 def composition_rate(category: str | None, on: dt.date | None = None) -> Decimal:
     rates = effective(on)["composition_rates"]
     return Decimal(str(rates.get(category or "TRADER", rates.get("TRADER", 1))))
+
+
+def app_name() -> str:
+    return effective()["brand"].get("app_name") or "SmartHisab"
 
 
 def public(on: dt.date | None = None) -> dict:

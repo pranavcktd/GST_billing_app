@@ -24,7 +24,7 @@ from ..models import (
 )
 from ..security import hash_password
 from ..services import backup as bk
-from ..services import mailer
+from ..services import config_store, mailer
 from ..services import plans as P
 from ..services.platform_audit import log
 from .auth import frontend_url, issue_reset
@@ -168,7 +168,7 @@ def create_user(data: UserCreate, db: DB, me: SuperAdmin, request: Request):
     if data.send_email:
         cfg = mailer.system_smtp(db)
         if cfg:
-            mailer.send(cfg, [u.email], "Your GST Billing account", mailer.layout("Welcome to GST Billing", f"""
+            mailer.send(cfg, [u.email], f"Your {config_store.app_name()} account", mailer.layout(f"Welcome to {config_store.app_name()}", f"""
                 <p>Hello {u.name},</p><p>An account has been created for you.</p>
                 <p>Sign in at <a href="{frontend_url(request)}/login">{frontend_url(request)}/login</a><br>
                 Email: <b>{u.email}</b><br>Temporary password: <b>{temp}</b></p>

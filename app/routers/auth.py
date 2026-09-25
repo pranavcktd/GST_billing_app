@@ -24,7 +24,7 @@ from ..security import (
     totp_uri,
     verify_password,
 )
-from ..services import mailer
+from ..services import config_store, mailer
 from ..services.platform_audit import log
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -171,12 +171,12 @@ def issue_reset(db, user: User, request: Request, actor: User | None = None) -> 
     link = f"{frontend_url(request)}/reset-password?token={token}"
     body = mailer.layout("Reset your password", f"""
         <p>Hello {user.name},</p>
-        <p>{'Your administrator requested' if actor else 'We received'} a request to reset the password of your GST Billing account.</p>
+        <p>{'Your administrator requested' if actor else 'We received'} a request to reset the password of your {config_store.app_name()} account.</p>
         <p style="text-align:center;margin:24px 0"><a href="{link}" style="background:#1f65bb;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Set a new password</a></p>
         <p>This link works once and expires in {RESET_MINUTES} minutes. If you did not ask for it, ignore this e-mail — your password stays the same.</p>""")
     cfg = mailer.system_smtp(db)
     if cfg:
-        mailer.send(cfg, [user.email], "Reset your GST Billing password", body)
+        mailer.send(cfg, [user.email], f"Reset your {config_store.app_name()} password", body)
     else:
         logger.warning("SMTP not configured — password reset link for %s: %s", user.email, link)
     return link
