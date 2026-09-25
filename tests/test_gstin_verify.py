@@ -31,6 +31,7 @@ def fake_provider(monkeypatch, status=200, body=None):
 
 
 def enable(client, root, **extra):
+    extra.setdefault("trial_live_limit", 100)  # tests below use trial accounts; the trial cap has its own test
     r = client.put("/api/admin/gstin-api", headers=root, json={"enabled": True, "api_key": "gak_test_key_123456", **extra})
     assert r.status_code == 200, r.text
     return r.json()
@@ -131,3 +132,27 @@ def test_last_status_is_free_and_platform_wide(client, monkeypatch):
     assert st["27AABCS1429B1Z1"] == {"verified": False} and CALLS == []
     # and autofill for them comes from the cache (free)
     assert post(client, b, "/api/gstin/verify", {"gstin": GOOD}, 200)["source"] == "cache" and CALLS == []
+
+
+def test_trial_accounts_get_one_paid_lookup(client, monkeypatch):
+    root = superadmin(client, monkeypatch)
+    enable(client, root, trial_live_limit=1)
+    fake_provider(monkeypatch)
+    user = signup(client)                                   # self sign-up → trial
+    h = make_business(client, user)
+    post(client, h, "/api/gstin/verify", {"gstin": GOOD}, 200)
+    r = client.post("/api/gstin/verify", headers=h, json={"gstin": gstin("27", "AABCS1429B")})
+    assert r.status_code == 402 and r.json()["detail"]["code"] == "UPGRADE" and len(CALLS) == 1
+    # staff / onboarding of the same account share the allowance; answers already on the platform stay free
+    assert post(client, h, "/api/gstin/verify", {"gstin": GOOD}, 200)["source"] == "cache"
+    # a paid plan lifts the cap
+    from app.db import get_db
+    from app.main import app
+    from app.models import Subscription
+    db = next(app.dependency_overrides[get_db]())
+    acc = db.scalar(__import__("sqlalchemy").select(Subscription))
+    acc.plan, acc.status = "STARTER", "ACTIVE"
+    db.commit()
+    assert post(client, h, "/api/gstin/verify", {"gstin": gstin("27", "AABCS1429B")}, 200)["source"] == "live"
+    # super admins are never capped
+    assert post(client, root, "/api/gstin/verify", {"gstin": gstin("29", "AAACK5678D")}, 200)["source"] == "live"

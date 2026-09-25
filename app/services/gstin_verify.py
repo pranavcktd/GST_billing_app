@@ -27,7 +27,7 @@ from ..security import decrypt_secret, encrypt_secret
 
 KEY = "gstin_api"
 DEFAULTS = dict(enabled=False, base_url="https://gstinapi.in", api_key_enc=None, cache_days=30,
-                daily_limit_business=50, daily_limit_user=100, min_plan="FREE")
+                daily_limit_business=50, daily_limit_user=100, min_plan="FREE", trial_live_limit=1)
 
 
 # ================================================================ settings
@@ -45,7 +45,7 @@ def public_settings(db: Session) -> dict:
 
 def save_settings(db: Session, values: dict) -> dict:
     s = settings(db)
-    for k in ("enabled", "base_url", "cache_days", "daily_limit_business", "daily_limit_user", "min_plan"):
+    for k in ("enabled", "base_url", "cache_days", "daily_limit_business", "daily_limit_user", "min_plan", "trial_live_limit"):
         if k in values and values[k] is not None:
             s[k] = values[k]
     if values.get("api_key"):
@@ -164,6 +164,19 @@ def _count_today(db: Session, **where) -> int:
     return db.scalar(q) or 0
 
 
+def _account_of(db: Session, user: User, business_id: str | None) -> str:
+    from ..models import Business
+    b = db.get(Business, business_id) if business_id else None
+    return b.owner_id if b is not None and b.owner_id else user.id
+
+
+def _unpaid(db: Session, account_id: str) -> bool:
+    """On a free trial or the Free plan (nothing paid yet) — self sign-ups land here."""
+    from . import plans as P
+    sub = P.current(db, account_id)
+    return sub.status == "TRIAL" or sub.plan == "FREE"
+
+
 def verify(db: Session, user: User, business_id: str | None, gstin: str, refresh: bool = False) -> dict:
     gstin = (gstin or "").strip().upper()
     err = validate_gstin(gstin)
@@ -184,16 +197,25 @@ def verify(db: Session, user: User, business_id: str | None, gstin: str, refresh
         select(GstinLookup).where(GstinLookup.gstin == gstin, GstinLookup.ok.is_(True), GstinLookup.source == "LIVE",
                                   GstinLookup.created_at >= since).order_by(GstinLookup.created_at.desc()).limit(1))
     if cached is not None:
-        db.add(GstinLookup(gstin=gstin, user_id=user.id, business_id=business_id, source="CACHE", ok=True, data=cached.data))
+        db.add(GstinLookup(gstin=gstin, user_id=user.id, business_id=business_id, account_id=_account_of(db, user, business_id),
+                           source="CACHE", ok=True, data=cached.data))
         db.commit()
         return {**cached.data, "source": "cache", "fetched_at": cached.created_at}
 
+    account_id = _account_of(db, user, business_id)
+    if user.platform_role is None and _unpaid(db, account_id):
+        used = db.scalar(select(func.count()).select_from(GstinLookup).where(
+            GstinLookup.account_id == account_id, GstinLookup.source == "LIVE", GstinLookup.ok.is_(True))) or 0
+        if used >= int(s.get("trial_live_limit", 1)):
+            raise HTTPException(402, {"message": "Your free GSTIN verification has been used. Upgrade to a paid plan to verify more "
+                                                 "GSTINs — or fill the details manually.", "code": "UPGRADE", "plan": "STARTER",
+                                      "plan_name": "Starter"})
     if business_id and _count_today(db, business_id=business_id) >= int(s["daily_limit_business"]):
         raise HTTPException(429, "Today's GSTIN verification limit for this business is reached — please fill the details manually.")
     if _count_today(db, user_id=user.id) >= int(s["daily_limit_user"]):
         raise HTTPException(429, "Today's GSTIN verification limit is reached — please fill the details manually.")
 
-    log = GstinLookup(gstin=gstin, user_id=user.id, business_id=business_id, source="LIVE")
+    log = GstinLookup(gstin=gstin, user_id=user.id, business_id=business_id, account_id=account_id, source="LIVE")
     try:
         raw, status = _call(s, f"gstin/{gstin}")
     except ProviderError as e:
