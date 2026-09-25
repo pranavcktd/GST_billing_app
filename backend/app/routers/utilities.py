@@ -8,14 +8,25 @@ from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Respo
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 
-from ..deps import DB, MANAGERS, WRITERS, BCtx, CurrentUser
+import bcrypt
+
+from ..deps import DB, BCtx, CurrentUser
 from ..gst.constants import GST_RATES, Role
 from ..models import Backup, Business, HsnCode, Item, Membership, User
 from ..services import backup as bk
 from ..services.importer import ENTITIES, run_import, template
-from ..services.plans import check_user_limit
+from ..permissions import ACTIONS, DEFAULTS, FLAGS, MODULES, ROLE_LABELS, effective, normalise
+from ..services.plans import check_backup_quota, check_business_limit, check_user_limit, require_feature
 
 router = APIRouter(tags=["utilities"])
+
+IMPORT_MODULE = {"parties": "parties", "items": "items", "stock": "items", "hsn": "settings", "expense-items": "expenses",
+                 "payments-in": "payments_in", "payments-out": "payments_out", "expenses": "expenses",
+                 "purchases": "purchases", "purchase-orders": "purchases", "debit-notes": "purchases"}
+
+
+def import_module(entity: str) -> str:
+    return IMPORT_MODULE.get(entity, "sales")
 MAX_UPLOAD = 10 * 1024 * 1024
 
 
@@ -37,7 +48,7 @@ def import_template(entity: str, ctx: BCtx):
 
 @router.post("/import/{entity}")
 async def import_data(entity: str, ctx: BCtx, file: UploadFile = File(...), dry_run: bool = Form(True)):
-    ctx.require(*WRITERS)
+    ctx.need(import_module(entity), "create")
     content = await file.read()
     if len(content) > MAX_UPLOAD:
         raise HTTPException(400, "File is larger than 10 MB — split it into smaller files")
@@ -60,6 +71,7 @@ def _hsn_out(h: HsnCode) -> dict:
 
 @router.get("/hsn")
 def list_hsn(ctx: BCtx, search: str | None = None):
+    """Readable by every member — item forms look codes up here."""
     q = select(HsnCode).where(HsnCode.business_id == ctx.bid).order_by(HsnCode.code)
     if search:
         q = q.where((HsnCode.code.like(f"{search}%")) | (HsnCode.description.ilike(f"%{search}%")))
@@ -68,7 +80,7 @@ def list_hsn(ctx: BCtx, search: str | None = None):
 
 @router.post("/hsn", status_code=201)
 def upsert_hsn(data: HsnIn, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("settings", "edit")
     if data.gst_rate not in GST_RATES:
         raise HTTPException(422, "Invalid GST rate")
     h = ctx.db.scalar(select(HsnCode).where(HsnCode.business_id == ctx.bid, HsnCode.code == data.code))
@@ -83,7 +95,7 @@ def upsert_hsn(data: HsnIn, ctx: BCtx):
 
 @router.delete("/hsn/{hsn_id}", status_code=204)
 def delete_hsn(hsn_id: str, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("settings", "edit")
     h = ctx.db.get(HsnCode, hsn_id)
     if not h or h.business_id != ctx.bid:
         raise HTTPException(404, "Not found")
@@ -94,7 +106,7 @@ def delete_hsn(hsn_id: str, ctx: BCtx):
 @router.post("/hsn/apply-to-items")
 def apply_hsn_rates(ctx: BCtx):
     """Update every item's GST/cess rate from the HSN master (new bills only; old bills keep their rates)."""
-    ctx.require(*MANAGERS)
+    ctx.need("settings", "edit")
     rates = {h.code: h for h in ctx.db.scalars(select(HsnCode).where(HsnCode.business_id == ctx.bid))}
     changed = []
     for it in ctx.db.scalars(select(Item).where(Item.business_id == ctx.bid, Item.hsn_sac.is_not(None))):
@@ -118,7 +130,7 @@ class SlabUpdate(BaseModel):
 
 @router.post("/tax-slab/update")
 def update_tax_slab(data: SlabUpdate, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("settings", "edit")
     if data.new_rate not in GST_RATES:
         raise HTTPException(422, "Invalid GST rate")
     if not any([data.from_rate is not None, data.hsn_prefix, data.category, data.item_ids]):
@@ -149,7 +161,7 @@ def _backup_out(b: Backup, biz_name: str) -> dict:
 
 @router.get("/backups")
 def list_backups(ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("backup", "view")
     rows = ctx.db.scalars(select(Backup).where(Backup.business_id == ctx.bid)
                           .order_by(Backup.created_at.desc()).limit(50)).all()
     return [_backup_out(b, ctx.business.name) for b in rows]
@@ -157,7 +169,8 @@ def list_backups(ctx: BCtx):
 
 @router.post("/backups", status_code=201)
 def create_backup(ctx: BCtx, bg: BackgroundTasks, email: bool = False):
-    ctx.require(*MANAGERS)
+    ctx.need("backup", "create")
+    check_backup_quota(ctx.db, ctx.bid, 0)
     b = bk.create_backup(ctx.db, ctx.business, ctx.user.id)
     if email:
         to = ctx.business.backup_email or ctx.user.email
@@ -169,7 +182,7 @@ def create_backup(ctx: BCtx, bg: BackgroundTasks, email: bool = False):
 
 @router.get("/backups/{backup_id}/download")
 def download_backup(backup_id: str, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("backup", "export")
     b = ctx.db.get(Backup, backup_id)
     if not b or b.business_id != ctx.bid:
         raise HTTPException(404, "Backup not found")
@@ -179,7 +192,7 @@ def download_backup(backup_id: str, ctx: BCtx):
 
 @router.delete("/backups/{backup_id}", status_code=204)
 def delete_backup(backup_id: str, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("backup", "delete")
     b = ctx.db.get(Backup, backup_id)
     if not b or b.business_id != ctx.bid:
         raise HTTPException(404, "Backup not found")
@@ -193,6 +206,7 @@ async def restore_backup(db: DB, user: CurrentUser, file: UploadFile = File(...)
     blob = await file.read()
     if len(blob) > 200 * 1024 * 1024:
         raise HTTPException(400, "Backup file is too large")
+    check_business_limit(db, user.id)
     biz = bk.restore_as_new(db, blob, user.id, name)
     db.commit()
     return {"id": biz.id, "name": biz.name}
@@ -204,6 +218,7 @@ def restore_saved_backup(backup_id: str, ctx: BCtx):
     b = ctx.db.get(Backup, backup_id)
     if not b or b.business_id != ctx.bid:
         raise HTTPException(404, "Backup not found")
+    check_business_limit(ctx.db, ctx.user.id)
     biz = bk.restore_as_new(ctx.db, b.data, ctx.user.id,
                             f"{ctx.business.name} (restored {b.created_at:%d-%m-%Y %H:%M})")
     ctx.db.commit()
@@ -213,24 +228,70 @@ def restore_saved_backup(backup_id: str, ctx: BCtx):
 # ---------------------------------------------------------------- company members
 @router.get("/members")
 def list_members(ctx: BCtx):
+    ctx.need("users", "view")
     rows = ctx.db.execute(select(Membership, User).join(User, User.id == Membership.user_id)
                           .where(Membership.business_id == ctx.bid).order_by(User.name)).all()
-    return [dict(id=m.id, user_id=u.id, name=u.name, email=u.email, role=m.role.value, you=u.id == ctx.user.id)
-            for m, u in rows]
+    return [dict(id=m.id, user_id=u.id, name=u.name, email=u.email, role=m.role.value, you=u.id == ctx.user.id,
+                 custom=bool(m.permissions), permissions=effective(m.role, m.permissions),
+                 has_pin=bool(m.approval_pin_hash)) for m, u in rows]
+
+
+@router.get("/permissions/meta")
+def permissions_meta(ctx: BCtx):
+    """Modules, actions, flags and the default matrix of each role (for the permission editor)."""
+    return {"modules": MODULES, "actions": list(ACTIONS), "flags": list(FLAGS),
+            "roles": {r.value: {"label": ROLE_LABELS[r], "defaults": DEFAULTS[r]} for r in Role},
+            "mine": ctx.perms, "role": ctx.role.value}
+
+
+class PermissionsIn(BaseModel):
+    modules: dict[str, list[str]] | None = None  # null = back to role defaults
+    flags: list[str] = []
+
+
+@router.put("/members/{member_id}/permissions")
+def set_permissions(member_id: str, data: PermissionsIn, ctx: BCtx):
+    ctx.need("users", "edit")
+    require_feature(ctx.db, ctx.bid, "custom_roles")
+    m = ctx.db.get(Membership, member_id)
+    if not m or m.business_id != ctx.bid or m.role == Role.OWNER:
+        raise HTTPException(404, "Member not found")
+    m.permissions = normalise(data.model_dump()) if data.modules is not None else None
+    ctx.db.commit()
+    return {"permissions": effective(m.role, m.permissions)}
+
+
+class PinIn(BaseModel):
+    pin: Annotated[str, Field(pattern=r"^\d{4,6}$")] | None = None
+
+
+@router.put("/me/approval-pin")
+def set_approval_pin(data: PinIn, ctx: BCtx):
+    """Managers set a 4–6 digit PIN to approve staff edits of older entries."""
+    if ctx.role not in (Role.OWNER, Role.ADMIN, Role.MANAGER):
+        raise HTTPException(403, "Only owners, admins and store managers can approve edits")
+    ctx.membership.approval_pin_hash = bcrypt.hashpw(data.pin.encode(), bcrypt.gensalt()).decode() if data.pin else None
+    ctx.db.commit()
+    return {"has_pin": bool(data.pin)}
+
+
+STAFF_ROLES = Literal["ADMIN", "MANAGER", "BILLING", "INVENTORY", "ACCOUNTANT"]
 
 
 class MemberIn(BaseModel):
     email: EmailStr
-    role: Literal["ADMIN", "STAFF", "ACCOUNTANT"]
+    role: STAFF_ROLES
 
 
 @router.post("/members", status_code=201)
 def add_member(data: MemberIn, ctx: BCtx):
-    ctx.require(Role.OWNER, Role.ADMIN)
-    check_user_limit(ctx.db, ctx.bid)
+    ctx.need("users", "create")
     u = ctx.db.scalar(select(User).where(func.lower(User.email) == data.email.lower()))
     if not u:
         raise HTTPException(404, "No account with this email — ask them to sign up first, then add them here")
+    check_user_limit(ctx.db, ctx.bid, u.id)
+    if data.role == "ADMIN" and ctx.role != Role.OWNER:
+        raise HTTPException(403, "Only the owner can add business admins")
     if ctx.db.scalar(select(Membership).where(Membership.user_id == u.id, Membership.business_id == ctx.bid)):
         raise HTTPException(409, "Already a member of this company")
     ctx.db.add(Membership(user_id=u.id, business_id=ctx.bid, role=Role(data.role)))
@@ -239,12 +300,12 @@ def add_member(data: MemberIn, ctx: BCtx):
 
 
 class RoleIn(BaseModel):
-    role: Literal["ADMIN", "STAFF", "ACCOUNTANT"]
+    role: STAFF_ROLES
 
 
 @router.put("/members/{member_id}")
 def change_role(member_id: str, data: RoleIn, ctx: BCtx):
-    ctx.require(Role.OWNER)
+    ctx.need("users", "edit")
     m = ctx.db.get(Membership, member_id)
     if not m or m.business_id != ctx.bid or m.role == Role.OWNER:
         raise HTTPException(404, "Member not found")
@@ -255,7 +316,7 @@ def change_role(member_id: str, data: RoleIn, ctx: BCtx):
 
 @router.delete("/members/{member_id}", status_code=204)
 def remove_member(member_id: str, ctx: BCtx):
-    ctx.require(Role.OWNER, Role.ADMIN)
+    ctx.need("users", "delete")
     m = ctx.db.get(Membership, member_id)
     if not m or m.business_id != ctx.bid:
         raise HTTPException(404, "Member not found")

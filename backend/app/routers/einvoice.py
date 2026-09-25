@@ -8,20 +8,22 @@ from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from ..deps import MANAGERS, WRITERS, BCtx
+from ..deps import BCtx
 from ..models import Voucher
 from ..schemas import TransportIn, VoucherDetailOut
 from ..services import einvoice as ei
-from ..services.plans import require_feature
+from ..permissions import voucher_module
+from ..services.plans import check_api_quota, require_einvoice
 from ..services.vouchers import to_detail
 
 router = APIRouter(tags=["e-invoice"])
 
 
-def _get(ctx: BCtx, vid: str) -> Voucher:
+def _get(ctx: BCtx, vid: str, action: str = "view") -> Voucher:
     v = ctx.db.get(Voucher, vid)
     if not v or v.business_id != ctx.bid:
         raise HTTPException(404, "Document not found")
+    ctx.need(voucher_module(v.type), action)
     return v
 
 
@@ -37,8 +39,7 @@ def _safe(number: str) -> str:
 @router.put("/vouchers/{vid}/transport", response_model=VoucherDetailOut)
 def update_transport(vid: str, data: TransportIn, ctx: BCtx):
     """Transport details can be added/changed even after the bill is final (before the e-way bill)."""
-    ctx.require(*WRITERS)
-    v = _get(ctx, vid)
+    v = _get(ctx, vid, "edit")
     v.transport = data.model_dump(mode="json", exclude_none=True)
     ctx.db.commit()
     return to_detail(ctx, v)
@@ -47,13 +48,16 @@ def update_transport(vid: str, data: TransportIn, ctx: BCtx):
 # ---------------------------------------------------------------- e-invoice
 @router.get("/vouchers/{vid}/einvoice/json")
 def einvoice_json(vid: str, ctx: BCtx):
-    v = _get(ctx, vid)
+    require_einvoice(ctx.db, ctx.bid, "JSON")
+    v = _get(ctx, vid, "export")
     return _json_file([ei.einvoice_payload(ctx.db, ctx.business, v)], f"einvoice-{_safe(v.number)}.json")
 
 
 @router.get("/einvoice/bulk-json")
 def einvoice_bulk(ctx: BCtx, date_from: dt.date, date_to: dt.date):
     """All B2B invoices / credit notes of the period that have no IRN yet (for the IRP bulk upload tool)."""
+    ctx.need("sales", "export")
+    require_einvoice(ctx.db, ctx.bid, "JSON")
     docs = ctx.db.scalars(select(Voucher).where(
         Voucher.business_id == ctx.bid, Voucher.type.in_(list(ei.EINVOICE_TYPES)), Voucher.cancelled.is_(False),
         Voucher.party_gstin.is_not(None), Voucher.irn.is_(None), Voucher.date >= date_from, Voucher.date <= date_to)
@@ -72,9 +76,9 @@ def einvoice_bulk(ctx: BCtx, date_from: dt.date, date_to: dt.date):
 
 @router.post("/vouchers/{vid}/einvoice", response_model=VoucherDetailOut)
 def generate_irn(vid: str, ctx: BCtx):
-    ctx.require(*WRITERS)
-    require_feature(ctx.db, ctx.bid, "einvoice")
-    v = _get(ctx, vid)
+    require_einvoice(ctx.db, ctx.bid, "API")
+    v = _get(ctx, vid, "edit")
+    check_api_quota(ctx.db, ctx.bid)
     if v.einvoice_status == "GENERATED":
         raise HTTPException(400, "IRN already generated")
     payload = ei.einvoice_payload(ctx.db, ctx.business, v)
@@ -93,8 +97,7 @@ class CancelIrn(BaseModel):
 
 @router.post("/vouchers/{vid}/einvoice/cancel", response_model=VoucherDetailOut)
 def cancel_irn(vid: str, data: CancelIrn, ctx: BCtx):
-    ctx.require(*MANAGERS)
-    v = _get(ctx, vid)
+    v = _get(ctx, vid, "delete")
     if v.einvoice_status != "GENERATED":
         raise HTTPException(400, "No active IRN on this document")
     ack = v.ack_date if v.ack_date.tzinfo else v.ack_date.replace(tzinfo=dt.timezone.utc)
@@ -116,8 +119,7 @@ class ManualIrn(BaseModel):
 @router.put("/vouchers/{vid}/einvoice", response_model=VoucherDetailOut)
 def record_irn(vid: str, data: ManualIrn, ctx: BCtx):
     """Save an IRN obtained from the portal (offline / bulk upload route)."""
-    ctx.require(*WRITERS)
-    v = _get(ctx, vid)
+    v = _get(ctx, vid, "edit")
     if v.type not in ei.EINVOICE_TYPES:
         raise HTTPException(400, "Not an e-invoice document")
     v.irn, v.ack_no, v.ack_date, v.signed_qr = data.irn.lower(), data.ack_no, data.ack_date, data.signed_qr
@@ -129,15 +131,16 @@ def record_irn(vid: str, data: ManualIrn, ctx: BCtx):
 # ---------------------------------------------------------------- e-way bill
 @router.get("/vouchers/{vid}/ewaybill/json")
 def ewaybill_json(vid: str, ctx: BCtx):
-    v = _get(ctx, vid)
+    require_einvoice(ctx.db, ctx.bid, "JSON")
+    v = _get(ctx, vid, "export")
     return _json_file(ei.ewaybill_payload(ctx.db, ctx.business, v), f"ewaybill-{_safe(v.number)}.json")
 
 
 @router.post("/vouchers/{vid}/ewaybill", response_model=VoucherDetailOut)
 def generate_ewb(vid: str, ctx: BCtx):
-    ctx.require(*WRITERS)
-    require_feature(ctx.db, ctx.bid, "ewaybill")
-    v = _get(ctx, vid)
+    require_einvoice(ctx.db, ctx.bid, "API")
+    v = _get(ctx, vid, "edit")
+    check_api_quota(ctx.db, ctx.bid)
     if v.ewb_no:
         raise HTTPException(400, "E-way bill already generated")
     p = ei.provider(ctx.business)
@@ -156,8 +159,7 @@ class ManualEwb(BaseModel):
 
 @router.put("/vouchers/{vid}/ewaybill", response_model=VoucherDetailOut)
 def record_ewb(vid: str, data: ManualEwb, ctx: BCtx):
-    ctx.require(*WRITERS)
-    v = _get(ctx, vid)
+    v = _get(ctx, vid, "edit")
     v.ewb_no, v.ewb_date, v.ewb_valid_till = data.ewb_no, data.ewb_date, data.valid_till
     ctx.db.commit()
     return to_detail(ctx, v)

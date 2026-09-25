@@ -21,10 +21,17 @@ UQC = {
 
 
 class Role(str, Enum):
-    OWNER = "OWNER"
-    ADMIN = "ADMIN"
-    STAFF = "STAFF"
-    ACCOUNTANT = "ACCOUNTANT"
+    OWNER = "OWNER"            # subscriber: owns the account, its plan and businesses
+    ADMIN = "ADMIN"            # business admin / branch manager
+    MANAGER = "MANAGER"        # store manager
+    BILLING = "BILLING"        # billing operator / cashier
+    INVENTORY = "INVENTORY"    # purchase & inventory clerk
+    ACCOUNTANT = "ACCOUNTANT"  # CA / auditor (read-only)
+
+
+class PlatformRole(str, Enum):
+    SUPERADMIN = "SUPERADMIN"  # SaaS owner / tech team
+    RESELLER = "RESELLER"      # channel partner: sells licences, never sees business data
 
 
 class BusinessGstType(str, Enum):

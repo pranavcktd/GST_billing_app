@@ -3,13 +3,13 @@
 import datetime as dt
 import json
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
 from sqlalchemy import func, select
 
-from ..deps import MANAGERS, BCtx
+from ..deps import BCtx
 from ..gst.constants import BusinessGstType
 from ..models import AuditLog
-from ..services import gstr1_json, tally
+from ..services import gstr1_json, gstr2b, tally
 from ..services.plans import require_feature
 
 router = APIRouter(tags=["exports"])
@@ -17,6 +17,8 @@ router = APIRouter(tags=["exports"])
 
 @router.get("/exports/gstr1-json")
 def gstr1(ctx: BCtx, date_from: dt.date, date_to: dt.date):
+    ctx.need("reports_gst", "export")
+    require_feature(ctx.db, ctx.bid, "gst_json")
     if ctx.business.gst_type != BusinessGstType.REGULAR or not ctx.business.gstin:
         raise HTTPException(400, "GSTR-1 applies to regular GST registered businesses")
     data = gstr1_json.build(ctx.db, ctx.business, date_from, date_to)
@@ -26,6 +28,7 @@ def gstr1(ctx: BCtx, date_from: dt.date, date_to: dt.date):
 
 @router.get("/exports/tally")
 def tally_xml(ctx: BCtx, date_from: dt.date, date_to: dt.date):
+    ctx.need("reports_financial", "export")
     require_feature(ctx.db, ctx.bid, "tally")
     xml = tally.export(ctx.db, ctx.business, date_from, date_to)
     return Response(xml, media_type="application/xml", headers={
@@ -35,7 +38,8 @@ def tally_xml(ctx: BCtx, date_from: dt.date, date_to: dt.date):
 @router.get("/audit")
 def audit_log(ctx: BCtx, limit: int = 100, offset: int = 0, entity: str | None = None, user_id: str | None = None,
               date_from: dt.date | None = None, date_to: dt.date | None = None):
-    ctx.require(*MANAGERS)
+    ctx.need("audit", "view")
+    require_feature(ctx.db, ctx.bid, "audit_view")
     q = select(AuditLog).where(AuditLog.business_id == ctx.bid)
     if entity:
         q = q.where(func.lower(AuditLog.entity).contains(entity.lower()))
@@ -50,3 +54,13 @@ def audit_log(ctx: BCtx, limit: int = 100, offset: int = 0, entity: str | None =
     return {"total": total, "rows": [dict(id=a.id, created_at=a.created_at, user=a.user_name, action=a.action,
                                           entity=a.entity, entity_id=a.entity_id, summary=a.summary, ip=a.ip)
                                      for a in rows]}
+
+
+@router.post("/reconcile/gstr2b")
+async def reconcile_2b(ctx: BCtx, file: UploadFile = File(...), date_from: dt.date = Form(...), date_to: dt.date = Form(...)):
+    ctx.need("reports_gst", "view")
+    require_feature(ctx.db, ctx.bid, "gstr2b")
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(400, "File too large")
+    return gstr2b.reconcile(ctx.db, ctx.business, content, date_from, date_to)

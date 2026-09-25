@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import func, select
 
-from ..deps import WRITERS, BCtx
+from ..deps import BCtx
 from ..gst.constants import ExpenseKind, VoucherType
 from ..models import ExpenseCategory, ExpenseItem, Voucher, VoucherLine
 from ..schemas import ExpenseCategoryIn, ExpenseCategoryOut, ExpenseItemIn, ExpenseItemOut
@@ -44,6 +44,7 @@ def _owned(ctx: BCtx, model, obj_id: str, label: str):
 
 @router.get("/categories", response_model=list[ExpenseCategoryOut])
 def list_categories(ctx: BCtx):
+    ctx.need("expenses", "view")
     totals = dict(ctx.db.execute(
         select(Voucher.expense_category_id, func.sum(Voucher.grand_total))
         .where(Voucher.business_id == ctx.bid, Voucher.type == VoucherType.EXPENSE, Voucher.cancelled.is_(False))
@@ -59,7 +60,7 @@ def list_categories(ctx: BCtx):
 
 @router.post("/categories", response_model=ExpenseCategoryOut, status_code=201)
 def create_category(data: ExpenseCategoryIn, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("expenses", "create")
     c = ExpenseCategory(business_id=ctx.bid, **data.model_dump())
     ctx.db.add(c)
     ctx.db.commit()
@@ -68,7 +69,7 @@ def create_category(data: ExpenseCategoryIn, ctx: BCtx):
 
 @router.put("/categories/{cat_id}", response_model=ExpenseCategoryOut)
 def update_category(cat_id: str, data: ExpenseCategoryIn, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("expenses", "edit")
     c = _owned(ctx, ExpenseCategory, cat_id, "Category")
     c.name, c.kind = data.name, data.kind
     ctx.db.commit()
@@ -77,7 +78,7 @@ def update_category(cat_id: str, data: ExpenseCategoryIn, ctx: BCtx):
 
 @router.delete("/categories/{cat_id}", status_code=204)
 def delete_category(cat_id: str, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("expenses", "delete")
     c = _owned(ctx, ExpenseCategory, cat_id, "Category")
     if ctx.db.scalar(select(Voucher.id).where(Voucher.expense_category_id == c.id).limit(1)):
         c.is_active = False
@@ -88,13 +89,14 @@ def delete_category(cat_id: str, ctx: BCtx):
 
 @router.get("/items", response_model=list[ExpenseItemOut])
 def list_items(ctx: BCtx):
+    ctx.need("expenses", "view")
     return ctx.db.scalars(select(ExpenseItem).where(ExpenseItem.business_id == ctx.bid)
                           .order_by(ExpenseItem.name)).all()
 
 
 @router.post("/items", response_model=ExpenseItemOut, status_code=201)
 def create_item(data: ExpenseItemIn, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("expenses", "create")
     if data.category_id:
         _owned(ctx, ExpenseCategory, data.category_id, "Category")
     it = ExpenseItem(business_id=ctx.bid, **data.model_dump())
@@ -105,7 +107,7 @@ def create_item(data: ExpenseItemIn, ctx: BCtx):
 
 @router.put("/items/{item_id}", response_model=ExpenseItemOut)
 def update_item(item_id: str, data: ExpenseItemIn, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("expenses", "edit")
     it = _owned(ctx, ExpenseItem, item_id, "Expense item")
     if data.category_id:
         _owned(ctx, ExpenseCategory, data.category_id, "Category")
@@ -117,7 +119,7 @@ def update_item(item_id: str, data: ExpenseItemIn, ctx: BCtx):
 
 @router.delete("/items/{item_id}", status_code=204)
 def delete_item(item_id: str, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("expenses", "delete")
     it = _owned(ctx, ExpenseItem, item_id, "Expense item")
     if ctx.db.scalar(select(VoucherLine.id).where(VoucherLine.expense_item_id == it.id).limit(1)):
         it.is_active = False

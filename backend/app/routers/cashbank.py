@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import selectinload
 
-from ..deps import MANAGERS, WRITERS, BCtx
+from ..deps import BCtx
 from ..gst.constants import PaymentMode
 from ..models import (
     Account,
@@ -47,9 +47,13 @@ def _owned(ctx: BCtx, model, obj_id: str, label: str):
 # ---------------------------------------------------------------- accounts
 @router.get("/accounts", response_model=list[AccountOut])
 def list_accounts(ctx: BCtx):
+    """Everyone who records money needs the account list; balances only for cash & bank viewers."""
+    if not any(ctx.can(m, a) for m, a in (("cashbank", "view"), ("payments_in", "create"), ("payments_out", "create"),
+                                           ("sales", "create"), ("purchases", "create"), ("expenses", "create"))):
+        ctx.need("cashbank", "view")
     cash_account(ctx.db, ctx.bid)
     ctx.db.commit()
-    balances = account_balances(ctx.db, ctx.bid)
+    balances = account_balances(ctx.db, ctx.bid) if ctx.can("cashbank") else {}
     out = []
     for a in ctx.db.scalars(select(Account).where(Account.business_id == ctx.bid)
                             .order_by(Account.is_default_cash.desc(), Account.name)):
@@ -61,7 +65,7 @@ def list_accounts(ctx: BCtx):
 
 @router.post("/accounts", response_model=AccountOut, status_code=201)
 def create_account(data: AccountIn, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("cashbank", "create")
     a = Account(business_id=ctx.bid, **data.model_dump())
     ctx.db.add(a)
     ctx.db.commit()
@@ -72,7 +76,7 @@ def create_account(data: AccountIn, ctx: BCtx):
 
 @router.put("/accounts/{account_id}", response_model=AccountOut)
 def update_account(account_id: str, data: AccountIn, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("cashbank", "edit")
     a = _owned(ctx, Account, account_id, "Account")
     for k, v in data.model_dump().items():
         if k == "type" and a.is_default_cash:
@@ -86,7 +90,7 @@ def update_account(account_id: str, data: AccountIn, ctx: BCtx):
 
 @router.delete("/accounts/{account_id}", status_code=204)
 def delete_account(account_id: str, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("cashbank", "delete")
     a = _owned(ctx, Account, account_id, "Account")
     if a.is_default_cash:
         raise HTTPException(400, "Cash in hand cannot be deleted")
@@ -104,6 +108,7 @@ def delete_account(account_id: str, ctx: BCtx):
 
 @router.get("/accounts/{account_id}/statement")
 def account_statement(account_id: str, ctx: BCtx, date_from: dt.date | None = None, date_to: dt.date | None = None):
+    ctx.need("cashbank", "view")
     a = _owned(ctx, Account, account_id, "Account")
     return {"account": AccountOut.model_validate(a).model_dump(mode="json"), **statement(ctx.db, a, date_from, date_to)}
 
@@ -111,13 +116,14 @@ def account_statement(account_id: str, ctx: BCtx, date_from: dt.date | None = No
 # ---------------------------------------------------------------- transfers
 @router.get("/transfers", response_model=list[TransferOut])
 def list_transfers(ctx: BCtx):
+    ctx.need("cashbank", "view")
     return ctx.db.scalars(select(AccountTransfer).where(AccountTransfer.business_id == ctx.bid)
                           .order_by(AccountTransfer.date.desc())).all()
 
 
 @router.post("/transfers", response_model=TransferOut, status_code=201)
 def create_transfer(data: TransferIn, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("cashbank", "create")
     if data.from_account_id == data.to_account_id:
         raise HTTPException(400, "Choose two different accounts")
     _owned(ctx, Account, data.from_account_id, "Account")
@@ -130,7 +136,7 @@ def create_transfer(data: TransferIn, ctx: BCtx):
 
 @router.delete("/transfers/{transfer_id}", status_code=204)
 def delete_transfer(transfer_id: str, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("cashbank", "delete")
     ctx.db.delete(_owned(ctx, AccountTransfer, transfer_id, "Transfer"))
     ctx.db.commit()
 
@@ -138,6 +144,7 @@ def delete_transfer(transfer_id: str, ctx: BCtx):
 # ---------------------------------------------------------------- cheques
 @router.get("/cheques", response_model=list[PaymentOut])
 def list_cheques(ctx: BCtx, status: str | None = None):
+    ctx.need("cashbank", "view")
     q = (select(Payment)
          .options(selectinload(Payment.allocations).selectinload(PaymentAllocation.voucher),
                   selectinload(Payment.party), selectinload(Payment.account))
@@ -156,7 +163,7 @@ class ChequeAction(BaseModel):
 
 @router.post("/cheques/{payment_id}", response_model=PaymentOut)
 def cheque_action(payment_id: str, data: ChequeAction, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("cashbank", "edit")
     p = _owned(ctx, Payment, payment_id, "Cheque")
     if p.mode != PaymentMode.CHEQUE:
         raise HTTPException(400, "This payment is not a cheque")
@@ -182,13 +189,14 @@ def cheque_action(payment_id: str, data: ChequeAction, ctx: BCtx):
 # ---------------------------------------------------------------- capital
 @router.get("/capital", response_model=list[CapitalOut])
 def list_capital(ctx: BCtx):
+    ctx.need("cashbank", "view")
     return ctx.db.scalars(select(CapitalEntry).where(CapitalEntry.business_id == ctx.bid)
                           .order_by(CapitalEntry.date.desc())).all()
 
 
 @router.post("/capital", response_model=CapitalOut, status_code=201)
 def create_capital(data: CapitalIn, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("cashbank", "create")
     acc = resolve_account(ctx.db, ctx.bid, data.account_id)
     c = CapitalEntry(business_id=ctx.bid, **{**data.model_dump(), "account_id": acc.id})
     ctx.db.add(c)
@@ -198,7 +206,7 @@ def create_capital(data: CapitalIn, ctx: BCtx):
 
 @router.delete("/capital/{entry_id}", status_code=204)
 def delete_capital(entry_id: str, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("cashbank", "delete")
     ctx.db.delete(_owned(ctx, CapitalEntry, entry_id, "Entry"))
     ctx.db.commit()
 
@@ -206,13 +214,14 @@ def delete_capital(entry_id: str, ctx: BCtx):
 # ---------------------------------------------------------------- tax payments
 @router.get("/tax-payments", response_model=list[TaxPaymentOut])
 def list_tax_payments(ctx: BCtx):
+    ctx.need("cashbank", "view")
     return ctx.db.scalars(select(TaxPayment).where(TaxPayment.business_id == ctx.bid)
                           .order_by(TaxPayment.date.desc())).all()
 
 
 @router.post("/tax-payments", response_model=TaxPaymentOut, status_code=201)
 def create_tax_payment(data: TaxPaymentIn, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("cashbank", "create")
     acc = resolve_account(ctx.db, ctx.bid, data.account_id)
     t = TaxPayment(business_id=ctx.bid, **{**data.model_dump(), "account_id": acc.id})
     ctx.db.add(t)
@@ -222,6 +231,6 @@ def create_tax_payment(data: TaxPaymentIn, ctx: BCtx):
 
 @router.delete("/tax-payments/{payment_id}", status_code=204)
 def delete_tax_payment(payment_id: str, ctx: BCtx):
-    ctx.require(*MANAGERS)
+    ctx.need("cashbank", "delete")
     ctx.db.delete(_owned(ctx, TaxPayment, payment_id, "Tax payment"))
     ctx.db.commit()

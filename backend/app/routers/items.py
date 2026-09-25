@@ -1,13 +1,15 @@
 import datetime as dt
+from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import or_, select
 
-from ..deps import WRITERS, BCtx
+from ..deps import BCtx
 from ..gst.constants import ItemType, StockMoveType
 from ..models import Item, StockMovement, VoucherLine
 from ..schemas import ItemIn, ItemOut, StockAdjustIn, StockMoveOut
 from ..services.ledger import item_stock
+from ..services.plans import require_feature
 
 router = APIRouter(prefix="/items", tags=["items"])
 
@@ -19,14 +21,17 @@ def _get(ctx: BCtx, item_id: str) -> Item:
     return it
 
 
-def _out(it: Item, stock) -> ItemOut:
+def _out(it: Item, stock, ctx: BCtx | None = None) -> ItemOut:
     o = ItemOut.model_validate(it)
     o.stock = stock
+    if ctx is not None and not ctx.flag("view_cost"):
+        o.purchase_price = Decimal("0")  # purchase rates are hidden from this role
     return o
 
 
 @router.get("", response_model=list[ItemOut])
 def list_items(ctx: BCtx, search: str | None = None, include_inactive: bool = False):
+    ctx.need("items", "view")
     q = select(Item).where(Item.business_id == ctx.bid).order_by(Item.name)
     if not include_inactive:
         q = q.where(Item.is_active.is_(True))
@@ -35,12 +40,12 @@ def list_items(ctx: BCtx, search: str | None = None, include_inactive: bool = Fa
         q = q.where(or_(Item.name.ilike(like), Item.code.ilike(like), Item.hsn_sac.ilike(like)))
     items = ctx.db.scalars(q).all()
     stock = item_stock(ctx.db, ctx.bid)
-    return [_out(i, stock.get(i.id, 0)) for i in items]
+    return [_out(i, stock.get(i.id, 0), ctx) for i in items]
 
 
 @router.post("", response_model=ItemOut, status_code=201)
 def create_item(data: ItemIn, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("items", "create")
     fields = data.model_dump(exclude={"opening_stock", "opening_stock_date"})
     it = Item(business_id=ctx.bid, **fields)
     ctx.db.add(it)
@@ -62,7 +67,8 @@ def _ean13(body12: str) -> str:
 @router.post("/assign-codes")
 def assign_codes(ctx: BCtx):
     """Give every item without a code an in-store EAN-13 barcode (prefix 2xx, reserved for internal use)."""
-    ctx.require(*WRITERS)
+    ctx.need("items", "edit")
+    require_feature(ctx.db, ctx.bid, "barcode")
     used = {c for c in ctx.db.scalars(select(Item.code).where(Item.business_id == ctx.bid, Item.code.is_not(None)))}
     seq, count = 1, 0
     for it in ctx.db.scalars(select(Item).where(Item.business_id == ctx.bid, Item.code.is_(None)).order_by(Item.name)):
@@ -80,13 +86,14 @@ def assign_codes(ctx: BCtx):
 
 @router.get("/{item_id}", response_model=ItemOut)
 def get_item(item_id: str, ctx: BCtx):
+    ctx.need("items", "view")
     it = _get(ctx, item_id)
-    return _out(it, item_stock(ctx.db, ctx.bid, [it.id]).get(it.id, 0))
+    return _out(it, item_stock(ctx.db, ctx.bid, [it.id]).get(it.id, 0), ctx)
 
 
 @router.put("/{item_id}", response_model=ItemOut)
 def update_item(item_id: str, data: ItemIn, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("items", "edit")
     it = _get(ctx, item_id)
     for k, v in data.model_dump(exclude={"opening_stock", "opening_stock_date"}).items():
         setattr(it, k, v)
@@ -96,7 +103,7 @@ def update_item(item_id: str, data: ItemIn, ctx: BCtx):
 
 @router.delete("/{item_id}", status_code=204)
 def delete_item(item_id: str, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("items", "delete")
     it = _get(ctx, item_id)
     if ctx.db.scalar(select(VoucherLine.id).where(VoucherLine.item_id == it.id).limit(1)):
         it.is_active = False
@@ -107,7 +114,7 @@ def delete_item(item_id: str, ctx: BCtx):
 
 @router.post("/{item_id}/adjust", response_model=ItemOut)
 def adjust_stock(item_id: str, data: StockAdjustIn, ctx: BCtx):
-    ctx.require(*WRITERS)
+    ctx.need("items", "edit")
     it = _get(ctx, item_id)
     if it.type != ItemType.GOODS:
         raise HTTPException(400, "Stock is not tracked for services")
@@ -121,6 +128,7 @@ def adjust_stock(item_id: str, data: StockAdjustIn, ctx: BCtx):
 
 @router.get("/{item_id}/movements", response_model=list[StockMoveOut])
 def movements(item_id: str, ctx: BCtx):
+    ctx.need("items", "view")
     it = _get(ctx, item_id)
     return ctx.db.scalars(
         select(StockMovement).where(StockMovement.item_id == it.id)

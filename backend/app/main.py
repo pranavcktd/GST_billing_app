@@ -14,6 +14,7 @@ from .routers import (
     einvoice,
     exports,
     godowns,
+    platform,
     cashbank,
     expenses,
     items,
@@ -49,7 +50,7 @@ async def integrity_error(_: Request, exc: IntegrityError):
 
 
 for r in (auth, businesses, parties, items, vouchers, payments, reports, uploads, cashbank, loans, expenses,
-          utilities, godowns, einvoice, billing, exports):
+          utilities, godowns, einvoice, billing, exports, platform):
     app.include_router(r.router, prefix="/api")
 
 

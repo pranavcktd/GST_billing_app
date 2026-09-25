@@ -63,6 +63,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(200), unique=True, index=True)
     phone: Mapped[str | None] = mapped_column(String(20))
     password_hash: Mapped[str] = mapped_column(String(100))
+    platform_role: Mapped[str | None] = mapped_column(String(12))  # SUPERADMIN / RESELLER
+    reseller_commission_pct: Mapped[Decimal | None] = mapped_column(Rate)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     memberships: Mapped[list["Membership"]] = relationship(back_populates="user")
@@ -71,6 +74,8 @@ class User(Base):
 class Business(Base):
     __tablename__ = "businesses"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    # the subscriber account this business belongs to (its plan and limits apply)
+    owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     name: Mapped[str] = mapped_column(String(200))
     legal_name: Mapped[str | None] = mapped_column(String(200))
     gst_type: Mapped[BusinessGstType] = mapped_column(_enum(BusinessGstType))
@@ -121,6 +126,8 @@ class Membership(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
     role: Mapped[Role] = mapped_column(_enum(Role))
+    permissions: Mapped[dict | None] = mapped_column(JSON)  # custom role matrix (Enterprise)
+    approval_pin_hash: Mapped[str | None] = mapped_column(String(100))  # managers approve edits of old entries
 
     user: Mapped[User] = relationship(back_populates="memberships")
     business: Mapped[Business] = relationship()
@@ -562,24 +569,43 @@ class AuditLog(Base):
 
 
 class Subscription(Base):
-    """The plan a company is on. New companies start on a free trial of the top plan."""
+    """The subscriber account's plan. It covers every business the account owns."""
 
     __tablename__ = "subscriptions"
-    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True)
-    plan: Mapped[str] = mapped_column(String(20))           # FREE / GROWTH / BUSINESS
+    account_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    plan: Mapped[str] = mapped_column(String(20))           # FREE / STARTER / PROFESSIONAL / ENTERPRISE
     status: Mapped[str] = mapped_column(String(10))         # TRIAL / ACTIVE / EXPIRED
     valid_until: Mapped[dt.date | None] = mapped_column(Date)
+    extra_businesses: Mapped[int] = mapped_column(Integer, default=0)  # add-on packs
+    feature_flags: Mapped[dict | None] = mapped_column(JSON)          # per-account overrides by super admin
+    reseller_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
 
 class SubscriptionPayment(Base):
     __tablename__ = "subscription_payments"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
-    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
-    plan: Mapped[str] = mapped_column(String(20))
+    account_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    plan: Mapped[str] = mapped_column(String(20))  # plan code, or ADDON_BUSINESSES
     cycle: Mapped[str] = mapped_column(String(10))  # MONTHLY / YEARLY
     amount: Mapped[Decimal] = mapped_column(Money)   # incl. GST
     order_id: Mapped[str] = mapped_column(String(60), unique=True)
     payment_id: Mapped[str | None] = mapped_column(String(60))
     status: Mapped[str] = mapped_column(String(10))  # CREATED / PAID / FAILED
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class LicenseSale(Base):
+    """A plan pack issued by a reseller to an account (drives commission & payouts)."""
+
+    __tablename__ = "license_sales"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    reseller_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    plan: Mapped[str] = mapped_column(String(20))
+    months: Mapped[int] = mapped_column(Integer)
+    amount: Mapped[Decimal] = mapped_column(Money)       # list price incl. GST
+    commission: Mapped[Decimal] = mapped_column(Money)
+    payout_status: Mapped[str] = mapped_column(String(10), default="PENDING")  # PENDING / PAID
+    paid_on: Mapped[dt.date | None] = mapped_column(Date)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)

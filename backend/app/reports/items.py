@@ -7,7 +7,7 @@ from sqlalchemy import select
 from ..gst.constants import ItemType, StockMoveType, VoucherType
 from ..models import Item, StockMovement
 from .accounting import avg_costs, stock_qty
-from .base import ZERO, RCtx, col, link_doc, money, pct, result, section, stat, totals, vouchers
+from .base import ZERO, RCtx, col, money, pct, result, section, stat, totals, vouchers
 from .transaction import _line_cost
 
 PAISE = Decimal("0.01")

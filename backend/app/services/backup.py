@@ -104,8 +104,14 @@ def create_backup(db: Session, business: Business, user_id: str | None, kind: st
 
 
 def maybe_auto_backup(db: Session, business: Business) -> Backup | None:
-    """Daily automatic backup, triggered lazily when the business is used."""
+    """Daily automatic backup, triggered lazily when the business is used (skipped when storage is full)."""
     if not business.auto_backup:
+        return None
+    from .plans import check_backup_quota
+
+    try:
+        check_backup_quota(db, business.id, 0)
+    except HTTPException:
         return None
     last = db.scalar(select(Backup.created_at).where(Backup.business_id == business.id)
                      .order_by(Backup.created_at.desc()).limit(1))
@@ -196,6 +202,7 @@ def restore_as_new(db: Session, blob: bytes, user_id: str, new_name: str | None 
                 out[c.name] = v
             if t.name == "businesses":
                 out["name"] = new_name or f"{out['name']} (restored)"
+                out["owner_id"] = user_id
             for sc in SELF_REFS.get(t.name, []):
                 if out.get(sc):
                     deferred.append((t, out["id"], sc, out[sc]))
@@ -208,6 +215,6 @@ def restore_as_new(db: Session, blob: bytes, user_id: str, new_name: str | None 
     db.add(Membership(user_id=user_id, business_id=new_bid, role=Role.OWNER))
     from .plans import start_trial
 
-    start_trial(db, new_bid)
+    start_trial(db, user_id)
     db.flush()
     return db.get(Business, new_bid)
