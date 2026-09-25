@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button, ErrorBox, Field, Input, Select } from "@/components/ui";
 import { STATES } from "@/lib/constants";
 import { api } from "@/lib/api";
+import { GstinVerify, type GstinInfo } from "@/components/GstinVerify";
 import { gstinError } from "@/lib/gst";
 import type { Party } from "@/lib/types";
 
@@ -20,6 +21,14 @@ export function QuickPartyDialog({
   onCreated: (p: Party) => void;
 }) {
   const [f, setF] = useState({ name: initialName, phone: "", gstin: "", state_code: "" });
+  const [extra, setExtra] = useState<{ gst_type?: string; billing_address?: string; city?: string; pincode?: string; pan?: string }>({});
+  const [filled, setFilled] = useState<string[]>([]);
+
+  function applyGstin(d: GstinInfo) {
+    setF((prev) => ({ ...prev, name: prev.name.trim() ? prev.name : d.trade_name || d.legal_name || "", state_code: d.state_code }));
+    setExtra({ gst_type: d.party_gst_type, billing_address: d.address ?? undefined, city: d.city ?? undefined, pincode: d.pincode ?? undefined, pan: d.pan });
+    setFilled(["name", "state", "GST type", ...(d.address ? ["address"] : []), ...(d.pincode ? ["pincode"] : [])]);
+  }
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const gstErr = f.gstin ? gstinError(f.gstin) : null;
@@ -32,7 +41,7 @@ export function QuickPartyDialog({
     setError(null);
     try {
       const p = await api<Party>("/parties", {
-        body: { ...f, type, gst_type: f.gstin ? "REGISTERED" : type === "CUSTOMER" ? "CONSUMER" : "UNREGISTERED" },
+        body: { ...f, type, gst_type: f.gstin ? "REGISTERED" : type === "CUSTOMER" ? "CONSUMER" : "UNREGISTERED", ...(f.gstin ? extra : {}) },
       });
       onCreated(p);
     } catch (err) {
@@ -60,6 +69,7 @@ export function QuickPartyDialog({
                 setF({ ...f, gstin: g, state_code: STATES[g.slice(0, 2)] ? g.slice(0, 2) : f.state_code });
               }}
             />
+            <GstinVerify gstin={f.gstin} onResult={applyGstin} filled={filled} />
           </Field>
           <Field label="State">
             <Select value={f.state_code} onChange={(e) => setF({ ...f, state_code: e.target.value })}>
