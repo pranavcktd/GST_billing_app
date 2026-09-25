@@ -15,7 +15,7 @@ from .db import get_db
 from .gst.constants import PlatformRole, Role
 from .models import Business, Membership, User
 from .permissions import MODULES, effective
-from .security import decode_token
+from .security import decode_token_full
 
 DB = Annotated[Session, Depends(get_db)]
 _bearer = HTTPBearer(auto_error=False)
@@ -24,9 +24,10 @@ _bearer = HTTPBearer(auto_error=False)
 def current_user(
     db: DB, creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
 ) -> User:
-    user_id = decode_token(creds.credentials) if creds else None
-    user = db.get(User, user_id) if user_id else None
-    if not user or not user.is_active:
+    decoded = decode_token_full(creds.credentials) if creds else None
+    user = db.get(User, decoded[0]) if decoded else None
+    # token_version changes on password change / reset / "sign out everywhere" / deactivation
+    if not user or not user.is_active or decoded[1] != (user.token_version or 0):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
     if user.email.lower() in get_settings().superadmins and user.platform_role != PlatformRole.SUPERADMIN.value:
         user.platform_role = PlatformRole.SUPERADMIN.value

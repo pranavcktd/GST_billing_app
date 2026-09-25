@@ -7,16 +7,13 @@ record a new id and remapping all references to it.
 import datetime as dt
 import gzip
 import json
-import smtplib
 import uuid
 from decimal import Decimal
-from email.message import EmailMessage
 
 from fastapi import HTTPException
 from sqlalchemy import Date, DateTime, Numeric, delete, insert, select, update
 from sqlalchemy.orm import Session
 
-from ..config import get_settings
 from ..gst.constants import Role
 from ..models import (
     Account,
@@ -129,21 +126,15 @@ def filename(business_name: str, created: dt.datetime) -> str:
     return f"{safe}-{created:%Y%m%d-%H%M}.gstbak"
 
 
-def email_backup(to: str, business_name: str, blob: bytes, created: dt.datetime) -> None:
-    s = get_settings()
-    if not s.smtp_host:
-        raise HTTPException(503, "Email is not configured on the server (SMTP_HOST)")
-    msg = EmailMessage()
-    msg["Subject"] = f"Backup of {business_name} — {created:%d %b %Y %H:%M}"
-    msg["From"] = s.smtp_from or s.smtp_user
-    msg["To"] = to
-    msg.set_content(f"Attached is the backup of {business_name}. Restore it from Utilities → Backup & Restore.")
-    msg.add_attachment(blob, maintype="application", subtype="octet-stream", filename=filename(business_name, created))
-    with smtplib.SMTP(s.smtp_host, s.smtp_port, timeout=30) as smtp:
-        smtp.starttls()
-        if s.smtp_user:
-            smtp.login(s.smtp_user, s.smtp_password or "")
-        smtp.send_message(msg)
+def email_backup(db: Session, business: Business, to: str, blob: bytes, created: dt.datetime) -> None:
+    from . import mailer
+    from .plans import account_of
+
+    cfg = mailer.business_smtp(db, business.id, account_of(db, business.id))
+    body = mailer.layout(f"Backup of {business.name}", f"<p>Attached is the backup of <b>{business.name}</b> taken on "
+                         f"{created:%d %b %Y %H:%M}.</p><p>Restore it from Utilities → Backup & Restore.</p>")
+    mailer.send(cfg, [to], f"Backup of {business.name} — {created:%d %b %Y}", body,
+                attachments=[(filename(business.name, created), blob, "application/octet-stream")])
 
 
 def _decode(col, v):
@@ -218,3 +209,145 @@ def restore_as_new(db: Session, blob: bytes, user_id: str, new_name: str | None 
     start_trial(db, user_id)
     db.flush()
     return db.get(Business, new_bid)
+
+
+# ================================================================ platform backups (super admin)
+import base64  # noqa: E402
+
+from sqlalchemy import LargeBinary  # noqa: E402
+
+from ..db import Base  # noqa: E402
+
+ACCOUNT_FORMAT = "gst-billing-account-backup"
+FULL_FORMAT = "gst-billing-full-backup"
+FULL_EXCLUDE = {"platform_backups"}          # never nest platform backups inside each other
+KEEP_PLATFORM_AUTO = 7
+
+
+def _snapshot_dict(db: Session, business: Business) -> dict:
+    return json.loads(gzip.decompress(snapshot(db, business)))
+
+
+def account_snapshot(db: Session, owner) -> bytes:
+    """Every business owned by one account, in one file."""
+    businesses = db.scalars(select(Business).where(Business.owner_id == owner.id)).all()
+    data = {"format": ACCOUNT_FORMAT, "version": VERSION, "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "account": {"name": owner.name, "email": owner.email},
+            "businesses": [_snapshot_dict(db, b) for b in businesses]}
+    return gzip.compress(json.dumps(data, separators=(",", ":")).encode())
+
+
+def _enc_full(col, v):
+    if isinstance(v, bytes):
+        return base64.b64encode(v).decode()
+    return _encode(v)
+
+
+def full_snapshot(db: Session, include_business_backups: bool = False) -> bytes:
+    tables = {}
+    for t in Base.metadata.sorted_tables:
+        if t.name in FULL_EXCLUDE or (t.name == "backups" and not include_business_backups):
+            continue
+        tables[t.name] = [{k: _enc_full(t.c[k], v) for k, v in r._mapping.items()} for r in db.execute(select(t))]
+    data = {"format": FULL_FORMAT, "version": VERSION, "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "tables": tables}
+    return gzip.compress(json.dumps(data, separators=(",", ":")).encode())
+
+
+def detect(blob: bytes) -> tuple[str, dict]:
+    try:
+        data = json.loads(gzip.decompress(blob))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(400, "This is not a valid backup file") from e
+    fmt = data.get("format")
+    if fmt not in (FORMAT, ACCOUNT_FORMAT, FULL_FORMAT):
+        raise HTTPException(400, "This is not a valid backup file")
+    if data.get("version", 0) > VERSION:
+        raise HTTPException(400, "This backup was made by a newer version of the app")
+    return fmt, data
+
+
+def restore_account(db: Session, data: dict, owner_id: str) -> list[Business]:
+    out = []
+    for snap in data.get("businesses", []):
+        blob = gzip.compress(json.dumps(snap).encode())
+        out.append(restore_as_new(db, blob, owner_id, None))
+    return out
+
+
+def _dec_full(col, v):
+    if v is None:
+        return None
+    if isinstance(col.type, LargeBinary):
+        return base64.b64decode(v)
+    return _decode(col, v)
+
+
+def restore_full(db: Session, data: dict, keep_user) -> dict:
+    """Replace ALL data with the backup. The acting super admin's login is preserved."""
+    keep = {c.name: getattr(keep_user, c.name) for c in keep_user.__table__.c}
+    tables = data["tables"]
+    ordered = [t for t in Base.metadata.sorted_tables if t.name not in FULL_EXCLUDE]
+    for t in reversed(ordered):
+        if t.name == "backups" and "backups" not in tables:
+            continue  # keep business backups if the file does not carry them
+        db.execute(delete(t))
+    counts = {}
+    deferred = []
+    for t in ordered:
+        rows = []
+        for row in tables.get(t.name, []):
+            out = {c.name: _dec_full(c, row.get(c.name)) for c in t.c if c.name in row}
+            for sc in SELF_REFS.get(t.name, []):
+                if out.get(sc):
+                    deferred.append((t, out["id"], sc, out[sc]))
+                    out[sc] = None
+            rows.append(out)
+        if rows:
+            db.execute(insert(t), rows)
+        counts[t.name] = len(rows)
+    for t, rid, colname, val in deferred:
+        db.execute(update(t).where(t.c.id == rid).values({colname: val}))
+    users = Base.metadata.tables["users"]
+    if not db.execute(select(users.c.id).where(users.c.id == keep["id"])).first():
+        by_email = db.execute(select(users.c.id).where(users.c.email == keep["email"])).first()
+        if by_email:
+            db.execute(update(users).where(users.c.id == by_email[0]).values(platform_role="SUPERADMIN", is_active=True))
+        else:
+            db.execute(insert(users), [keep])
+    db.flush()
+    return counts
+
+
+def create_platform_backup(db: Session, scope: str, label: str, blob: bytes, kind: str, user_id: str | None,
+                           ref_id: str | None = None):
+    from ..models import PlatformBackup
+
+    b = PlatformBackup(scope=scope, ref_id=ref_id, label=label, kind=kind, size=len(blob), data=blob,
+                       created_by_id=user_id)
+    db.add(b)
+    db.flush()
+    if kind == "AUTO":
+        old = db.scalars(select(PlatformBackup.id).where(PlatformBackup.scope == scope, PlatformBackup.kind == "AUTO")
+                         .order_by(PlatformBackup.created_at.desc())).all()
+        if len(old) > KEEP_PLATFORM_AUTO:
+            db.execute(delete(PlatformBackup).where(PlatformBackup.id.in_(old[KEEP_PLATFORM_AUTO:])))
+    return b
+
+
+def maybe_auto_full_backup(db: Session) -> None:
+    """Daily full platform backup (called by the background scheduler)."""
+    from ..models import PlatformBackup, PlatformSetting
+
+    setting = db.get(PlatformSetting, "auto_full_backup")
+    if setting is not None and not (setting.value or {}).get("enabled", True):
+        return
+    last = db.scalar(select(PlatformBackup.created_at).where(PlatformBackup.scope == "FULL", PlatformBackup.kind == "AUTO")
+                     .order_by(PlatformBackup.created_at.desc()).limit(1))
+    if last is not None:
+        last = last if last.tzinfo else last.replace(tzinfo=dt.timezone.utc)
+        if dt.datetime.now(dt.timezone.utc) - last < dt.timedelta(hours=24):
+            return
+    blob = full_snapshot(db)
+    create_platform_backup(db, "FULL", f"Automatic full backup {dt.date.today():%d-%m-%Y}", blob, "AUTO", None)
+    db.commit()

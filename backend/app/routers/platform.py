@@ -9,7 +9,7 @@ import secrets
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select, text
 
@@ -19,6 +19,7 @@ from ..gst.constants import PlatformRole, VoucherType
 from ..models import Business, LicenseSale, Subscription, SubscriptionPayment, User, Voucher
 from ..security import hash_password
 from ..services import plans as P
+from ..services.platform_audit import log
 
 router = APIRouter(tags=["platform"])
 PAID = ["STARTER", "PROFESSIONAL", "ENTERPRISE"]
@@ -89,28 +90,17 @@ class SubscriptionAdminIn(BaseModel):
 
 
 @router.put("/admin/accounts/{account_id}/subscription")
-def set_subscription(account_id: str, data: SubscriptionAdminIn, db: DB, _: SuperAdmin):
+def set_subscription(account_id: str, data: SubscriptionAdminIn, db: DB, me: SuperAdmin):
     sub = db.get(Subscription, account_id)
     if not sub:
         raise HTTPException(404, "Account not found")
     for k, v in data.model_dump().items():
         setattr(sub, k, v)
+    owner = db.get(User, account_id)
+    log(db, me, "UPDATE", "subscription", f"{owner.email}: plan {data.plan} {data.status} till {data.valid_until}"
+        + (f", flags {data.feature_flags}" if data.feature_flags else ""), entity_id=account_id)
     db.commit()
     return _account_row(db, sub, db.get(User, account_id))
-
-
-class ActiveIn(BaseModel):
-    active: bool
-
-
-@router.put("/admin/users/{user_id}/active")
-def set_active(user_id: str, data: ActiveIn, db: DB, me: SuperAdmin):
-    u = db.get(User, user_id)
-    if not u or u.id == me.id:
-        raise HTTPException(400, "Not allowed")
-    u.is_active = data.active
-    db.commit()
-    return {"active": u.is_active}
 
 
 class ResellerIn(BaseModel):
@@ -131,22 +121,24 @@ def resellers(db: DB, _: SuperAdmin):
 
 
 @router.post("/admin/resellers", status_code=201)
-def add_reseller(data: ResellerIn, db: DB, _: SuperAdmin):
+def add_reseller(data: ResellerIn, db: DB, me: SuperAdmin):
     u = db.scalar(select(User).where(func.lower(User.email) == data.email.lower()))
     if not u:
         raise HTTPException(404, "The person must sign up first, then you can make them a reseller")
     if u.platform_role == PlatformRole.SUPERADMIN.value:
         raise HTTPException(400, "This user is a super admin")
     u.platform_role, u.reseller_commission_pct = PlatformRole.RESELLER.value, data.commission_pct
+    log(db, me, "UPDATE", "user", f"Made {u.email} a reseller ({data.commission_pct}% commission)", entity_id=u.id)
     db.commit()
     return {"id": u.id}
 
 
 @router.delete("/admin/resellers/{user_id}", status_code=204)
-def remove_reseller(user_id: str, db: DB, _: SuperAdmin):
+def remove_reseller(user_id: str, db: DB, me: SuperAdmin):
     u = db.get(User, user_id)
     if u and u.platform_role == PlatformRole.RESELLER.value:
         u.platform_role = None
+        log(db, me, "UPDATE", "user", f"Removed reseller access of {u.email}", entity_id=u.id)
         db.commit()
 
 
@@ -159,11 +151,12 @@ def all_licenses(db: DB, _: SuperAdmin, status: str | None = None):
 
 
 @router.post("/admin/licenses/{license_id}/paid")
-def mark_paid(license_id: str, db: DB, _: SuperAdmin):
+def mark_paid(license_id: str, db: DB, me: SuperAdmin):
     x = db.get(LicenseSale, license_id)
     if not x:
         raise HTTPException(404, "Not found")
     x.payout_status, x.paid_on = "PAID", dt.date.today()
+    log(db, me, "UPDATE", "payout", f"Commission {x.commission} marked paid", entity_id=x.id)
     db.commit()
     return _license_row(db, x)
 
@@ -228,7 +221,9 @@ def register_account(data: NewAccountIn, db: DB, me: Reseller):
     u = User(name=data.name, email=data.email.lower(), phone=data.phone, password_hash=hash_password(temp))
     db.add(u)
     db.flush()
+    u.must_change_password = True
     db.add(Subscription(account_id=u.id, plan="FREE", status="ACTIVE", reseller_id=me.id))
+    log(db, me, "CREATE", "user", f"Reseller registered owner {u.email}", entity_id=u.id)
     db.commit()
     return {"account_id": u.id, "email": u.email, "temporary_password": temp}
 
@@ -253,6 +248,8 @@ def issue_license(data: LicenseIn, db: DB, me: Reseller):
     sale = LicenseSale(reseller_id=me.id, account_id=sub.account_id, plan=data.plan, months=data.months,
                        amount=amount, commission=commission)
     db.add(sale)
+    log(db, me, "CREATE", "licence", f"Issued {data.plan} x {data.months} months to account {sub.account_id}",
+        entity_id=sub.account_id)
     db.commit()
     return _license_row(db, sale)
 
@@ -266,3 +263,32 @@ def my_licenses(db: DB, me: Reseller):
             "commission_earned": sum(r["commission"] for r in rows),
             "commission_pending": sum(r["commission"] for r in rows if r["payout_status"] == "PENDING")}
 
+
+
+# ---------------------------------------------------------------- reseller: manage own customers' logins
+class ResellerUserAction(BaseModel):
+    action: Literal["reset_email", "reset_temp", "activate", "deactivate"]
+
+
+@router.post("/reseller/accounts/{account_id}/user")
+def reseller_user_action(account_id: str, data: ResellerUserAction, db: DB, me: Reseller, request: Request):
+    from .auth import issue_reset
+
+    _my_account(db, me, account_id)
+    u = db.get(User, account_id)
+    if data.action == "reset_email":
+        issue_reset(db, u, request, actor=me)
+        out = {"sent": True}
+    elif data.action == "reset_temp":
+        temp = secrets.token_urlsafe(9)
+        u.password_hash, u.must_change_password = hash_password(temp), True
+        u.token_version = (u.token_version or 0) + 1
+        out = {"temporary_password": temp}
+    else:
+        u.is_active = data.action == "activate"
+        if not u.is_active:
+            u.token_version = (u.token_version or 0) + 1
+        out = {"active": u.is_active}
+    log(db, me, "ACTION", "user", f"Reseller {data.action.replace('_', ' ')} for {u.email}", entity_id=u.id, request=request)
+    db.commit()
+    return out

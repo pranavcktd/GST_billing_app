@@ -4,7 +4,7 @@ import datetime as dt
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 
@@ -174,7 +174,7 @@ def create_backup(ctx: BCtx, bg: BackgroundTasks, email: bool = False):
     b = bk.create_backup(ctx.db, ctx.business, ctx.user.id)
     if email:
         to = ctx.business.backup_email or ctx.user.email
-        bk.email_backup(to, ctx.business.name, b.data, b.created_at)  # raise early if SMTP is missing
+        bk.email_backup(ctx.db, ctx.business, to, b.data, b.created_at)  # raise early if SMTP is missing
         b.emailed_to = to
     ctx.db.commit()
     return _backup_out(b, ctx.business.name)
@@ -324,6 +324,22 @@ def remove_member(member_id: str, ctx: BCtx):
         raise HTTPException(400, "The owner cannot be removed")
     ctx.db.delete(m)
     ctx.db.commit()
+
+
+@router.post("/members/{member_id}/reset-password")
+def member_reset(member_id: str, ctx: BCtx, request: Request):
+    """Owner / admin e-mails a password-reset link to a staff member of this business."""
+    from ..services import mailer
+    from .auth import issue_reset
+
+    ctx.need("users", "edit")
+    m = ctx.db.get(Membership, member_id)
+    if not m or m.business_id != ctx.bid or m.role == Role.OWNER:
+        raise HTTPException(404, "Member not found")
+    u = ctx.db.get(User, m.user_id)
+    link = issue_reset(ctx.db, u, request, actor=ctx.user)
+    ctx.db.commit()
+    return {"sent": True, "dev_link": link if not mailer.system_smtp(ctx.db) else None}
 
 
 class DeleteCompany(BaseModel):

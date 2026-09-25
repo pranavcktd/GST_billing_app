@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     app_env: str = "development"
     # comma-separated emails that get Super Admin (platform owner) access when they sign in
     superadmin_emails: str = ""
+    # public address of the web app, used in e-mailed links (reset password, invoice links)
+    app_url: str | None = None
 
     # Railway exposes DATABASE_URL as postgresql://user:pass@host:port/db
     database_url: str = "sqlite:///./dev.db"
