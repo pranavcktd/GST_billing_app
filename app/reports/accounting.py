@@ -95,8 +95,10 @@ def opening_stock_movements_value(db: Session, bid: str, date_from: dt.date, dat
 
 # ---------------------------------------------------------------- GST treatment of inward documents
 def itc_claimable(v: Voucher, biz: Business) -> bool:
+    if v.type == VoucherType.EXPENSE and v.expense_category is not None and v.expense_category.itc_blocked:
+        return False  # Sec 17(5) blocked credit
     return (biz.gst_type == BusinessGstType.REGULAR and v.tax_applicable
-            and bool(v.party_gstin or v.reverse_charge))
+            and bool(v.party_gstin or v.reverse_charge or v.export_type == "IMPORT"))
 
 
 def tax_of(v) -> Decimal:

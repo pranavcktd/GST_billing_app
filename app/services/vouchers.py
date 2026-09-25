@@ -93,16 +93,35 @@ def save_voucher(ctx: Ctx, data: VoucherIn, voucher: Voucher | None = None) -> V
         raise bad("Please select a party")
 
     # ---- tax applicability & place of supply ----
+    export_type = None
+    zero_rated = False
     if outward:
         tax_applicable = biz.gst_type == BusinessGstType.REGULAR
         supplier_state = biz.state_code
         pos = data.place_of_supply or (party.state_code if party else None) or biz.state_code
+        kind = None
+        if party is not None and party.gst_type == PartyGstType.OVERSEAS:
+            kind, pos = "EXP", "96"  # export: place of supply is outside India
+        elif party is not None and party.gst_type == PartyGstType.SEZ:
+            kind = "SEZ"
+        if kind and tax_applicable:
+            lut_ok = bool(biz.lut_number) and (biz.lut_valid_till is None or biz.lut_valid_till >= data.date)
+            with_payment = data.export_with_payment if data.export_with_payment is not None else not lut_ok
+            if not with_payment and not lut_ok:
+                raise bad("Add a valid LUT number in Settings to export / supply to SEZ without paying IGST")
+            export_type = f"{kind}{'WP' if with_payment else 'WOP'}"
+            zero_rated = not with_payment
+        inter_state = kind is not None or is_inter_state(supplier_state, pos)  # exports & SEZ are inter-state
     else:
-        default_tax = party is not None and party.gst_type in (PartyGstType.REGISTERED, PartyGstType.SEZ)
+        default_tax = party is not None and party.gst_type in (PartyGstType.REGISTERED, PartyGstType.SEZ, PartyGstType.OVERSEAS)
         tax_applicable = data.tax_applicable if data.tax_applicable is not None else default_tax
         supplier_state = (party.state_code if party else None) or biz.state_code
         pos = data.place_of_supply or biz.state_code
-    inter_state = is_inter_state(supplier_state, pos)
+        if party is not None and party.gst_type == PartyGstType.OVERSEAS:
+            export_type = "IMPORT"  # IGST paid at customs (goods) or under reverse charge (services)
+            inter_state = True
+        else:
+            inter_state = is_inter_state(supplier_state, pos)
 
     # ---- expense category ----
     category = None
@@ -139,6 +158,7 @@ def save_voucher(ctx: Ctx, data: VoucherIn, voucher: Voucher | None = None) -> V
         round_off=data.round_off,
         tcs_rate=data.tcs_rate,
         reverse_charge=reverse_charge,
+        zero_rated=zero_rated,
     )
 
     if data.fully_paid and voucher is None and vtype not in NON_LEDGER_TYPES:
@@ -201,6 +221,12 @@ def save_voucher(ctx: Ctx, data: VoucherIn, voucher: Voucher | None = None) -> V
     voucher.expense_category_id = category.id if category else None
     voucher.tcs_rate = data.tcs_rate
     voucher.godown_id = godown.id if godown else None
+    voucher.export_type = export_type
+    voucher.shipping_bill_no = data.shipping_bill_no
+    voucher.shipping_bill_date = data.shipping_bill_date
+    voucher.port_code = data.port_code
+    voucher.currency_code = data.currency_code.upper() if data.currency_code else None
+    voucher.exchange_rate = data.exchange_rate
     voucher.transport = data.transport.model_dump(mode="json", exclude_none=True) if data.transport else None
     voucher.extra_fields = extra
     voucher.tcs_amount = totals.tcs

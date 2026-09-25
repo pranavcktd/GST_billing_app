@@ -38,10 +38,10 @@ def _vouchers(db: Session, bid: str, types, date_from: dt.date, date_to: dt.date
     return db.scalars(q).all()
 
 
-def _rate_rows(v: Voucher) -> dict[Decimal, dict]:
+def _rate_rows(v: Voucher, include_zero: bool = False) -> dict[Decimal, dict]:
     rows: dict[Decimal, dict] = defaultdict(_zero)
     for l in v.lines:
-        if l.gst_rate > 0:
+        if l.gst_rate > 0 or include_zero:
             _add(rows[l.gst_rate], l)
     return rows
 
@@ -55,7 +55,7 @@ def gstr1(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) -> d
     all_docs = _vouchers(db, biz.id, [VoucherType.SALE, VoucherType.SALE_RETURN], date_from, date_to, True)
     active = [v for v in all_docs if not v.cancelled and v.tax_applicable]
 
-    b2b, b2cl, cdnr = [], [], []
+    b2b, b2cl, cdnr, exp, cdnur = [], [], [], [], []
     b2cs: dict[tuple, dict] = defaultdict(_zero)
     nil = {k: ZERO for k in ("inter_registered", "intra_registered", "inter_unregistered", "intra_unregistered")}
     hsn: dict[tuple, dict] = {}
@@ -79,7 +79,12 @@ def gstr1(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) -> d
             h["value"] += sign * l.total
             _add(h, l, sign)
 
-        if is_sale:
+        doc["type"] = {"SEZWP": "SEWP", "SEZWOP": "SEWOP"}.get(v.export_type or "", "R") if registered else (v.export_type or "")
+        if v.export_type and v.export_type.startswith("EXP"):
+            doc.update(shipping_bill=v.shipping_bill_no, shipping_date=v.shipping_bill_date, port=v.port_code,
+                       rates=_rows_list(_rate_rows(v, include_zero=True)))
+            (exp if is_sale else cdnur).append(doc)
+        elif is_sale:
             if registered:
                 b2b.append(doc)
             elif v.inter_state and v.grand_total > B2CL_LIMIT:
@@ -125,6 +130,7 @@ def gstr1(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) -> d
         b2cl=b2cl, b2cl_total=total_of(b2cl),
         b2cs=b2cs_rows, b2cs_total=b2cs_total,
         cdnr=cdnr, cdnr_total=cdnr_total,
+        exp=exp, exp_total=total_of(exp), cdnur=cdnur, cdnur_total=total_of(cdnur),
         nil=nil,
         hsn=[dict(section=k[0], hsn=k[1], uqc=k[2], rate=k[3], **v) for k, v in sorted(hsn.items())],
         docs=docs,
@@ -133,49 +139,9 @@ def gstr1(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) -> d
 
 # ---------------------------------------------------------------- GSTR-3B
 def gstr3b(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) -> dict:
-    outward = _zero()        # 3.1(a)
-    nil_exempt = ZERO        # 3.1(c)
-    rcm_inward = _zero()     # 3.1(d)
-    inter_unreg: dict[str, dict] = defaultdict(lambda: dict(taxable=ZERO, igst=ZERO))  # 3.2
-    itc_rcm = _zero()        # 4(A)(3)
-    itc_other = _zero()      # 4(A)(5)
+    from .gst_returns import gstr3b as compute
 
-    for v in _vouchers(db, biz.id, [VoucherType.SALE, VoucherType.SALE_RETURN], date_from, date_to):
-        if not v.tax_applicable:
-            continue
-        sign = 1 if v.type == VoucherType.SALE else -1
-        for l in v.lines:
-            if l.gst_rate > 0:
-                _add(outward, l, sign)
-                if v.inter_state and not v.party_gstin:
-                    b = inter_unreg[v.place_of_supply]
-                    b["taxable"] += sign * l.taxable
-                    b["igst"] += sign * l.igst
-            else:
-                nil_exempt += sign * l.taxable
-
-    for v in _vouchers(db, biz.id, [VoucherType.PURCHASE, VoucherType.PURCHASE_RETURN], date_from, date_to):
-        if not v.tax_applicable:
-            continue
-        sign = 1 if v.type == VoucherType.PURCHASE else -1
-        if v.reverse_charge:
-            _add(rcm_inward, v, sign)
-            _add(itc_rcm, v, sign)
-        elif v.party_gstin:
-            _add(itc_other, v, sign)
-
-    itc_total = _zero()
-    _add(itc_total, itc_rcm)
-    _add(itc_total, itc_other)
-    liability = {f: outward[f] + rcm_inward[f] for f in ("igst", "cgst", "sgst", "cess")}
-    net = {f: liability[f] - itc_total[f] for f in ("igst", "cgst", "sgst", "cess")}
-    return dict(
-        applicable=biz.gst_type.value == "REGULAR",
-        outward_taxable=outward, nil_exempt=nil_exempt, inward_rcm=rcm_inward,
-        inter_state_unregistered=[dict(pos=state_label(p), **vals) for p, vals in sorted(inter_unreg.items())],
-        itc_rcm=itc_rcm, itc_other=itc_other, itc_total=itc_total,
-        liability=liability, net_payable=net,
-    )
+    return compute(db, biz, date_from, date_to)
 
 
 # ---------------------------------------------------------------- registers

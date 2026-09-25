@@ -119,6 +119,11 @@ class Business(Base):
     auto_backup: Mapped[bool] = mapped_column(Boolean, default=True)
     backup_email: Mapped[str | None] = mapped_column(String(200))
     transfer_prefix: Mapped[str] = mapped_column(String(8), default="ST")
+    # exports / SEZ under Letter of Undertaking (zero-rated without paying IGST)
+    lut_number: Mapped[str | None] = mapped_column(String(30))
+    lut_valid_till: Mapped[dt.date | None] = mapped_column(Date)
+    # composition scheme category: TRADER / MANUFACTURER (1%), RESTAURANT (5%), SERVICE (6%)
+    composition_type: Mapped[str] = mapped_column(String(12), default="TRADER", server_default="TRADER")
     # invoice look & feel, custom fields, paper size... (see schemas.PrintSettings)
     print_settings: Mapped[dict | None] = mapped_column(JSON)
     # e-invoice / e-way bill API user created on the IRP / EWB portal (password encrypted)
@@ -243,6 +248,8 @@ class ExpenseCategory(Base):
     business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(100))
     kind: Mapped[ExpenseKind] = mapped_column(_enum(ExpenseKind), default=ExpenseKind.INDIRECT)
+    # Sec 17(5) blocked credit (food & beverages, personal use, motor vehicles…): GST becomes cost
+    itc_blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -325,6 +332,13 @@ class Voucher(Base):
     terms: Mapped[str | None] = mapped_column(Text)
     cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
     share_token: Mapped[str | None] = mapped_column(String(40), unique=True)  # public view link
+    # exports / SEZ / imports: EXPWP, EXPWOP, SEZWP, SEZWOP (outward) or IMPORT (inward)
+    export_type: Mapped[str | None] = mapped_column(String(8))
+    shipping_bill_no: Mapped[str | None] = mapped_column(String(20))  # or bill of entry no. for imports
+    shipping_bill_date: Mapped[dt.date | None] = mapped_column(Date)
+    port_code: Mapped[str | None] = mapped_column(String(10))
+    currency_code: Mapped[str | None] = mapped_column(String(3))
+    exchange_rate: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
     converted_to_id: Mapped[str | None] = mapped_column(String(32))  # estimate -> invoice
     created_by_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)

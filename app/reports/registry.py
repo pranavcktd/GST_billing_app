@@ -35,6 +35,8 @@ CATALOG = [
     R("gstr1", GST, "GSTR-1", "Outward supplies: B2B, B2CL, B2CS, CDNR, HSN, documents", ["period"], href="/reports/gstr1"),
     R("gstr2", GST, "GSTR-2", "Inward supplies with ITC, to reconcile with GSTR-2B", ["period"], gst.gstr2),
     R("gstr3b", GST, "GSTR-3B", "Monthly summary: liability, ITC, net payable", ["period"], href="/reports/gstr3b"),
+    R("cmp08", GST, "CMP-08", "Composition dealer quarterly statement", ["period"], gst.cmp08),
+    R("gstr4", GST, "GSTR-4", "Composition dealer annual return", ["period"], gst.gstr4),
     R("gst-transactions", GST, "GSTR transaction report", "All GST documents with tax breakup", ["period"], gst.gst_transactions),
     R("gstr9", GST, "GSTR-9", "Annual return summary with HSN tables", ["period"], gst.gstr9),
     R("hsn-sales", GST, "Sale summary by HSN", "HSN-wise outward supplies", ["period"], gst.hsn_sales),
