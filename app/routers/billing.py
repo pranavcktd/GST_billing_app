@@ -12,6 +12,7 @@ from ..gst.constants import Role
 from ..models import SubscriptionPayment
 from ..services import config_store
 from ..services import plans as P
+from ..services import razorpay_cfg as rz
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -47,10 +48,12 @@ def status(ctx: BCtx):
     return {
         "plan": {**_plan_out(sub.plan), "businesses": plan["businesses"]}, "status": sub.status,
         "valid_until": sub.valid_until, "extra_businesses": sub.extra_businesses,
-        "usage": P.usage(ctx.db, ctx.bid), "is_owner": owner, "payments_live": P.payments_live(),
-        "dev_mode": get_settings().is_dev and not P.payments_live(),
+        "usage": P.usage(ctx.db, ctx.bid), "is_owner": owner, "payments_live": P.payments_live(ctx.db),
+        "dev_mode": get_settings().is_dev and not P.payments_live(ctx.db),
+        "test_mode": (rz.creds(ctx.db) or {}).get("mode") == "TEST",
         "payments": [dict(id=h.id, plan=h.plan, cycle=h.cycle, amount=float(h.amount), status=h.status,
-                          order_id=h.order_id, payment_id=h.payment_id, created_at=h.created_at) for h in history],
+                          order_id=h.order_id, payment_id=h.payment_id, mode=h.mode, method=h.method,
+                          created_at=h.created_at) for h in history],
     }
 
 
@@ -66,7 +69,8 @@ def create_order(data: OrderIn, ctx: BCtx):
     pay = P.create_order(ctx.db, account, data.plan, data.cycle)
     ctx.db.commit()
     return {"order_id": pay.order_id, "amount": float(pay.amount), "amount_paise": int(pay.amount * 100),
-            "currency": "INR", "key_id": get_settings().razorpay_key_id, "live": P.payments_live(),
+            "currency": "INR", "key_id": (rz.creds(ctx.db) or {}).get("key_id"), "live": pay.mode != "DEV",
+            "test_mode": pay.mode == "TEST",
             "business_name": ctx.business.name, "email": ctx.user.email, "phone": ctx.user.phone}
 
 
@@ -86,15 +90,17 @@ def verify(data: VerifyIn, ctx: BCtx):
     if not pay:
         raise HTTPException(404, "Order not found")
     if data.simulate:
-        if not (get_settings().is_dev and not P.payments_live() and pay.order_id.startswith("dev_order_")):
+        if not (get_settings().is_dev and not P.payments_live(ctx.db) and pay.order_id.startswith("dev_order_")):
             raise HTTPException(400, "Simulated payments are only available in local development")
         payment_id = "dev_pay_" + pay.order_id[-8:]
     else:
-        if not P.signature_ok(data.order_id, data.payment_id or "", data.signature or ""):
+        if not P.signature_ok(ctx.db, data.order_id, data.payment_id or "", data.signature or ""):
             pay.status = "FAILED"
             ctx.db.commit()
             raise HTTPException(400, "Payment could not be verified — if money was debited it will be refunded")
         payment_id = data.payment_id
+        if pay.status != "PAID":
+            P.confirm_with_razorpay(ctx.db, pay, payment_id)
     sub = P.activate(ctx.db, pay, payment_id)
     ctx.db.commit()
     return {"plan": sub.plan, "status": sub.status, "valid_until": sub.valid_until,
@@ -105,7 +111,7 @@ def verify(data: VerifyIn, ctx: BCtx):
 async def webhook(request: Request, db: DB):
     """Razorpay webhook (payment.captured / order.paid) — activates even if the browser was closed."""
     body = await request.body()
-    if not P.webhook_signature_ok(body, request.headers.get("x-razorpay-signature", "")):
+    if not P.webhook_signature_ok(db, body, request.headers.get("x-razorpay-signature", "")):
         raise HTTPException(400, "Bad signature")
     event = await request.json()
     entity = (event.get("payload", {}).get("payment", {}) or {}).get("entity", {})
@@ -113,6 +119,7 @@ async def webhook(request: Request, db: DB):
     if event.get("event") in ("payment.captured", "order.paid") and order_id:
         pay = db.scalar(select(SubscriptionPayment).where(SubscriptionPayment.order_id == order_id))
         if pay:
+            pay.method = pay.method or (entity.get("method") or "")[:20] or None
             P.activate(db, pay, payment_id)
             db.commit()
     return {"ok": True}

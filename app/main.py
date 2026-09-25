@@ -15,6 +15,7 @@ from .routers import (
     billing,
     businesses,
     compliance,
+    integrations,
     gstin,
     einvoice,
     exports,
@@ -90,7 +91,7 @@ async def integrity_error(_: Request, exc: IntegrityError):
     return JSONResponse(status_code=409, content={"detail": msg})
 
 
-for r in (auth, businesses, compliance, gstin, parties, items, vouchers, payments, reports, uploads, cashbank, loans, expenses,
+for r in (auth, businesses, compliance, gstin, integrations, parties, items, vouchers, payments, reports, uploads, cashbank, loans, expenses,
           utilities, godowns, einvoice, billing, exports, platform, admin, smtp, sharing):
     app.include_router(r.router, prefix="/api")
 

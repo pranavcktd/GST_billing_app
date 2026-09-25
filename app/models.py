@@ -616,6 +616,8 @@ class SubscriptionPayment(Base):
     order_id: Mapped[str] = mapped_column(String(60), unique=True)
     payment_id: Mapped[str | None] = mapped_column(String(60))
     status: Mapped[str] = mapped_column(String(10))  # CREATED / PAID / FAILED
+    mode: Mapped[str | None] = mapped_column(String(4))  # LIVE / TEST (Razorpay test keys) / DEV (simulated)
+    method: Mapped[str | None] = mapped_column(String(20))  # card / upi / netbanking / wallet ...
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

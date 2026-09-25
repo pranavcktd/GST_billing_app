@@ -1,12 +1,9 @@
 """Godowns, e-invoice / e-way bill, GSTR-1 JSON, Tally XML, audit log, print settings, subscriptions."""
 
-import hashlib
-import hmac
 import json
 import xml.etree.ElementTree as ET
 from decimal import Decimal
 
-from app.config import get_settings
 from app.db import get_db
 from app.main import app
 from app.models import Subscription
@@ -204,16 +201,7 @@ def test_subscription_trial_limits_and_payments(client, monkeypatch):
     assert client.get("/api/businesses/current", headers=h).json()["plan"]["watermark"] is False
     # addon packs are Enterprise-only
     assert client.post("/api/billing/order", headers=h, json={"plan": "ADDON_BUSINESSES"}).status_code == 400
-
-    # real Razorpay signature checks
-    monkeypatch.setattr(get_settings(), "razorpay_key_secret", "rzp_secret")
-    monkeypatch.setattr(get_settings(), "razorpay_webhook_secret", "wh_secret")
-    good = hmac.new(b"rzp_secret", b"order_1|pay_1", hashlib.sha256).hexdigest()
-    assert P.signature_ok("order_1", "pay_1", good) and not P.signature_ok("order_1", "pay_1", "bad")
-    body = json.dumps({"event": "payment.captured", "payload": {"payment": {"entity": {"order_id": "nope", "id": "p"}}}}).encode()
-    sig = hmac.new(b"wh_secret", body, hashlib.sha256).hexdigest()
-    assert client.post("/api/billing/webhook", content=body, headers={"x-razorpay-signature": sig}).status_code == 200
-    assert client.post("/api/billing/webhook", content=body, headers={"x-razorpay-signature": "x"}).status_code == 400
+    # real Razorpay checkout, signatures and webhooks: tests/test_razorpay.py
 
 
 def test_gstr2b_reconciliation(client):
