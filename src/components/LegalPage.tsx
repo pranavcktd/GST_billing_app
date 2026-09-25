@@ -23,9 +23,3 @@ export function LegalPage({ title, updated, children }: { title: string; updated
   );
 }
 
-export const COMPANY = {
-  name: "Core NexGen AI Pvt Ltd",
-  email: "corenexgenaipvtltd@gmail.com",
-  address: "Registered office address — to be filled in",
-  phone: "Phone — to be filled in",
-};
