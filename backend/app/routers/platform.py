@@ -19,6 +19,7 @@ from ..gst.constants import PlatformRole, VoucherType
 from ..models import Business, LicenseSale, Subscription, SubscriptionPayment, User, Voucher
 from ..security import hash_password
 from ..services import plans as P
+from ..services import razorpay_cfg as rz
 from ..services.platform_audit import log
 
 router = APIRouter(tags=["platform"])
@@ -66,7 +67,8 @@ def stats(db: DB, _: SuperAdmin):
                                                                     Voucher.created_at >= since)),
         signups_30d=db.scalar(select(func.count(User.id)).where(User.created_at >= since)),
         revenue_30d=float(db.scalar(select(func.coalesce(func.sum(SubscriptionPayment.amount), 0)).where(
-            SubscriptionPayment.status == "PAID", SubscriptionPayment.created_at >= since)) or 0),
+            SubscriptionPayment.status == "PAID", SubscriptionPayment.created_at >= since,
+            func.coalesce(SubscriptionPayment.mode, "LIVE") == "LIVE")) or 0),  # test / simulated payments are not revenue
     )
 
 
@@ -172,7 +174,7 @@ def health(db: DB, _: SuperAdmin):
     return dict(
         app_env=s.app_env, database=db_ok, database_engine=db.bind.dialect.name,
         einvoice_provider=s.einvoice_provider, gsp_configured=bool(s.gsp_base_url and s.gsp_client_id),
-        razorpay_live=P.payments_live(), razorpay_webhook=bool(s.razorpay_webhook_secret),
+        razorpay_live=(rz.creds(db) or {}).get("mode") == "LIVE", razorpay_webhook=bool(rz.webhook_secrets(db)),
         email_configured=bool(s.smtp_host), cloudinary_configured=bool(s.cloudinary_url),
         superadmins=sorted(s.superadmins),
     )

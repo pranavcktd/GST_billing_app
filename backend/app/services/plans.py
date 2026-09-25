@@ -20,6 +20,7 @@ from ..config import get_settings
 from ..gst.constants import Role, VoucherType
 from ..gst.fy import fy_range
 from . import config_store
+from . import razorpay_cfg as rz
 from ..models import Backup, Business, Godown, Membership, Subscription, SubscriptionPayment, Voucher
 
 TRIAL_PLAN = "ENTERPRISE"
@@ -281,44 +282,77 @@ def price(plan: str, cycle: str) -> Decimal:
     return with_gst(PLANS[plan]["monthly" if cycle == "MONTHLY" else "yearly"])
 
 
-def payments_live() -> bool:
-    s = get_settings()
-    return bool(s.razorpay_key_id and s.razorpay_key_secret)
+def payments_live(db: Session) -> bool:
+    """Razorpay keys are configured (Test or Live) — real checkout instead of the dev simulation."""
+    return rz.creds(db) is not None
 
 
 def create_order(db: Session, account_id: str, plan: str, cycle: str) -> SubscriptionPayment:
     if plan == ADDON["code"] and current(db, account_id).plan != "ENTERPRISE":
         raise HTTPException(400, "Business add-on packs are for the Enterprise plan")
     amount = price(plan, cycle)
-    s = get_settings()
-    if payments_live():
-        r = httpx.post("https://api.razorpay.com/v1/orders", auth=(s.razorpay_key_id, s.razorpay_key_secret),
-                       json={"amount": int(amount * 100), "currency": "INR", "receipt": uuid.uuid4().hex[:20],
-                             "notes": {"account_id": account_id, "plan": plan, "cycle": cycle}}, timeout=20)
+    c = rz.creds(db)
+    if c:
+        try:
+            r = rz.request("POST", "/orders", c, json={
+                "amount": int(amount * 100), "currency": "INR", "receipt": uuid.uuid4().hex[:20],
+                "notes": {"account_id": account_id, "plan": plan, "cycle": cycle}})
+        except httpx.HTTPError:
+            raise HTTPException(502, "Could not reach Razorpay — please try again") from None
         if r.status_code >= 300:
             raise HTTPException(502, "Could not start the payment with Razorpay — please try again")
-        order_id = r.json()["id"]
-    elif s.is_dev:
-        order_id = "dev_order_" + uuid.uuid4().hex[:16]
+        order_id, mode = r.json()["id"], c["mode"]
+    elif get_settings().is_dev:
+        order_id, mode = "dev_order_" + uuid.uuid4().hex[:16], "DEV"
     else:
         raise HTTPException(503, "Online payments are not configured")
     pay = SubscriptionPayment(account_id=account_id, plan=plan, cycle=cycle, amount=amount, order_id=order_id,
-                              status="CREATED")
+                              status="CREATED", mode=mode)
     db.add(pay)
     db.flush()
     return pay
 
 
-def signature_ok(order_id: str, payment_id: str, signature: str) -> bool:
-    secret = get_settings().razorpay_key_secret or ""
+def signature_ok(db: Session, order_id: str, payment_id: str, signature: str) -> bool:
+    c = rz.creds(db)
+    secret = (c or {}).get("key_secret") or ""
     expected = hmac.new(secret.encode(), f"{order_id}|{payment_id}".encode(), hashlib.sha256).hexdigest()
     return bool(secret) and hmac.compare_digest(expected, signature or "")
 
 
-def webhook_signature_ok(body: bytes, signature: str) -> bool:
-    secret = get_settings().razorpay_webhook_secret or ""
-    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-    return bool(secret) and hmac.compare_digest(expected, signature or "")
+def webhook_signature_ok(db: Session, body: bytes, signature: str) -> bool:
+    for secret in rz.webhook_secrets(db):
+        expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+        if hmac.compare_digest(expected, signature or ""):
+            return True
+    return False
+
+
+def confirm_with_razorpay(db: Session, pay: SubscriptionPayment, payment_id: str) -> None:
+    """Server-side check after the checkout: the payment belongs to this order, the amount matches and
+    the money is captured (captures it when the Razorpay account uses manual capture)."""
+    c = rz.creds(db)
+    if not c:
+        raise HTTPException(503, "Online payments are not configured")
+    try:
+        r = rz.request("GET", f"/payments/{payment_id}", c)
+    except httpx.HTTPError:
+        raise HTTPException(502, "Could not confirm the payment with Razorpay — it will be applied once confirmed, "
+                                 "or contact support") from None
+    if r.status_code != 200:
+        raise HTTPException(400, "Payment not found at Razorpay")
+    p = r.json()
+    paise = int(pay.amount * 100)
+    if p.get("order_id") != pay.order_id or int(p.get("amount") or 0) != paise:
+        raise HTTPException(400, "Payment does not match this order")
+    status = p.get("status")
+    if status == "authorized":
+        cap = rz.request("POST", f"/payments/{payment_id}/capture", c, json={"amount": paise, "currency": "INR"})
+        if cap.status_code >= 300:
+            raise HTTPException(502, "Payment authorised but could not be captured — please contact support")
+    elif status != "captured":
+        raise HTTPException(400, f"Payment is {status} — not completed")
+    pay.method = (p.get("method") or "")[:20] or None
 
 
 def extend(sub: Subscription, plan: str, days: int) -> None:

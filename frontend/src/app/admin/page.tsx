@@ -11,6 +11,7 @@ import { AdminBusinesses } from "@/components/admin/AdminBusinesses";
 import { AdminConfig } from "@/components/admin/AdminConfig";
 import { AdminHsnMaster } from "@/components/admin/AdminHsnMaster";
 import { AdminIntegrations } from "@/components/admin/AdminIntegrations";
+import { AdminRazorpay } from "@/components/admin/AdminRazorpay";
 import { AdminPlanConfig } from "@/components/admin/AdminPlanConfig";
 import { AdminRateNotices } from "@/components/admin/AdminRateNotices";
 import { AdminHierarchy } from "@/components/admin/AdminHierarchy";
@@ -91,7 +92,7 @@ function Admin() {
       {tab === "HSN master" && <AdminHsnMaster />}
       {tab === "Rate notices" && <AdminRateNotices />}
       {tab === "Pricing" && <AdminPlanConfig />}
-      {tab === "Integrations" && <AdminIntegrations />}
+      {tab === "Integrations" && <div className="space-y-8"><AdminRazorpay /><AdminIntegrations /></div>}
       {tab === "Backups" && <AdminBackups />}
       {tab === "Audit" && <AdminAudit />}
       {tab === "Email" && (
