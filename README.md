@@ -136,6 +136,19 @@ The test suite checks that the balance sheet balances exactly across a month of 
 
 ## Local development
 
+**Quick start on Windows** (after the one-time setup below): double-click
+
+| File | What it does |
+|---|---|
+| `start-dev.bat` | Starts the database container, applies migrations, opens the backend (auto-reload) and frontend (hot reload) in two windows. Stops old servers first, so it also works as a restart. |
+| `start-dev.bat prod` | Same, but builds the frontend and runs it in production mode (faster pages, no hot reload). |
+| `stop-dev.bat` | Stops the frontend and backend (ports 3000 and 8000). |
+| `stop-dev.bat all` | Also stops the database container. |
+
+Then open http://localhost:3000 (or `http://<this-PC-IP>:3000` from other devices on the network).
+
+One-time setup:
+
 ```bash
 # database: PostgreSQL 17 in Docker (same engine as production)
 docker run -d --name gst-billing-db -e POSTGRES_USER=gst -e POSTGRES_PASSWORD=<pw> -e POSTGRES_DB=gst_billing   -p 5433:5432 -v gst_billing_pg:/var/lib/postgresql/data postgres:17-alpine
@@ -149,7 +162,7 @@ pip install -r requirements.txt
 copy .env.example .env                              # SQLite works out of the box
 alembic upgrade head                                # incremental migrations — existing data is kept
 uvicorn app.main:app --reload --port 8000           # API docs: http://localhost:8000/docs
-pytest                                              # 44 tests (uses TEST_DATABASE_URL if set)
+pytest                                              # uses TEST_DATABASE_URL if set
 
 # frontend (Node 20+)
 cd frontend
