@@ -55,9 +55,15 @@ function Admin() {
 
   return (
     <>
-      <div className="mb-5 flex flex-wrap gap-1 rounded-lg border border-gray-200 bg-white p-1 text-sm">
-        {TABS.map((t) => <button key={t} onClick={() => setTab(t)} className={`rounded-md px-4 py-1.5 ${tab === t ? "bg-brand-600 text-white" : "text-gray-700"}`}>{t}</button>)}
-      </div>
+      <div className="lg:grid lg:grid-cols-[12.5rem_minmax(0,1fr)] lg:gap-6">
+      <nav className="sticky top-14 z-10 -mx-4 mb-5 flex gap-1 overflow-x-auto border-b border-gray-200 bg-gray-50/95 px-4 py-2 text-sm backdrop-blur
+        lg:top-20 lg:mx-0 lg:mb-0 lg:max-h-[calc(100vh-6rem)] lg:flex-col lg:self-start lg:overflow-y-auto lg:rounded-lg lg:border lg:bg-white lg:p-2">
+        {TABS.map((t) => (
+          <button key={t} onClick={() => { setTab(t); window.scrollTo({ top: 0 }); }}
+            className={`shrink-0 rounded-md px-3 py-1.5 text-left whitespace-nowrap ${tab === t ? "bg-brand-600 text-white" : "text-gray-700 hover:bg-gray-100"}`}>{t}</button>
+        ))}
+      </nav>
+      <div className="min-w-0">
       <ErrorBox message={err} />
 
       {tab === "Overview" && (!stats ? <Loading /> : (
@@ -222,6 +228,8 @@ function Admin() {
           </div>
         </Modal>
       )}
+      </div>
+      </div>
     </>
   );
 }

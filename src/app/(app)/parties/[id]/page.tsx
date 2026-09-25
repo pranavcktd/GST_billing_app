@@ -7,9 +7,10 @@ import { useState } from "react";
 import { Button, Card, ErrorBox, Field, Input, LinkButton, Loading, PageHeader } from "@/components/ui";
 import { api, qs } from "@/lib/api";
 import { stateLabel } from "@/lib/constants";
-import { downloadCsv, fmtDate, fyRange, money } from "@/lib/format";
+import { fmtDate, fyRange, money } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 import type { Party } from "@/lib/types";
+import { ExportMenu, simpleDoc } from "@/components/ExportMenu";
 
 interface Ledger {
   party: Party;
@@ -81,17 +82,14 @@ export default function PartyDetailPage() {
             <Field label="From"><Input type="date" value={range.from} onChange={(e) => setRange({ ...range, from: e.target.value })} /></Field>
             <Field label="To"><Input type="date" value={range.to} onChange={(e) => setRange({ ...range, to: e.target.value })} /></Field>
             {ledger && (
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  downloadCsv(`ledger-${party.name}.csv`, ["Date", "Type", "Number", "Debit", "Credit", "Balance"], [
-                    [range.from, "Opening balance", "", "", "", ledger.opening],
-                    ...ledger.entries.map((e) => [e.date, e.kind, e.number, e.debit || "", e.credit || "", e.balance]),
-                  ])
-                }
-              >
-                Export
-              </Button>
+              <ExportMenu compact build={() => ({
+                ...simpleDoc(`Ledger — ${party.name}`, ["Date", "Type", "Number", "Debit", "Credit", "Balance"], [
+                  [range.from, "Opening balance", "", null, null, ledger.opening],
+                  ...ledger.entries.map((e) => [e.date, e.kind, e.number, e.debit || null, e.credit || null, e.balance]),
+                ], { subtitle: [party.gstin && `GSTIN ${party.gstin}`, `${fmtDate(range.from)} to ${fmtDate(range.to)}`].filter(Boolean).join(" · "),
+                  filename: `ledger-${party.name}-${range.from}-to-${range.to}`, types: ["date", "text", "text", "money", "money", "money"] }),
+                summary: [{ label: "Closing balance (+ receivable / − payable)", value: ledger.closing, type: "money" }],
+              })} />
             )}
           </div>
         </div>

@@ -2,10 +2,11 @@
 
 import { Download } from "lucide-react";
 import { useState } from "react";
+import { type DocColumn, ExportMenu, type TableDoc } from "@/components/ExportMenu";
 import { PeriodPicker } from "@/components/PeriodPicker";
 import { Button, Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
 import { downloadFile, qs } from "@/lib/api";
-import { monthRange, money } from "@/lib/format";
+import { fmtDate, monthRange, money } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 import { ReviewNote } from "@/components/ReviewNote";
 
@@ -34,6 +35,32 @@ const Head = () => (
   <thead><tr><th>Nature</th><th className="num">Taxable value</th><th className="num">IGST</th><th className="num">CGST</th><th className="num">SGST/UTGST</th><th className="num">Cess</th></tr></thead>
 );
 
+const TC: DocColumn[] = [{ key: "label", label: "Nature", type: "text" }, { key: "taxable", label: "Taxable value", type: "money" },
+  { key: "igst", label: "IGST", type: "money" }, { key: "cgst", label: "CGST", type: "money" }, { key: "sgst", label: "SGST/UTGST", type: "money" }, { key: "cess", label: "Cess", type: "money" }];
+const r = (label: string, t: Tax, noTaxable = false): Record<string, unknown> => ({ label, ...t, ...(noTaxable ? { taxable: null } : {}) });
+
+function gstr3bDoc(d: Gstr3b, from: string, to: string): TableDoc {
+  return {
+    title: "GSTR-3B — summary", subtitle: `${fmtDate(from)} to ${fmtDate(to)} · prepared from your books for review`, filename: `GSTR3B-${from}-to-${to}`,
+    sections: [
+      { title: "3.1 Outward and reverse-charge inward supplies", columns: TC, rows: [
+        r("(a) Outward taxable supplies", d.outward_taxable), r("(b) Zero rated (exports & SEZ)", d.zero_rated),
+        r("(c) Nil rated / exempted", { taxable: d.nil_exempt, igst: 0, cgst: 0, sgst: 0, cess: 0 }), r("(d) Inward supplies liable to reverse charge", d.inward_rcm)] },
+      { title: "3.2 Inter-state supplies to unregistered persons and composition dealers",
+        columns: [{ key: "to", label: "Supplies to", type: "text" }, { key: "pos", label: "Place of supply", type: "text" }, { key: "taxable", label: "Taxable value", type: "money" }, { key: "igst", label: "IGST", type: "money" }],
+        rows: [...d.inter_state_unregistered.map((x) => ({ to: "Unregistered persons", ...x })), ...d.inter_state_composition.map((x) => ({ to: "Composition taxable persons", ...x }))] },
+      { title: "4 Eligible ITC", columns: TC, rows: [
+        r("(A)(1) Import of goods", d.itc_import_goods, true), r("(A)(2) Import of services", d.itc_import_services, true),
+        r("(A)(3) Reverse charge (other than imports)", d.itc_rcm, true), r("(A)(5) All other ITC", d.itc_other, true),
+        { ...r("(C) Net ITC available", d.itc_total, true), _style: "bold" }, r("(D)(1) Ineligible — Sec 17(5)", d.itc_blocked, true)] },
+      { title: "5 Exempt, nil and non-GST inward supplies", columns: [{ key: "k", label: "Nature", type: "text" }, { key: "inter", label: "Inter-state", type: "money" }, { key: "intra", label: "Intra-state", type: "money" }],
+        rows: [{ k: "From composition, exempt and nil rated suppliers", ...d.inward_exempt }] },
+      { title: "Tax payable (indicative)", columns: TC, rows: [r("Total tax liability", d.liability, true), r("Less: ITC", d.itc_total, true),
+        { ...r("Net (negative = credit carried forward)", d.net_payable, true), _style: "bold" }] },
+    ],
+  };
+}
+
 export default function Gstr3bPage() {
   const [period, setPeriod] = useState(monthRange(0));
   const { data, error, loading } = useFetch<Gstr3b>(`/reports/gstr3b${qs({ date_from: period.from, date_to: period.to })}`);
@@ -41,9 +68,12 @@ export default function Gstr3bPage() {
   return (
     <>
       <PageHeader title="GSTR-3B" sub="Summary return — tax liability and input tax credit" actions={
+        <>
+        <ExportMenu compact build={() => (data ? gstr3bDoc(data, period.from, period.to) : null)} disabled={!data?.applicable} />
         <Button onClick={() => downloadFile(`/exports/gstr3b-json${qs({ date_from: period.from, date_to: period.to })}`).catch((e) => alert(e.message))}>
           <Download size={16} /> GSTR-3B JSON for portal
         </Button>
+        </>
       } />
       <PeriodPicker value={period} onChange={setPeriod} />
       <ReviewNote />

@@ -1,10 +1,9 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { ExportMenu, simpleDoc } from "@/components/ExportMenu";
 import { useState } from "react";
 import { Button, Card, Empty, Field, Input, Loading, Select } from "@/components/ui";
 import { qs } from "@/lib/api";
-import { downloadCsv } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 
 interface Row { id: string; created_at: string; user: string | null; action: string; entity: string; summary: string; ip: string | null; business: string | null }
@@ -39,8 +38,8 @@ export function AdminAudit() {
         <Field label="From"><Input type="date" value={f.date_from} onChange={(e) => set({ date_from: e.target.value })} /></Field>
         <Field label="To"><Input type="date" value={f.date_to} onChange={(e) => set({ date_to: e.target.value })} /></Field>
         <div className="flex-1" />
-        {data && <Button variant="secondary" onClick={() => downloadCsv("platform-audit.csv", ["When", "User", "Action", "Business", "What", "IP"],
-          data.rows.map((r) => [new Date(r.created_at).toLocaleString("en-IN"), r.user, r.action, r.business, r.summary, r.ip]))}><Download size={15} /> Export</Button>}
+        {data && <ExportMenu compact build={() => simpleDoc("Platform audit trail", ["When", "User", "Action", "Business", "What", "IP"],
+          data.rows.map((r) => [new Date(r.created_at).toLocaleString("en-IN"), r.user, r.action, r.business, r.summary, r.ip]), { filename: "platform-audit" })} />}
       </div>
       <Card className="overflow-x-auto">
         {!data ? <Loading /> : !data.rows.length ? <Empty title="Nothing recorded for these filters" /> : (

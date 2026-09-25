@@ -1,13 +1,13 @@
 "use client";
 
-import { Download, Printer } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { PeriodPicker } from "@/components/PeriodPicker";
-import { ReportSections, reportCsvRows } from "@/components/ReportView";
-import { Button, Combobox, ErrorBox, Field, Input, Loading, PageHeader, Select } from "@/components/ui";
+import { ExportMenu, type TableDoc } from "@/components/ExportMenu";
+import { ReportSections } from "@/components/ReportView";
+import { Combobox, ErrorBox, Field, Input, Loading, PageHeader, Select } from "@/components/ui";
 import { qs } from "@/lib/api";
-import { downloadCsv, fyRange, today } from "@/lib/format";
+import { fmtDate, fyRange, today } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 import type { Account, ExpenseCategory, Item, Loan, Party, ReportMeta, ReportResult } from "@/lib/types";
 
@@ -43,11 +43,11 @@ export default function ReportRunner() {
   if (!catalog) return <Loading />;
   if (!meta) return <ErrorBox message="Report not found" />;
 
-  const exportCsv = () => {
-    if (!data) return;
-    const { headers, rows } = reportCsvRows(data);
-    downloadCsv(`${slug}-${f.has("period") ? `${period.from}_${period.to}` : asOf}.csv`, headers, rows);
-  };
+  const range = f.has("period") ? `${fmtDate(period.from)} to ${fmtDate(period.to)}` : f.has("as_of") ? `As of ${fmtDate(asOf)}` : "";
+  const buildDoc = (): TableDoc | null => data && ({
+    ...data, subtitle: [range, data.subtitle].filter(Boolean).join(" · "),
+    filename: `${slug}-${f.has("period") ? `${period.from}_${period.to}` : asOf}`,
+  });
 
   return (
     <>
@@ -55,10 +55,7 @@ export default function ReportRunner() {
         title={data?.title ?? meta.title}
         sub={data?.subtitle ?? meta.description}
         actions={
-          <div className="no-print flex gap-2">
-            <Button variant="secondary" onClick={() => window.print()} disabled={!data}><Printer size={16} /> Print / PDF</Button>
-            <Button variant="secondary" onClick={exportCsv} disabled={!data}><Download size={16} /> Export</Button>
-          </div>
+          <ExportMenu build={buildDoc} disabled={!data} />
         }
       />
       <div className="no-print flex flex-wrap items-end gap-2">
