@@ -4,6 +4,7 @@ import { Copy, Plus } from "lucide-react";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { PlatformShell } from "@/components/PlatformShell";
+import { SmtpForm } from "@/components/SmtpForm";
 import { Button, Card, Empty, ErrorBox, Field, Input, Loading, Select } from "@/components/ui";
 import { api } from "@/lib/api";
 import { fmtDate, money } from "@/lib/format";
@@ -23,6 +24,18 @@ function Reseller() {
   const [created, setCreated] = useState<{ email: string; temporary_password: string } | null>(null);
   const [issue, setIssue] = useState<{ account: Account; plan: string; months: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [loginFor, setLoginFor] = useState<Account | null>(null);
+  const [showMail, setShowMail] = useState(false);
+
+  const userAction = async (a: Account, action: string) => {
+    setErr(null);
+    try {
+      const r = await api<{ temporary_password?: string; sent?: boolean; active?: boolean }>(`/reseller/accounts/${a.account_id}/user`, { body: { action } });
+      setLoginFor(null);
+      if (r.temporary_password) setCreated({ email: a.email, temporary_password: r.temporary_password });
+      reload();
+    } catch (e) { setErr((e as Error).message); }
+  };
 
   const run = async (fn: () => Promise<unknown>) => {
     setErr(null);
@@ -54,7 +67,10 @@ function Reseller() {
                   <td>{a.plan}<div className="text-xs text-gray-500">{a.status}</div></td>
                   <td>{fmtDate(a.valid_until)}</td>
                   <td className="num">{a.users}</td><td className="num">{a.invoices_this_month}</td>
-                  <td className="text-right"><Button className="!py-1" onClick={() => setIssue({ account: a, plan: "STARTER", months: 12 })}>Issue licence</Button></td>
+                  <td className="whitespace-nowrap text-right">
+                    <Button variant="secondary" className="!py-1" onClick={() => setLoginFor(a)}>Login</Button>{" "}
+                    <Button className="!py-1" onClick={() => setIssue({ account: a, plan: "STARTER", months: 12 })}>Issue licence</Button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -78,6 +94,21 @@ function Reseller() {
           </table>
         )}
       </Card>
+      <div className="mt-5">
+        <button className="text-sm font-medium text-brand-600 hover:underline" onClick={() => setShowMail(!showMail)}>{showMail ? "Hide" : "Set up"} e-mail for my customers</button>
+        {showMail && <div className="mt-3"><SmtpForm base="/reseller/smtp" title="Reseller e-mail"
+          help="Your customers' invoices and backups are e-mailed through this server unless a business sets up its own." /></div>}
+      </div>
+      {loginFor && (
+        <Modal title={`Login — ${loginFor.name}`} onClose={() => setLoginFor(null)}>
+          <div className="grid gap-2">
+            <Button variant="secondary" onClick={() => userAction(loginFor, "reset_email")}>E-mail a password reset link</Button>
+            <Button variant="secondary" onClick={() => userAction(loginFor, "reset_temp")}>Set a temporary password</Button>
+            <Button variant="secondary" onClick={() => userAction(loginFor, "activate")}>Activate login</Button>
+            <Button variant="danger" onClick={() => userAction(loginFor, "deactivate")}>Deactivate login</Button>
+          </div>
+        </Modal>
+      )}
       <p className="mt-4 text-xs text-gray-500">For confidentiality you see account details and usage counts only — never customers&apos; invoices, parties or books.</p>
 
       {newAcc && (

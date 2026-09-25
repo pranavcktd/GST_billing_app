@@ -100,6 +100,12 @@ export default function CompaniesPage() {
                     </td>
                     <td className="whitespace-nowrap text-right">
                       {m.role !== "OWNER" && can("users", "edit") && (
+                        <button className="mr-3 text-xs text-brand-600 hover:underline" onClick={() => run(async () => {
+                          const r = await api<{ dev_link: string | null }>(`/members/${m.id}/reset-password`, { body: {} });
+                          alert(r.dev_link ? `E-mail isn't set up. Share this reset link with ${m.name}:\n${r.dev_link}` : `A password reset link was e-mailed to ${m.email}.`);
+                        })}>Reset password</button>
+                      )}
+                      {m.role !== "OWNER" && can("users", "edit") && (
                         <button className="mr-3 text-gray-400 hover:text-gray-700" title="Permissions" aria-label="Permissions" onClick={() => setEditing({ member: m, perms: m.permissions })}><SlidersHorizontal size={15} /></button>
                       )}
                       {m.role !== "OWNER" && can("users", "delete") && (

@@ -116,6 +116,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return;
     if (!me) router.replace("/login");
+    else if (me.must_change_password) router.replace("/change-password");
     else if (!business) router.replace(me.platform_role === "SUPERADMIN" ? "/admin" : me.platform_role === "RESELLER" ? "/reseller" : "/onboarding");
   }, [loading, me, business, router]);
 

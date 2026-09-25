@@ -19,7 +19,10 @@ export interface MyBusiness {
   id: string; name: string; gstin: string | null; gst_type: BusinessGstType; role: Role; owned: boolean;
   permissions: Permissions;
 }
-export interface Me { user: User; businesses: MyBusiness[]; platform_role: "SUPERADMIN" | "RESELLER" | null }
+export interface Me {
+  user: User; businesses: MyBusiness[]; platform_role: "SUPERADMIN" | "RESELLER" | null;
+  totp_enabled: boolean; must_change_password: boolean;
+}
 
 export interface CustomField { key: string; label: string; print: boolean }
 export interface PrintSettings {

@@ -114,6 +114,12 @@ export default function Landing() {
       </section>
 
       <footer className="border-t border-gray-100 py-8 text-center text-sm text-gray-500">
+        <nav className="mb-2 flex justify-center gap-5">
+          <Link href="/terms" className="hover:underline">Terms</Link>
+          <Link href="/privacy" className="hover:underline">Privacy</Link>
+          <Link href="/refund" className="hover:underline">Refunds</Link>
+          <Link href="/contact" className="hover:underline">Contact</Link>
+        </nav>
         © {new Date().getFullYear()} GST Billing · Made for Indian MSMEs
       </footer>
     </div>
