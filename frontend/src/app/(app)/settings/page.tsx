@@ -23,7 +23,10 @@ export default function SettingsPage() {
   const { refresh, business: mine } = useAuth();
   const { can } = usePerms();
   const { data, error, loading, setData } = useFetch<Business>("/businesses/current");
-  const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("business");
+  const [tab, setTab] = useState<(typeof TABS)[number]["key"]>(() => {
+    const t = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tab") : null;
+    return TABS.find((x) => x.key === t)?.key ?? "business";
+  });
   const [saved, setSaved] = useState<string | null>(null);
 
   if (loading) return <Loading />;

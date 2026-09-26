@@ -38,6 +38,7 @@ import { LinkButton, Loading } from "@/components/ui";
 import { useAuth, usePerms } from "@/lib/auth";
 import type { Action, Module } from "@/lib/types";
 import { BrandLogo } from "@/components/BrandLogo";
+import { GlobalSearch } from "@/components/GlobalSearch";
 import { UserBar } from "@/components/UserBar";
 
 type NavItem = { href: string; label: string; icon: React.ElementType; perm?: [Module, Action] | [Module, Action][] };
@@ -186,7 +187,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <button className="lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
             <Menu size={22} />
           </button>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 shrink lg:w-56">
             {me.businesses.length > 1 ? (
               <select
                 className="max-w-full truncate rounded-md border-0 bg-transparent py-1 text-sm font-semibold text-gray-900 focus:ring-0"
@@ -206,8 +207,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               {business.gstin ? `GSTIN ${business.gstin}` : "Not GST registered"}
             </div>
           </div>
+          <div className="flex min-w-0 flex-1 justify-center"><GlobalSearch /></div>
           {can("purchases", "create") && (
-            <LinkButton href="/v/purchases/new" variant="secondary" className="hidden sm:inline-flex">
+            <LinkButton href="/v/purchases/new" variant="secondary" className="hidden xl:inline-flex">
               <Plus size={16} /> Purchase
             </LinkButton>
           )}
