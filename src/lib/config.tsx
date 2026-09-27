@@ -20,6 +20,7 @@ export interface AppConfig {
   uqc: Record<string, string>; states: Record<string, string>; credit_note_reasons: string[];
   blocked_itc_categories: string[]; subscription_gst_rate: number; trial_days: number;
   company: { name: string; email: string; address: string; phone: string; gstin?: string; website?: string };
+  it_depreciation_rates?: Record<string, number>; ca_residual_value_pct?: number;
   brand: { app_name: string; by_line: string; tagline: string };
 }
 

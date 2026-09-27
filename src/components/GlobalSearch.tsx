@@ -83,7 +83,7 @@ function Palette({ onClose }: { onClose: () => void }) {
 
   const hits = useMemo<Hit[]>(() => {
     const term = q.trim();
-    const allowed = ENTRIES.filter((e) => (!e.perm || can(...e.perm)) && (!e.platform || me?.platform_role === e.platform || me?.platform_role === "SUPERADMIN"));
+    const allowed = ENTRIES.filter((e) => (!e.perm || can(...e.perm)) && (!e.platform || me?.platform_role === e.platform || me?.platform_role === "SUPERADMIN") && (!e.practice || (me?.practice_clients ?? 0) > 0));
     if (!term) {
       const sug = SUGGEST.map((t) => allowed.find((e) => e.title === t)).filter(Boolean)
         .map((e) => ({ key: e!.href, section: "Suggestions", title: e!.title, href: e!.href, icon: GROUP_ICON[e!.group] }));

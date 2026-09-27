@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Briefcase,
   Barcode,
   BarChart3,
   Boxes,
@@ -120,7 +121,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (loading) return;
     if (!me) router.replace("/login");
     else if (me.must_change_password) router.replace("/change-password");
-    else if (!business) router.replace(me.platform_role === "SUPERADMIN" ? "/admin" : me.platform_role === "RESELLER" ? "/reseller" : "/onboarding");
+    else if (!business) router.replace(me.platform_role === "SUPERADMIN" ? "/admin" : me.platform_role === "RESELLER" ? "/reseller" : me.practice_clients > 0 ? "/practice" : "/onboarding");
   }, [loading, me, business, router]);
 
   if (loading || !me || !business) return <Loading />;
@@ -128,13 +129,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const allowed = (i: NavItem) =>
     !i.perm || (Array.isArray(i.perm[0]) ? (i.perm as [Module, Action][]).some(([m, a]) => can(m, a)) : can(...(i.perm as [Module, Action])));
   const nav = NAV.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length);
-  if (me.platform_role) {
-    nav.push({ section: "Platform", items: [
-      me.platform_role === "SUPERADMIN"
-        ? { href: "/admin", label: "Super Admin", icon: Shield }
-        : { href: "/reseller", label: "Reseller Portal", icon: Store },
-    ] });
-  }
+  const platformItems: NavItem[] = [];
+  if (me.practice_clients > 0) platformItems.push({ href: "/practice", label: "Practitioner workspace", icon: Briefcase });
+  if (me.platform_role === "SUPERADMIN") platformItems.push({ href: "/admin", label: "Super Admin", icon: Shield });
+  else if (me.platform_role === "RESELLER") platformItems.push({ href: "/reseller", label: "Reseller Portal", icon: Store });
+  if (platformItems.length) nav.push({ section: "More", items: platformItems });
   const allHrefs = nav.flatMap((g) => g.items.map((i) => i.href));
 
   return (

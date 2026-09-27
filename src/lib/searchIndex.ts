@@ -7,7 +7,7 @@ import type { Action, Module } from "@/lib/types";
 
 export type Group = "Create" | "Go to" | "GST" | "Settings" | "Utilities" | "Account";
 export interface SearchEntry {
-  title: string; href: string; group: Group; k?: string; perm?: [Module, Action]; platform?: "SUPERADMIN" | "RESELLER";
+  title: string; href: string; group: Group; k?: string; perm?: [Module, Action]; platform?: "SUPERADMIN" | "RESELLER"; practice?: boolean;
 }
 
 export const ENTRIES: SearchEntry[] = [
@@ -78,6 +78,8 @@ export const ENTRIES: SearchEntry[] = [
   { group: "Utilities", title: "All utilities", href: "/utilities" },
 
   // ---- account
+  { group: "Go to", title: "Practitioner workspace (final accounts)", href: "/practice", practice: true,
+    k: "ca clients balance sheet profit loss capital depreciation trial balance audit final accounts practice" },
   { group: "Account", title: "Change password", href: "/change-password", k: "reset password" },
   { group: "Account", title: "Super Admin", href: "/admin", k: "platform admin", platform: "SUPERADMIN" },
   { group: "Account", title: "Reseller portal", href: "/reseller", k: "licences", platform: "RESELLER" },

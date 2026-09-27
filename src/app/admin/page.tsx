@@ -213,6 +213,16 @@ function Admin() {
               <Field label="Valid until"><Input type="date" value={edit.valid_until ?? ""} onChange={(e) => setEdit({ ...edit, valid_until: e.target.value || null })} /></Field>
               <Field label="Extra businesses"><Input type="number" min={0} value={edit.extra_businesses} onChange={(e) => setEdit({ ...edit, extra_businesses: Number(e.target.value) || 0 })} /></Field>
             </div>
+            <Field label="Practitioner workspace — clients allowed" hint="0 = off. Enables final accounts (P&L, balance sheet, depreciation) for this account's clients.">
+              <Input type="number" min={0} value={(() => { try { return String(JSON.parse(edit.flagsText || "{}").practice_clients ?? 0); } catch { return "0"; } })()}
+                onChange={(e) => {
+                  let f: Record<string, unknown> = {};
+                  try { f = JSON.parse(edit.flagsText || "{}"); } catch { /* keep empty */ }
+                  const n = Number(e.target.value) || 0;
+                  if (n > 0) f.practice_clients = n; else delete f.practice_clients;
+                  setEdit({ ...edit, flagsText: JSON.stringify(f, null, 1) });
+                }} />
+            </Field>
             <Field label="Feature flags (JSON)" hint='Overrides plan limits, e.g. {"api_quota": 2000, "tally": true, "report:batch": true}'>
               <Textarea rows={4} className="font-mono text-xs" value={edit.flagsText} onChange={(e) => setEdit({ ...edit, flagsText: e.target.value })} />
             </Field>

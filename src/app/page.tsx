@@ -49,7 +49,7 @@ export default function Landing() {
 
   useEffect(() => {
     if (!loading && me) {
-      router.replace(business ? "/dashboard" : me.platform_role === "SUPERADMIN" ? "/admin" : me.platform_role === "RESELLER" ? "/reseller" : "/onboarding");
+      router.replace(business ? "/dashboard" : me.platform_role === "SUPERADMIN" ? "/admin" : me.platform_role === "RESELLER" ? "/reseller" : me.practice_clients > 0 ? "/practice" : "/onboarding");
     }
   }, [me, loading, business, router]);
 
