@@ -82,6 +82,15 @@ FIELDS: list[Field] = [
     Field("credit_note_reasons", "Masters", "Credit / debit note reasons", "list", CREDIT_NOTE_REASONS),
     Field("blocked_itc_categories", "Masters", "Expense categories with blocked ITC (new businesses)", "list",
           ["Tea & Refreshments"], "Sec. 17(5) — ticked as 'ITC blocked' when a business is created."),
+    # ---- practitioner workspace (final accounts)
+    Field("it_depreciation_rates", "Final accounts", "Income-tax depreciation rates by block (%)", "map_number",
+          {"Building - residential": 5, "Building - other": 10, "Furniture & fittings": 10,
+           "Plant & machinery - general": 15, "Motor car (not used for hire)": 15,
+           "Motor vehicles used in hire business": 30, "Computers & software": 40, "Intangible assets": 25},
+          "Written-down-value rates per block of assets (Income-tax Act). Half the rate applies to additions put to "
+          "use for less than 180 days in the year. Check against the latest rules."),
+    Field("ca_residual_value_pct", "Final accounts", "Companies Act residual value (% of cost)", "number", 5,
+          "Used for useful-life depreciation (Schedule II)."),
     # ---- billing & brand
     Field("subscription_gst_rate", "Subscription & company", "GST on subscription fees (%)", "number", 18),
     Field("trial_days", "Subscription & company", "Free trial days", "int", 14),
