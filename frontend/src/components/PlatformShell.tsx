@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, Shield, Store } from "lucide-react";
+import { Briefcase, LayoutDashboard, Shield, Store } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -31,6 +31,7 @@ export function PlatformShell({ need, children }: { need: "SUPERADMIN" | "RESELL
           </div>
           <div className="flex-1" />
           {me.platform_role === "SUPERADMIN" && need === "SUPERADMIN" && <Link href="/reseller" className="text-sm text-gray-600 hover:underline">Reseller view</Link>}
+          {me.practice_clients > 0 && <Link href="/practice" className="inline-flex items-center gap-1 text-sm text-gray-600 hover:underline"><Briefcase size={15} /> Practice</Link>}
           {business && <Link href="/dashboard" className="inline-flex items-center gap-1 text-sm text-gray-600 hover:underline"><LayoutDashboard size={15} /> My business</Link>}
           <UserBar />
         </div>

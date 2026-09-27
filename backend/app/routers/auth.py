@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 
 from ..config import get_settings
 from ..deps import DB, CurrentUser
-from ..models import Membership, PasswordReset, User
+from ..models import Membership, PasswordReset, Subscription, User
 from ..permissions import effective
 from ..schemas import LoginIn, MeOut, MyBusinessOut, RegisterIn, TokenOut, UserOut
 from ..security import (
@@ -43,6 +43,16 @@ def _aware(t: dt.datetime | None) -> dt.datetime | None:
     return t if t is None or t.tzinfo else t.replace(tzinfo=dt.timezone.utc)
 
 
+def _practice_limit(db, user: User) -> int:
+    if user.platform_role == "SUPERADMIN":
+        return 100000
+    sub = db.get(Subscription, user.id)
+    try:
+        return int(((sub.feature_flags or {}) if sub else {}).get("practice_clients") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def me_payload(db, user: User) -> MeOut:
     memberships = db.scalars(select(Membership).where(Membership.user_id == user.id)).all()
     return MeOut(
@@ -50,6 +60,7 @@ def me_payload(db, user: User) -> MeOut:
         platform_role=user.platform_role,
         last_login_at=user.last_login_at,
         previous_login_at=user.previous_login_at,
+        practice_clients=_practice_limit(db, user),
         totp_enabled=user.totp_enabled,
         must_change_password=user.must_change_password,
         businesses=[

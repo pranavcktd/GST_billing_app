@@ -764,3 +764,44 @@ class GstinLookup(Base):
     data: Mapped[dict | None] = mapped_column(JSON)
     credits_remaining: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+# ================================================================ practitioner workspace (final accounts)
+class PracticeClient(Base):
+    """A client of a tax practitioner / accountant / CA, whose final accounts are prepared in the workspace."""
+
+    __tablename__ = "practice_clients"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    account_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)  # the practitioner
+    name: Mapped[str] = mapped_column(String(200))
+    entity_type: Mapped[str] = mapped_column(String(20), default="PROPRIETORSHIP")  # PROPRIETORSHIP | PARTNERSHIP
+    pan: Mapped[str | None] = mapped_column(String(10))
+    gstin: Mapped[str | None] = mapped_column(String(15))
+    address: Mapped[str | None] = mapped_column(Text)
+    phone: Mapped[str | None] = mapped_column(String(20))
+    email: Mapped[str | None] = mapped_column(String(200))
+    nature_of_business: Mapped[str | None] = mapped_column(String(200))
+    linked_business_id: Mapped[str | None] = mapped_column(ForeignKey("businesses.id", ondelete="SET NULL"))
+    mappings: Mapped[dict | None] = mapped_column(JSON)  # remembered ledger → head / partner
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class PracticeFile(Base):
+    """One financial year's accounts of a practice client."""
+
+    __tablename__ = "practice_files"
+    __table_args__ = (UniqueConstraint("client_id", "fy", name="uq_practice_file_fy"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    client_id: Mapped[str] = mapped_column(ForeignKey("practice_clients.id", ondelete="CASCADE"), index=True)
+    fy: Mapped[str] = mapped_column(String(7))  # 2025-26
+    status: Mapped[str] = mapped_column(String(10), default="DRAFT", server_default="DRAFT")  # DRAFT | FINAL
+    source: Mapped[str | None] = mapped_column(String(20))  # MANUAL | TRIAL_BALANCE | BOOKS
+    data: Mapped[dict] = mapped_column(JSON, default=dict)
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    final_snapshot: Mapped[dict | None] = mapped_column(JSON)  # statements as finalised
+    finalized_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    finalized_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)

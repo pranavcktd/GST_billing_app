@@ -123,6 +123,7 @@ class MeOut(BaseModel):
     platform_role: str | None = None
     last_login_at: dt.datetime | None = None       # this session
     previous_login_at: dt.datetime | None = None   # the sign-in before this one ("last login")
+    practice_clients: int = 0                      # practitioner workspace: clients allowed (0 = not enabled)
     totp_enabled: bool = False
     must_change_password: bool = False
     businesses: list[MyBusinessOut]
