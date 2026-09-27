@@ -113,6 +113,7 @@ KEYWORDS: list[tuple[str, str]] = [
     (r"interest on (partners'? )?capital", "PARTNER_INTEREST"), (r"partners?'? (salary|remuneration)|remuneration to partner", "PARTNER_REMUNERATION"),
     (r"drawing", "DRAWINGS"), (r"capital", "CAPITAL"),
     (r"opening stock", "OPENING_STOCK"), (r"closing stock", "SUSPENSE"),
+    (r"bank charges|bank commission|processing fee|interest (paid )?on .*(loan|od|cc|cash credit|overdraft)", "FINANCE"),
     (r"depreciation", "DEPRECIATION_BOOKED"), (r"provision for (income )?tax|income tax payable", "PROVISIONS"),
     (r"income tax( expense)?$|tax expense", "TAX_EXPENSE"),
     (r"\b(od|occ|cc)\b|overdraft|cash credit", "ST_BORROWINGS"),
