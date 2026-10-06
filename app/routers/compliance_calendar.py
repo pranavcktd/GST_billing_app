@@ -19,6 +19,15 @@ def _rules() -> list[dict]:
     return C.get("compliance_rules") or CC.DEFAULT_RULES
 
 
+def _biz(ctx: BCtx):
+    """The business, with its GST registration date picked up from an earlier GSTIN lookup when not saved yet."""
+    from .businesses import _fill_registration_date
+
+    if ctx.business.gstin and not ctx.business.gst_registration_date:
+        _fill_registration_date(ctx.db, ctx.business)
+    return ctx.business
+
+
 def _done(ctx: BCtx) -> dict[tuple[str, str], dict]:
     rows = ctx.db.scalars(select(ComplianceFiling).where(ComplianceFiling.business_id == ctx.bid)).all()
     return {(r.rule_code, r.period_key): dict(id=r.id, done_on=r.done_on, reference=r.reference, note=r.note, by=r.by,
@@ -28,7 +37,7 @@ def _done(ctx: BCtx) -> dict[tuple[str, str], dict]:
 @router.get("/calendar")
 def get_calendar(ctx: BCtx, ahead_days: int = 120):
     ctx.need("reports_gst", "view")
-    return CC.calendar_for(ctx.business, _rules(), _done(ctx), ahead_days=min(max(ahead_days, 15), 400))
+    return CC.calendar_for(_biz(ctx), _rules(), _done(ctx), ahead_days=min(max(ahead_days, 15), 400))
 
 
 @router.post("/sync")
@@ -48,7 +57,7 @@ def get_register(ctx: BCtx, law: str = "GST", fy: int | None = None):
     fy = fy or (today.year if today.month >= 4 else today.year - 1)
     if not 2017 <= fy <= today.year + 1:
         raise HTTPException(422, "Choose a financial year from 2017-18")
-    out = CC.register(ctx.business, _rules(), _done(ctx), fy, law.upper())
+    out = CC.register(_biz(ctx), _rules(), _done(ctx), fy, law.upper())
     if law.upper() == "GST":
         rows = ctx.db.scalars(select(GstReturnStatus).where(GstReturnStatus.business_id == ctx.bid, GstReturnStatus.fy == out["fy_label"])
                               .order_by(GstReturnStatus.return_period, GstReturnStatus.return_type)).all()
@@ -74,7 +83,7 @@ def get_summary(ctx: BCtx):
     """Counts for the dashboard: overdue and due within 15 days, plus the next three items."""
     if not ctx.can("reports_gst", "view"):
         return {"summary": None, "next": []}
-    cal = CC.calendar_for(ctx.business, _rules(), _done(ctx), ahead_days=30)
+    cal = CC.calendar_for(_biz(ctx), _rules(), _done(ctx), ahead_days=30)
     pending = [i for i in cal["items"] if i["status"] in ("OVERDUE", "DUE_SOON")]
     return {"summary": cal["summary"], "next": pending[:3]}
 

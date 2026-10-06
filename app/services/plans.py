@@ -191,7 +191,7 @@ def check_invoice_limit(db: Session, business_id: str) -> None:
                                   f"{plan['name']} plan. Upgrade to keep billing.", nxt)
     if plan.get("invoices_per_year") is not None:
         fy_start = fy_range(now.date())[0]
-        used = _invoice_count(db, ids, dt.datetime.combine(fy_start, dt.time.min, dt.timezone.utc))
+        used = _invoice_count(db, ids, dt.datetime.combine(fy_start, dt.time.min, dt.timezone(dt.timedelta(hours=5, minutes=30))))
         if used >= plan["invoices_per_year"]:
             raise UpgradeRequired(f"The {plan['name']} plan allows {plan['invoices_per_year']} invoices per year.",
                                   "STARTER")
@@ -260,7 +260,7 @@ def usage(db: Session, business_id: str) -> dict:
     month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     return dict(
         invoices_this_month=_invoice_count(db, ids, month),
-        invoices_this_year=_invoice_count(db, ids, dt.datetime.combine(fy_range(now.date())[0], dt.time.min, dt.timezone.utc)),
+        invoices_this_year=_invoice_count(db, ids, dt.datetime.combine(fy_range(now.date())[0], dt.time.min, dt.timezone(dt.timedelta(hours=5, minutes=30)))),
         businesses=len(ids), users=len(account_user_ids(db, acc)),
         godowns=db.scalar(select(func.count(Godown.id)).where(Godown.business_id == business_id,
                                                               Godown.is_active.is_(True))) or 0,

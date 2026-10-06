@@ -118,3 +118,51 @@ def test_modules_and_entity_type(client):
     r = client.put("/api/businesses/current", headers=h, json={**body, "entity_type": "PRIVATE_LIMITED"})
     assert r.status_code == 200, r.text
     assert r.json()["entity_type"] == "PRIVATE_LIMITED" and r.json()["modules"]["mode"] == "SERVICES"
+
+
+def test_free_plan_watermark_on_exports_and_pdf(client):
+    import io
+
+    from openpyxl import load_workbook
+    from pypdf import PdfReader
+
+    from app.models import Subscription
+    from tests.test_phase2 import db_session
+
+    h = make_business(client, signup(client))
+    doc = {"title": "Sales", "sections": [{"columns": [{"key": "a", "label": "A"}], "rows": [{"a": "x"}]}]}
+    pdf = client.post("/api/export/table", headers=h, params={"format": "pdf"}, json=doc)
+    assert pdf.status_code == 200 and "Free plan" not in "".join(p.extract_text() for p in PdfReader(io.BytesIO(pdf.content)).pages)
+
+    db = db_session()
+    owner_id = client.get("/api/auth/me", headers=h).json()["user"]["id"]
+    db.get(Subscription, owner_id).plan = "FREE"
+    db.commit()
+    db.close()
+    pdf = client.post("/api/export/table", headers=h, params={"format": "pdf"}, json=doc)
+    assert "Free plan" in "".join(p.extract_text() for p in PdfReader(io.BytesIO(pdf.content)).pages)
+    xl = client.post("/api/export/table", headers=h, params={"format": "xlsx"}, json=doc)
+    assert "Free plan" in str(load_workbook(io.BytesIO(xl.content)).active.cell(1, 1).value)
+
+    cust = post(client, h, "/api/parties", {"name": "Ravi", "gst_type": "UNREGISTERED"})
+    v = post(client, h, "/api/vouchers", {"type": "SALE", "date": "2026-09-10", "party_id": cust["id"], "lines": [{"name": "Work", "qty": 1, "rate": 100, "gst_rate": 0}]})
+    inv = client.get(f"/api/vouchers/{v['id']}/pdf", headers=h)
+    assert "Free plan" in "".join(p.extract_text() for p in PdfReader(io.BytesIO(inv.content)).pages)
+
+
+def test_registration_date_and_portal_details(client, monkeypatch):
+    from tests.test_gstin_verify import GOOD, enable, fake_provider
+
+    root = __import__("tests.test_security_admin", fromlist=["superadmin"]).superadmin(client, monkeypatch)
+    enable(client, root)
+    fake_provider(monkeypatch)
+    user = signup(client, "gst@x.in")
+    d = post(client, user, "/api/gstin/verify", {"gstin": GOOD}, 200)
+    assert d["registration_date"] == "2020-10-01"
+    # a business saved without the date picks it (and the portal details) up from the lookup — no new call
+    h = make_business(client, user, gstin=GOOD, state_code="24")
+    biz = client.get("/api/businesses/current", headers=h).json()
+    assert biz["gst_registration_date"] == "2020-10-01" and biz["gst_portal"]["constitution"] == "Proprietorship"
+    assert biz["gst_portal"]["legal_name"] == "HARILAL SAVAJIBHAI VAGHASIA"
+    cal = client.get("/api/compliance/calendar", headers=h).json()
+    assert cal["settings"]["registration_date"] == "2020-10-01"

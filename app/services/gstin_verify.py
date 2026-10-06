@@ -159,7 +159,8 @@ def normalise(raw: dict, gstin: str) -> dict:
 
 # ================================================================ verify
 def _count_today(db: Session, **where) -> int:
-    start = dt.datetime.combine(dt.date.today(), dt.time.min, tzinfo=dt.UTC)
+    ist = dt.timezone(dt.timedelta(hours=5, minutes=30))  # "today" is the Indian day, not the UTC one
+    start = dt.datetime.combine(dt.datetime.now(ist).date(), dt.time.min, tzinfo=ist)
     q = select(func.count()).select_from(GstinLookup).where(GstinLookup.source == "LIVE", GstinLookup.created_at >= start)
     for k, v in where.items():
         q = q.where(getattr(GstinLookup, k) == v)
@@ -287,3 +288,30 @@ def last_status(db: Session, gstins: list[str]) -> dict[str, dict]:
                             legal_name=d.get("legal_name"), trade_name=d.get("trade_name"), taxpayer_type=d.get("taxpayer_type"),
                             fresh=at >= cutoff, days_ago=(dt.datetime.now(dt.UTC) - at).days)
     return out
+
+
+# ================================================================ details already fetched (free, no API call)
+def parse_date(v) -> dt.date | None:
+    if not v:
+        return None
+    t = str(v).strip()[:10]
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return dt.datetime.strptime(t, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def portal_details(db: Session, gstin: str | None) -> dict | None:
+    """The newest successful answer for a GSTIN on the platform (what the GST portal said), if any."""
+    if not gstin:
+        return None
+    row = db.scalar(select(GstinLookup).where(GstinLookup.gstin == gstin.upper(), GstinLookup.ok.is_(True),
+                                              GstinLookup.source == "LIVE", GstinLookup.data.is_not(None))
+                    .order_by(GstinLookup.created_at.desc()).limit(1))
+    if row is None:
+        return None
+    keep = ("legal_name", "trade_name", "status", "active", "taxpayer_type", "constitution", "registration_date",
+            "cancellation_date", "state", "state_code", "jurisdiction", "address", "pincode", "nature_of_business", "pan")
+    return {**{k: row.data.get(k) for k in keep}, "fetched_at": row.created_at}

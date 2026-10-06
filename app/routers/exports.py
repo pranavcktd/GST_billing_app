@@ -60,9 +60,9 @@ def audit_log(ctx: BCtx, limit: int = 100, offset: int = 0, entity: str | None =
     if user_id:
         q = q.where(AuditLog.user_id == user_id)
     if date_from:
-        q = q.where(AuditLog.created_at >= dt.datetime.combine(date_from, dt.time.min, dt.timezone.utc))
+        q = q.where(AuditLog.created_at >= dt.datetime.combine(date_from, dt.time.min, dt.timezone(dt.timedelta(hours=5, minutes=30))))
     if date_to:
-        q = q.where(AuditLog.created_at < dt.datetime.combine(date_to + dt.timedelta(days=1), dt.time.min, dt.timezone.utc))
+        q = q.where(AuditLog.created_at < dt.datetime.combine(date_to + dt.timedelta(days=1), dt.time.min, dt.timezone(dt.timedelta(hours=5, minutes=30))))
     total = ctx.db.scalar(select(func.count()).select_from(q.subquery()))
     rows = ctx.db.scalars(q.order_by(AuditLog.created_at.desc()).limit(min(limit, 500)).offset(offset)).all()
     return {"total": total, "rows": [dict(id=a.id, created_at=a.created_at, user=a.user_name, action=a.action,
@@ -99,13 +99,18 @@ def export_table(doc: TableDoc, db: DB, user: CurrentUser, format: Literal["xlsx
     rows = sum(len(s.get("rows") or []) for s in doc.sections)
     if rows > table_export.MAX_ROWS:
         raise HTTPException(413, f"Too many rows to export at once ({rows}); narrow the filters")
-    business = None
+    business, watermark = None, False
     if x_business_id:
         m = db.scalar(select(Membership).where(Membership.user_id == user.id, Membership.business_id == x_business_id, Membership.status == "ACTIVE"))
         business = m.business.name + (f" · GSTIN {m.business.gstin}" if m and m.business.gstin else "") if m else None
+        if m:
+            from ..services.plans import business_plan
+
+            watermark = bool(business_plan(db, m.business_id)["watermark"])
     data = doc.model_dump()
     brand = config_store.app_name()
-    content = table_export.to_pdf(data, business, brand) if format == "pdf" else table_export.to_xlsx(data, business, brand)
+    content = (table_export.to_pdf(data, business, brand, watermark) if format == "pdf"
+               else table_export.to_xlsx(data, business, brand, watermark))
     name = re.sub(r"[^\w.-]+", "-", doc.filename or doc.title).strip("-")[:100] or "export"
     return Response(content, media_type="application/pdf" if format == "pdf" else XLSX_TYPE,
                     headers={"Content-Disposition": f'attachment; filename="{name}.{format}"'})

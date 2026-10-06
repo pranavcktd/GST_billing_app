@@ -31,8 +31,22 @@ def _check_theme(db, business_id: str | None, data: BusinessIn) -> None:
             ps.theme, ps.accent = "classic", "#1f65bb"
 
 
+def _fill_registration_date(db, biz: Business) -> dict | None:
+    """Portal details of the business's GSTIN; also remembers the registration date when it is not known yet."""
+    from ..services import gstin_verify as G
+
+    d = G.portal_details(db, biz.gstin) if biz.gstin else None
+    if d and not biz.gst_registration_date:
+        biz.gst_registration_date = G.parse_date(d.get("registration_date"))
+        if biz.gst_registration_date:
+            db.commit()
+    return d
+
+
 def business_out(db, biz: Business) -> BusinessOut:
+    portal = _fill_registration_date(db, biz)
     out = BusinessOut.model_validate(biz)
+    out.gst_portal = portal
     out.einvoice_password_set = bool(biz.einvoice_password_enc)
     p = business_plan(db, biz.id)
     out.plan = {"code": p["code"], "name": p["name"], "watermark": p["watermark"],

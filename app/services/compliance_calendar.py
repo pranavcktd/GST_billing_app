@@ -51,11 +51,25 @@ def _fy_label(y: int) -> str:
     return f"FY {y}-{str(y + 1)[-2:]}"
 
 
+def registration_date(biz) -> dt.date | None:
+    return getattr(biz, "gst_registration_date", None)
+
+
 def settings(biz) -> dict:
+    """Business answers. Tracking starts on the GST registration date when known (else the day the business joined)."""
     s = {**SETTINGS_DEFAULT, **(biz.compliance_settings or {})}
+    reg = registration_date(biz)
     if not s.get("track_from"):
-        s["track_from"] = (biz.created_at.date() if biz.created_at else dt.date.today()).isoformat()
+        s["track_from"] = (reg or (biz.created_at.date() if biz.created_at else dt.date.today())).isoformat()
+    elif reg and dt.date.fromisoformat(s["track_from"]) < reg:
+        s["track_from"] = reg.isoformat()  # nothing was due before the business was registered
+    s["registration_date"] = reg.isoformat() if reg else None
     return s
+
+
+def _before_registration(o: dict, reg: dt.date | None) -> bool:
+    """A period that ended before the registration date never had to be filed."""
+    return bool(reg) and o["period_end"] < reg
 
 
 def applies(rule: dict, biz, s: dict) -> bool:
@@ -118,7 +132,7 @@ def occurrences(rule: dict, state_code: str, start: dt.date, end: dt.date) -> li
                 d = due_on(y, m, spec)
                 if start <= d <= end:
                     out.append(dict(period_key=f"{y}-{m:02d}", period=dt.date(y, m, 1).strftime("%b %Y"),
-                                    period_start=dt.date(y, m, 1), due_date=d))
+                                    period_start=dt.date(y, m, 1), period_end=_date(y, m, 31), due_date=d))
             y, m = (y + 1, 1) if m == 12 else (y, m + 1)
     elif freq == "QUARTERLY":
         for fy in range(_fy_start(start) - 1, _fy_start(end) + 1):
@@ -129,7 +143,7 @@ def occurrences(rule: dict, state_code: str, start: dt.date, end: dt.date) -> li
                 d = due_on(fy, q_end_month, spec)
                 if start <= d <= end:
                     last = _date(fy, q_end_month, 1)
-                    out.append(dict(period_key=f"FY{fy}-Q{q}", period_start=q_start, due_date=d,
+                    out.append(dict(period_key=f"FY{fy}-Q{q}", period_start=q_start, period_end=_date(fy, q_end_month, 31), due_date=d,
                                     period=f"{q_start.strftime('%b')}–{last.strftime('%b %Y')} (Q{q} {_fy_label(fy)})"))
     elif freq == "YEARLY":
         dates = due.get("dates") or []
@@ -144,17 +158,19 @@ def occurrences(rule: dict, state_code: str, start: dt.date, end: dt.date) -> li
                 if start <= d <= end:
                     key = f"FY{fy}" + (f"#{i + 1}" if len(dates) > 1 else "")
                     label = _fy_label(fy) + (f" · {spec['label']}" if spec.get("label") else "")
-                    out.append(dict(period_key=key, period=label, period_start=dt.date(fy, 4, 1), due_date=d))
+                    out.append(dict(period_key=key, period=label, period_start=dt.date(fy, 4, 1), period_end=dt.date(fy + 1, 3, 31), due_date=d))
     return out
 
 
 def calendar_for(biz, rules: list[dict], done: dict[tuple[str, str], dict], today: dt.date | None = None,
                  ahead_days: int = 120) -> dict:
-    """The business's filings from `track_from` (at most ~15 months back) to `ahead_days` ahead, with status."""
+    """The business's filings to `ahead_days` ahead, with status: pending ones from `track_from`, filed ones (by hand or
+    from the GST portal) from up to ~15 months back. Nothing from before the registration date."""
     today = today or dt.date.today()
     s = settings(biz)
     track_from = dt.date.fromisoformat(s["track_from"])
-    start = max(track_from, today - dt.timedelta(days=460))
+    reg = registration_date(biz)
+    start = today - dt.timedelta(days=460)
     end = today + dt.timedelta(days=ahead_days)
     items = []
     for rule in rules:
@@ -163,6 +179,8 @@ def calendar_for(biz, rules: list[dict], done: dict[tuple[str, str], dict], toda
         fee = _fee_per_day(rule)
         for o in occurrences(rule, biz.state_code, start, end):
             rec = done.get((rule["code"], o["period_key"]))
+            if _before_registration(o, reg) or (not rec and o["due_date"] < track_from):
+                continue
             days = (today - o["due_date"]).days
             status = "DONE" if rec else "OVERDUE" if days > 0 else "DUE_SOON" if days >= -15 else "UPCOMING"
             items.append(dict(
@@ -226,7 +244,7 @@ def register(biz, rules: list[dict], done: dict[tuple[str, str], dict], fy: int,
             continue
         fee = _fee_per_day(rule)
         for o in occurrences(rule, biz.state_code, fy_start, dt.date(fy + 2, 12, 31)):
-            if not (fy_start <= o["period_start"] <= fy_end):
+            if not (fy_start <= o["period_start"] <= fy_end) or _before_registration(o, registration_date(biz)):
                 continue
             rec = done.get((rule["code"], o["period_key"]))
             days = (today - o["due_date"]).days
