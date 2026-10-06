@@ -206,6 +206,10 @@ def test_smtp_levels_and_invoice_email(client, monkeypatch):
     assert r["via"] == "BUSINESS" and "/i/" in r["link"]
     msg = SENT[-1]
     assert "billing@shop.in" in msg["From"] and msg["To"] == "buyer@client.in"
+    pdfs = [a for a in msg.iter_attachments() if a.get_content_type() == "application/pdf"]
+    assert len(pdfs) == 1 and pdfs[0].get_content()[:5] == b"%PDF-" and pdfs[0].get_filename().endswith(".pdf")
+    post(client, h, f"/api/vouchers/{v['id']}/email", {"to": ["buyer@client.in"], "attach_pdf": False}, 200)
+    assert not list(SENT[-1].iter_attachments())
     token = r["link"].rsplit("/", 1)[1]
     pub = client.get(f"/api/public/invoice/{token}")  # no login
     assert pub.status_code == 200 and pub.json()["voucher"]["number"] == v["number"]
