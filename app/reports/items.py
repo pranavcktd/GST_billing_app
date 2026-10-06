@@ -72,19 +72,21 @@ def stock_summary(r: RCtx):
 
 def stock_details(r: RCtx):
     agg = _moves(r)
-    keys = ["opening", "OPENING", "PURCHASE", "SALE_RETURN", "SALE", "PURCHASE_RETURN", "ADJUSTMENT"]
+    keys = ["opening", "OPENING", "PURCHASE", "SALE_RETURN", "PRODUCTION", "SALE", "PURCHASE_RETURN", "CONSUMPTION", "ADJUSTMENT"]
     rows = []
     for it in _items(r):
         a = agg[it.id]
         row = dict(_link=f"/items/{it.id}", item=it.name, unit=it.unit, **{k: a[k] for k in keys})
         row["SALE"] = -row["SALE"]
         row["PURCHASE_RETURN"] = -row["PURCHASE_RETURN"]
+        row["CONSUMPTION"] = -row["CONSUMPTION"]
         row["closing"] = sum((a[k] for k in keys), ZERO)
         rows.append(row)
     cols = [col("item", "Item"), col("unit", "Unit"), col("opening", "Opening", "qty"),
             col("OPENING", "Opening stock added", "qty"), col("PURCHASE", "Purchased", "qty"),
-            col("SALE_RETURN", "Sale returns", "qty"), col("SALE", "Sold", "qty"),
-            col("PURCHASE_RETURN", "Purchase returns", "qty"), col("ADJUSTMENT", "Adjustments (±)", "qty"),
+            col("SALE_RETURN", "Sale returns", "qty"), col("PRODUCTION", "Produced", "qty"), col("SALE", "Sold", "qty"),
+            col("PURCHASE_RETURN", "Purchase returns", "qty"), col("CONSUMPTION", "Used in production", "qty"),
+            col("ADJUSTMENT", "Adjustments (±)", "qty"),
             col("closing", "Closing", "qty")]
     return result("Stock details", [section(cols, rows)])
 
@@ -105,7 +107,7 @@ def low_stock(r: RCtx):
 
 def item_details(r: RCtx):
     it = _item(r)
-    days: dict = defaultdict(lambda: dict(sale=ZERO, purchase=ZERO, returns_in=ZERO, returns_out=ZERO, adjust=ZERO))
+    days: dict = defaultdict(lambda: dict(sale=ZERO, purchase=ZERO, returns_in=ZERO, returns_out=ZERO, produced=ZERO, used=ZERO, adjust=ZERO))
     opening = ZERO
     for m in r.db.scalars(select(StockMovement).where(StockMovement.item_id == it.id,
                                                       StockMovement.date <= r.date_to).order_by(StockMovement.date)):
@@ -116,14 +118,16 @@ def item_details(r: RCtx):
             continue
         d = days[m.date]
         key = {StockMoveType.SALE: "sale", StockMoveType.PURCHASE: "purchase", StockMoveType.OPENING: "purchase",
-               StockMoveType.SALE_RETURN: "returns_in", StockMoveType.PURCHASE_RETURN: "returns_out"}.get(m.type, "adjust")
+               StockMoveType.SALE_RETURN: "returns_in", StockMoveType.PURCHASE_RETURN: "returns_out",
+               StockMoveType.PRODUCTION: "produced", StockMoveType.CONSUMPTION: "used"}.get(m.type, "adjust")
         d[key] += abs(m.qty) if key != "adjust" else m.qty
     rows, running = [], opening
     for day, d in sorted(days.items()):
-        running += d["purchase"] + d["returns_in"] - d["sale"] - d["returns_out"] + d["adjust"]
+        running += d["purchase"] + d["returns_in"] + d["produced"] - d["sale"] - d["returns_out"] - d["used"] + d["adjust"]
         rows.append(dict(date=day, **d, closing=running))
     cols = [col("date", "Date", "date"), col("purchase", "Purchased", "qty"), col("sale", "Sold", "qty"),
             col("returns_in", "Sale returns", "qty"), col("returns_out", "Purchase returns", "qty"),
+            col("produced", "Produced", "qty"), col("used", "Used in production", "qty"),
             col("adjust", "Adjustment", "qty"), col("closing", "Closing", "qty")]
     return result(f"Item details — {it.name}", [section(cols, rows)],
                   summary=[stat("Opening", opening, "qty"), stat("Closing", running, "qty")])
