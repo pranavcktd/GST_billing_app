@@ -275,6 +275,7 @@ class Voucher(Base):
     __tablename__ = "vouchers"
     __table_args__ = (
         UniqueConstraint("business_id", "type", "number", name="uq_voucher_number"),
+        UniqueConstraint("business_id", "client_ref", name="uq_voucher_client_ref"),
         Index("ix_vouchers_business_type_date", "business_id", "type", "date"),
         Index("ix_vouchers_party", "party_id"),
     )
@@ -336,6 +337,7 @@ class Voucher(Base):
     cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
     share_token: Mapped[str | None] = mapped_column(String(40), unique=True)  # public view link
     recurring_id: Mapped[str | None] = mapped_column(ForeignKey("recurring_invoices.id", ondelete="SET NULL"), index=True)
+    client_ref: Mapped[str | None] = mapped_column(String(40))  # set by the app for bills made offline (idempotent upload)
     # exports / SEZ / imports: EXPWP, EXPWOP, SEZWP, SEZWOP (outward) or IMPORT (inward)
     export_type: Mapped[str | None] = mapped_column(String(8))
     shipping_bill_no: Mapped[str | None] = mapped_column(String(20))  # or bill of entry no. for imports

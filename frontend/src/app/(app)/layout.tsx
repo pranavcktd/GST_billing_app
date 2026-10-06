@@ -44,6 +44,7 @@ import { useAuth, usePerms } from "@/lib/auth";
 import type { Action, Module } from "@/lib/types";
 import { BrandLogo } from "@/components/BrandLogo";
 import { GlobalSearch } from "@/components/GlobalSearch";
+import { OfflineSync } from "@/components/OfflineSync";
 import { UserBar } from "@/components/UserBar";
 
 type NavItem = { href: string; label: string; icon: React.ElementType; perm?: [Module, Action] | [Module, Action][] };
@@ -216,6 +217,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="flex min-w-0 flex-1 justify-center"><GlobalSearch /></div>
+          <OfflineSync />
           {can("purchases", "create") && (
             <LinkButton href="/v/purchases/new" variant="secondary" className="hidden xl:inline-flex">
               <Plus size={16} /> Purchase

@@ -475,6 +475,7 @@ class VoucherIn(BaseModel):
     exchange_rate: Annotated[Decimal, Field(gt=0, max_digits=12, decimal_places=4)] | None = None
     transport: "TransportIn | None" = None
     extra_fields: dict[str, Annotated[str, StringConstraints(max_length=200)]] | None = None
+    client_ref: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{8,40}$")] | None = None  # offline bills
 
     _pos = field_validator("place_of_supply")(_check_state)
 

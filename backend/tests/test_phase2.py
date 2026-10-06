@@ -235,3 +235,16 @@ def test_invoice_pdf_download_email_and_public(client, monkeypatch):
     pub = client.get(f"/api/public/invoice/{token}/pdf")
     assert pub.status_code == 200 and pub.content[:5] == b"%PDF-"
     assert client.get("/api/public/invoice/" + "x" * 30 + "/pdf").status_code == 404
+
+
+def test_offline_upload_is_idempotent(client):
+    h, cust, item = setup(client)
+    body = {"type": "SALE", "date": "2026-09-10", "party_id": cust["id"], "client_ref": "off_7f3a9c2e1b",
+            "lines": [{"item_id": item["id"], "name": "Bottle", "qty": 1, "rate": 500, "gst_rate": 18}]}
+    first = post(client, h, "/api/vouchers", body)
+    again = client.post("/api/vouchers", headers=h, json=body)
+    assert again.status_code in (200, 201) and again.json()["id"] == first["id"]
+    assert client.get(f"/api/items/{item['id']}", headers=h).json()["stock"] == 19      # stock taken once
+    assert len([v for v in client.get("/api/vouchers", headers=h, params={"type": "SALE"}).json()]) == 1
+    bad = client.post("/api/vouchers", headers=h, json={**body, "client_ref": "x y"})
+    assert bad.status_code == 422
