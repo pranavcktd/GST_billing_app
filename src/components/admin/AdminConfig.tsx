@@ -6,6 +6,7 @@ import { Button, Card, ErrorBox, Field, Input, Loading, Textarea } from "@/compo
 import { api, qs } from "@/lib/api";
 import { fmtDate } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
+import { ComplianceRulesEditor, type Rule } from "@/components/admin/ComplianceRulesEditor";
 
 type FieldType = "money" | "int" | "number" | "text" | "bool" | "rates" | "list" | "map_text" | "map_number" | "json";
 interface ConfigField { key: string; group: string; label: string; type: FieldType; default: unknown; help: string }
@@ -122,6 +123,18 @@ export function AdminConfig() {
               const multi = f.type === "list" || f.type.startsWith("map_") || f.type === "json";
               const hint = f.type === "rates" ? "Comma separated, e.g. 0, 5, 18, 40" : f.type === "json" ? "JSON — edit carefully; it is checked when you save."
                 : multi ? (f.type === "list" ? "One per line" : "One per line: CODE = value") : undefined;
+              if (f.key === "compliance_rules") {
+                let rules: Rule[] = [];
+                try { rules = JSON.parse(value); } catch { /* shown as text below */ }
+                return (
+                  <div key={f.key} className="md:col-span-2">
+                    <div className="mb-1 text-xs font-medium text-gray-600">{f.label}{dirty ? " •" : ""}</div>
+                    <p className="mb-2 text-xs text-gray-500">{f.help}</p>
+                    <ComplianceRulesEditor rules={rules} links={Object.keys((data.effective.links as Record<string, string>) ?? {})}
+                      onChange={(next) => setEdits({ ...edits, [f.key]: JSON.stringify(next, null, 2) })} />
+                  </div>
+                );
+              }
               return (
                 <Field key={f.key} label={f.label + (dirty ? " •" : "")} hint={[f.help, hint].filter(Boolean).join(" ")} className={multi ? "md:col-span-2" : ""}>
                   {f.type === "bool" ? (
