@@ -33,7 +33,7 @@ def get_config(db: DB, admin: SuperAdmin, on: dt.date | None = None):
     return {
         "fields": [dict(key=f.key, group=f.group, label=f.label, type=f.type, default=f.default, help=f.help)
                    for f in C.FIELDS],
-        "effective": C.public(on),
+        "effective": C.public(on, full=True),
         "on": (on or dt.date.today()).isoformat(),
         "versions": C.versions(),
     }
