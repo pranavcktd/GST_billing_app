@@ -1,7 +1,22 @@
 "use client";
 
+import { CircleHelp } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { helpFor } from "@/lib/help";
+
+/** ⓘ icon that explains a field or term on hover, keyboard focus or tap. */
+export function Info({ text, below = false, className = "" }: { text: string; below?: boolean; className?: string }) {
+  return (
+    <span tabIndex={0} role="note" aria-label={text} onClick={(e) => e.preventDefault()}
+      className={`group relative ml-1 inline-flex cursor-help align-middle outline-none ${className}`}>
+      <CircleHelp size={13} className="text-gray-400 group-hover:text-brand-600 group-focus:text-brand-600" aria-hidden />
+      <span className={`pointer-events-none invisible absolute ${below ? "top-full mt-1.5" : "bottom-full mb-1.5"} left-1/2 z-50 w-64 -translate-x-1/2 rounded-md bg-gray-900 px-2.5 py-1.5 text-left text-xs leading-snug font-normal tracking-normal text-white normal-case opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus:visible group-focus:opacity-100`}>
+        {text}
+      </span>
+    </span>
+  );
+}
 
 type BtnVariant = "primary" | "secondary" | "danger" | "ghost";
 
@@ -51,6 +66,7 @@ export function Field({
   hint,
   error,
   required,
+  info,
   className = "",
   children,
 }: {
@@ -58,14 +74,18 @@ export function Field({
   hint?: string;
   error?: string | null;
   required?: boolean;
+  /** explanation behind the ⓘ icon; by default looked up from the label (lib/help.ts), `false` hides it */
+  info?: string | false;
   className?: string;
   children: React.ReactNode;
 }) {
+  const help = info === false ? undefined : info ?? helpFor(label);
   return (
     <label className={`block ${className}`}>
       <span className="mb-1 block text-xs font-medium text-gray-600">
         {label}
         {required && <span className="text-red-600"> *</span>}
+        {help && <Info text={help} />}
       </span>
       {children}
       {error ? (
