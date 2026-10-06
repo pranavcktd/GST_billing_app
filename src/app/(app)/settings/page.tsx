@@ -12,6 +12,7 @@ import { useFetch } from "@/lib/useFetch";
 import type { Business, PrintSettings } from "@/lib/types";
 import { ReminderSettings } from "@/components/ReminderSettings";
 import { PortalLink } from "@/components/PortalLink";
+import { ModuleSettings } from "@/components/ModuleSettings";
 
 const TABS = [
   { key: "business", label: "Business" },
@@ -19,6 +20,7 @@ const TABS = [
   { key: "einvoice", label: "e-Invoice" },
   { key: "email", label: "Email" },
   { key: "reminders", label: "Reminders" },
+  { key: "modules", label: "Modules" },
   { key: "security", label: "Security" },
 ] as const;
 
@@ -54,7 +56,7 @@ export default function SettingsPage() {
         ))}
       </div>
       {saved && <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{saved}</div>}
-      {!canEdit && tab !== "security" && tab !== "email" && tab !== "reminders" && <ErrorBox message="Your role can view settings but not change them." />}
+      {!canEdit && tab !== "security" && tab !== "email" && tab !== "reminders" && tab !== "modules" && <ErrorBox message="Your role can view settings but not change them." />}
 
       {tab === "business" && (
         <div className="max-w-4xl">
@@ -68,6 +70,7 @@ export default function SettingsPage() {
           help="Invoices, payment reminders and backups you e-mail go out from this address. Leave empty to use your reseller's or the platform's mail server." />
       )}
       {tab === "reminders" && <ReminderSettings canEdit={canEdit} />}
+      {tab === "modules" && <ModuleSettings canEdit={canEdit} />}
       {tab === "security" && <SecuritySettings canApprove={["OWNER", "ADMIN", "MANAGER"].includes(mine?.role ?? "")} />}
     </div>
   );

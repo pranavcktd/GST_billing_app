@@ -15,6 +15,29 @@ export const stateLabel = (code?: string | null) => (code && STATES[code] ? `${c
 
 export const GST_RATES = [0, 0.25, 3, 5, 12, 18, 28, 40];
 
+/** Constitution of the business — decides which MCA / income-tax compliances apply. */
+export const ENTITY_TYPES: Record<string, string> = {
+  PROPRIETORSHIP: "Proprietorship (individual)", PARTNERSHIP: "Partnership firm", LLP: "LLP (Limited Liability Partnership)",
+  PRIVATE_LIMITED: "Private Limited company", OPC: "One Person Company (OPC)", PUBLIC_LIMITED: "Public Limited company",
+  HUF: "HUF (Hindu Undivided Family)", TRUST_SOCIETY: "Trust / Society / AOP", OTHER: "Other",
+};
+
+/** Best guess from the GST portal's "constitution of business", else from the PAN's 4th letter. */
+export function guessEntityType(constitution: string | null | undefined, gstinOrPan?: string | null): string | null {
+  const c = (constitution ?? "").toLowerCase();
+  if (c.includes("limited liability")) return "LLP";
+  if (c.includes("one person")) return "OPC";
+  if (c.includes("private limited")) return "PRIVATE_LIMITED";
+  if (c.includes("public limited")) return "PUBLIC_LIMITED";
+  if (c.includes("partnership")) return "PARTNERSHIP";
+  if (c.includes("proprietor")) return "PROPRIETORSHIP";
+  if (c.includes("hindu undivided")) return "HUF";
+  if (c.includes("trust") || c.includes("society") || c.includes("aop")) return "TRUST_SOCIETY";
+  const v = (gstinOrPan ?? "").toUpperCase();
+  const ch = v.length === 15 ? v[5] : v.length === 10 ? v[3] : "";
+  return ({ P: "PROPRIETORSHIP", C: "PRIVATE_LIMITED", F: "PARTNERSHIP", H: "HUF", T: "TRUST_SOCIETY", A: "TRUST_SOCIETY" } as Record<string, string>)[ch] ?? null;
+}
+
 export const UNITS: Record<string, string> = {
   NOS: "Numbers", PCS: "Pieces", KGS: "Kilograms", GMS: "Grams", LTR: "Litres", MLT: "Millilitre",
   MTR: "Metres", CMS: "Centimetres", SQF: "Square Feet", SQM: "Square Metres", BOX: "Box", PAC: "Packs",
