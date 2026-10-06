@@ -119,6 +119,7 @@ class Business(Base):
     invoice_terms: Mapped[str | None] = mapped_column(Text)
     auto_backup: Mapped[bool] = mapped_column(Boolean, default=True)
     backup_email: Mapped[str | None] = mapped_column(String(200))
+    reminder_settings: Mapped[dict | None] = mapped_column(JSON)  # payment reminders (see services/reminders.py)
     transfer_prefix: Mapped[str] = mapped_column(String(8), default="ST")
     # exports / SEZ under Letter of Undertaking (zero-rated without paying IGST)
     lut_number: Mapped[str | None] = mapped_column(String(30))
@@ -805,3 +806,22 @@ class PracticeFile(Base):
     finalized_by: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class ReminderLog(Base):
+    """A payment reminder sent to a customer (automatic or by a user)."""
+
+    __tablename__ = "reminder_logs"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    party_id: Mapped[str | None] = mapped_column(ForeignKey("parties.id", ondelete="SET NULL"), index=True)
+    voucher_id: Mapped[str | None] = mapped_column(ForeignKey("vouchers.id", ondelete="CASCADE"), index=True)
+    stage: Mapped[str] = mapped_column(String(20))  # BEFORE_3 / DUE / AFTER_7 / MANUAL
+    channel: Mapped[str] = mapped_column(String(10), default="EMAIL")
+    sent_to: Mapped[str | None] = mapped_column(String(300))
+    status: Mapped[str] = mapped_column(String(10), default="SENT")  # SENT / FAILED
+    error: Mapped[str | None] = mapped_column(String(300))
+    automatic: Mapped[bool] = mapped_column(Boolean, default=False)
+    amount: Mapped[Decimal | None] = mapped_column(Money)
+    by_name: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
