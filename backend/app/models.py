@@ -334,6 +334,7 @@ class Voucher(Base):
     terms: Mapped[str | None] = mapped_column(Text)
     cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
     share_token: Mapped[str | None] = mapped_column(String(40), unique=True)  # public view link
+    recurring_id: Mapped[str | None] = mapped_column(ForeignKey("recurring_invoices.id", ondelete="SET NULL"), index=True)
     # exports / SEZ / imports: EXPWP, EXPWOP, SEZWP, SEZWOP (outward) or IMPORT (inward)
     export_type: Mapped[str | None] = mapped_column(String(8))
     shipping_bill_no: Mapped[str | None] = mapped_column(String(20))  # or bill of entry no. for imports
@@ -825,3 +826,27 @@ class ReminderLog(Base):
     amount: Mapped[Decimal | None] = mapped_column(Money)
     by_name: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class RecurringInvoice(Base):
+    """A sale invoice repeated on a schedule (rent, AMC, subscriptions). `template` holds the invoice body."""
+
+    __tablename__ = "recurring_invoices"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    party_id: Mapped[str | None] = mapped_column(ForeignKey("parties.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    template: Mapped[dict] = mapped_column(JSON)
+    frequency: Mapped[str] = mapped_column(String(12))  # WEEKLY | MONTHLY | QUARTERLY | HALF_YEARLY | YEARLY
+    interval: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    start_date: Mapped[dt.date] = mapped_column(Date)
+    end_date: Mapped[dt.date | None] = mapped_column(Date)
+    next_date: Mapped[dt.date | None] = mapped_column(Date, index=True)
+    due_days: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    auto_email: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    status: Mapped[str] = mapped_column(String(10), default="ACTIVE", server_default="ACTIVE")  # ACTIVE | PAUSED | ENDED
+    generated_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_generated_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(String(300))
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)

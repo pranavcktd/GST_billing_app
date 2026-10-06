@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { EInvoicePanel } from "@/components/EInvoicePanel";
 import { PdfButton } from "@/components/PdfButton";
+import { MakeRecurringButton } from "@/components/RecurringForm";
 import { RemindButton } from "@/components/RemindButton";
 import { CopyLinkButton, EmailButton, getShareLink } from "@/components/ShareDialog";
 import { InvoiceDocument } from "@/components/InvoiceDocument";
@@ -70,6 +71,7 @@ export default function VoucherViewPage() {
             <Button variant="secondary" onClick={share}><MessageCircle size={16} /> WhatsApp</Button>
             {!v.cancelled && <EmailButton v={v} />}
             {!v.cancelled && v.type === "SALE" && v.balance > 0 && v.party_id && <RemindButton partyId={v.party_id} voucherId={v.id} />}
+            {!v.cancelled && v.type === "SALE" && v.party_id && can("sales", "create") && <MakeRecurringButton voucherId={v.id} date={v.date} partyName={v.party_name} />}
             {!v.cancelled && <CopyLinkButton id={v.id} />}
             {!v.cancelled && convertTo && !v.converted_to_id && can(convertTo === "purchases" ? "purchases" : "sales", "create") && (
               <LinkButton href={`/v/${convertTo}/new?from=${v.id}`} variant="secondary">
