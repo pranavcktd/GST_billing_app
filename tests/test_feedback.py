@@ -101,3 +101,20 @@ def test_money_entries_can_be_corrected(client):
     assert client.delete(f"/api/items/{item['id']}/movements/{opening['id']}", headers=h).status_code == 400
     assert client.delete(f"/api/items/{item['id']}/movements/{adj['id']}", headers=h).status_code == 204
     assert client.get(f"/api/items/{item['id']}", headers=h).json()["stock"] == 5
+
+
+def test_modules_and_entity_type(client):
+    auth = signup(client)
+    h = make_business(client, auth, entity_type="LLP")
+    me = client.get("/api/auth/me", headers=auth).json()["businesses"][0]
+    assert me["entity_type"] == "LLP" and me["modules"] is None
+    r = client.put("/api/businesses/current/modules", headers=h, json={"mode": "SERVICES", "hidden": ["pos", "godowns", "pos"]})
+    assert r.status_code == 200 and r.json()["modules"] == {"mode": "SERVICES", "hidden": ["godowns", "pos"]}
+    assert client.get("/api/auth/me", headers=auth).json()["businesses"][0]["modules"]["mode"] == "SERVICES"
+    assert client.put("/api/businesses/current/modules", headers=h, json={"mode": "X"}).status_code == 422
+    # a normal settings save keeps the modules and can change the constitution
+    biz = client.get("/api/businesses/current", headers=h).json()
+    body = {k: v for k, v in biz.items() if k not in ("id", "plan", "einvoice_password_set", "modules")}
+    r = client.put("/api/businesses/current", headers=h, json={**body, "entity_type": "PRIVATE_LIMITED"})
+    assert r.status_code == 200, r.text
+    assert r.json()["entity_type"] == "PRIVATE_LIMITED" and r.json()["modules"]["mode"] == "SERVICES"

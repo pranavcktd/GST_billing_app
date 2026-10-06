@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from ..deps import DB, BCtx, CurrentUser
 from ..gst.constants import Role
 from ..models import Business, Membership
-from ..schemas import BusinessIn, BusinessOut, MyBusinessOut
+from ..schemas import BusinessIn, BusinessOut, ModulesIn, MyBusinessOut
 from ..security import encrypt_secret
 from ..services.accounts import cash_account
 from ..services.godowns import default_godown
@@ -56,7 +56,8 @@ def create_business(data: BusinessIn, db: DB, user: CurrentUser):
     seed_categories(db, biz.id)
     default_godown(db, biz.id)
     db.commit()
-    return MyBusinessOut(id=biz.id, name=biz.name, gstin=biz.gstin, gst_type=biz.gst_type, role=Role.OWNER)
+    return MyBusinessOut(id=biz.id, name=biz.name, gstin=biz.gstin, gst_type=biz.gst_type, role=Role.OWNER,
+                         modules=biz.modules, entity_type=biz.entity_type or "PROPRIETORSHIP")
 
 
 @router.get("/current", response_model=BusinessOut)
@@ -69,5 +70,14 @@ def update_current(data: BusinessIn, ctx: BCtx):
     ctx.need("settings", "edit")
     _check_theme(ctx.db, ctx.bid, data)
     apply_business(ctx.business, data)
+    ctx.db.commit()
+    return business_out(ctx.db, ctx.business)
+
+
+@router.put("/current/modules", response_model=BusinessOut)
+def update_modules(data: ModulesIn, ctx: BCtx):
+    """Hide menus the business does not use (e.g. stock and godowns for a services business). Data is never removed."""
+    ctx.need("settings", "edit")
+    ctx.business.modules = {"mode": data.mode, "hidden": sorted(set(data.hidden))}
     ctx.db.commit()
     return business_out(ctx.db, ctx.business)
