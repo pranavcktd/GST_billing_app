@@ -208,3 +208,47 @@ def clean_rules(rules) -> list[dict]:
         elif not (1 <= int(due.get("day", 0)) <= 31 and 0 <= int(due.get("months_after", 1)) <= 12):
             raise ValueError(f"{code}: 'due' needs day (1-31) and months_after (0-12)")
     return rules
+
+
+# ================================================================ register (one law, one financial year)
+def register(biz, rules: list[dict], done: dict[tuple[str, str], dict], fy: int, law: str,
+             today: dt.date | None = None) -> dict:
+    """Every filing of `law` for financial year `fy` (Apr fy – Mar fy+1), whatever its due date: for the
+    month-by-month / quarter-by-quarter tables of the compliance page. Periods due before the business's
+    "track from" date and not recorded are shown as NOT_TRACKED rather than overdue."""
+    today = today or dt.date.today()
+    s = settings(biz)
+    track_from = dt.date.fromisoformat(s["track_from"])
+    fy_start, fy_end = dt.date(fy, 4, 1), dt.date(fy + 1, 3, 31)
+    rows = []
+    for rule in rules:
+        if rule.get("authority") != law or not applies(rule, biz, s):
+            continue
+        fee = _fee_per_day(rule)
+        for o in occurrences(rule, biz.state_code, fy_start, dt.date(fy + 2, 12, 31)):
+            if not (fy_start <= o["period_start"] <= fy_end):
+                continue
+            rec = done.get((rule["code"], o["period_key"]))
+            days = (today - o["due_date"]).days
+            if rec:
+                st = "DONE"
+            elif days > 0:
+                st = "NOT_TRACKED" if o["due_date"] < track_from else "OVERDUE"
+            else:
+                st = "DUE_SOON" if days >= -15 else "UPCOMING"
+            rows.append(dict(
+                code=rule["code"], name=rule["name"], frequency=rule.get("frequency"), period_key=o["period_key"],
+                period=o["period"], period_start=o["period_start"], due_date=o["due_date"], status=st,
+                days_overdue=max(days, 0) if st == "OVERDUE" else 0, days_left=max(-days, 0), done=rec,
+                penalty=render(rule.get("penalty")) if st == "OVERDUE" else None,
+                late_fee_so_far=float(min(fee * days, Decimal(str(rule.get("fee_cap") or fee * days))))
+                if fee is not None and st == "OVERDUE" else None,
+                link=rule.get("link"),
+            ))
+    rows.sort(key=lambda r: (r["period_start"], r["due_date"]))
+    columns = []
+    for r in rows:  # filings in rule order, once each
+        if r["code"] not in [c["code"] for c in columns]:
+            columns.append(dict(code=r["code"], name=r["name"], frequency=r["frequency"]))
+    return dict(fy=fy, fy_label=f"{fy}-{str(fy + 1)[-2:]}", law=law, columns=columns, rows=rows,
+                track_from=s["track_from"], laws=[a for a in AUTHORITIES if any(r.get("authority") == a and applies(r, biz, s) for r in rules)])

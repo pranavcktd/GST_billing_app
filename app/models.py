@@ -892,6 +892,23 @@ class StaffSession(Base):
     valid_until: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class GstReturnStatus(Base):
+    """A GST return exactly as the GST portal listed it (filed or not), saved at the last sync of that year."""
+
+    __tablename__ = "gst_return_status"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    fy: Mapped[str] = mapped_column(String(7))  # 2025-26
+    return_type: Mapped[str] = mapped_column(String(20))  # GSTR1, GSTR3B, CMP08, GSTR4, GSTR9, IFF…
+    return_period: Mapped[str] = mapped_column(String(7))  # YYYY-MM (last month of the quarter / year)
+    status: Mapped[str | None] = mapped_column(String(30))
+    filed: Mapped[bool] = mapped_column(Boolean, default=False)
+    filed_on: Mapped[dt.date | None] = mapped_column(Date)
+    arn: Mapped[str | None] = mapped_column(String(30))
+    mode: Mapped[str | None] = mapped_column(String(20))
+    fetched_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class ComplianceFiling(Base):
     """A filing the business marked as done on the compliance calendar (rule code + period)."""
 
