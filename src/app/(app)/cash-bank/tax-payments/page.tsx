@@ -1,12 +1,13 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { AccountSelect } from "@/components/AccountSelect";
 import { Button, Card, Empty, ErrorBox, Field, Input, Loading, PageHeader, Select } from "@/components/ui";
 import { api } from "@/lib/api";
 import { fmtDate, money, today } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
+import { CashEntryEditor } from "@/components/CashEntryEditor";
 
 interface TaxPayment { id: string; date: string; type: "GST" | "TDS" | "TCS"; amount: number; reference: string | null; period: string | null; note: string | null }
 
@@ -14,6 +15,7 @@ export default function TaxPaymentsPage() {
   const { data, error, reload } = useFetch<TaxPayment[]>("/tax-payments");
   const [f, setF] = useState({ type: "GST", amount: "", date: today(), account_id: "", reference: "", period: "" });
   const [formError, setFormError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -61,7 +63,7 @@ export default function TaxPaymentsPage() {
                   <tr key={x.id}>
                     <td>{fmtDate(x.date)}</td><td>{x.type}</td><td>{x.period}</td><td>{x.reference}</td>
                     <td className="num">{money(x.amount)}</td>
-                    <td><button className="text-gray-400 hover:text-red-600" aria-label="Delete" onClick={async () => { if (confirm("Delete?")) { await api(`/tax-payments/${x.id}`, { method: "DELETE" }); reload(); } }}><Trash2 size={15} /></button></td>
+                    <td className="whitespace-nowrap"><button className="mr-2 text-gray-400 hover:text-gray-700" aria-label="Edit" onClick={() => setEditing(x.id)}><Pencil size={15} /></button><button className="text-gray-400 hover:text-red-600" aria-label="Delete" onClick={async () => { if (confirm("Delete?")) { await api(`/tax-payments/${x.id}`, { method: "DELETE" }); reload(); } }}><Trash2 size={15} /></button></td>
                   </tr>
                 ))}
               </tbody>
@@ -69,6 +71,7 @@ export default function TaxPaymentsPage() {
           )}
         </Card>
       </div>
+    {editing && <CashEntryEditor kind="tax" id={editing} onClose={() => setEditing(null)} onSaved={reload} />}
     </>
   );
 }

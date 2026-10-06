@@ -8,22 +8,22 @@ import { api, qs } from "@/lib/api";
 import { PAYMENT_MODES } from "@/lib/constants";
 import { fmtDate, money, today } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
-import type { Party, PaymentMode, Voucher } from "@/lib/types";
+import type { Party, Payment, PaymentMode, Voucher } from "@/lib/types";
 
-function PaymentForm({ type }: { type: "IN" | "OUT" }) {
+function PaymentForm({ type, initial }: { type: "IN" | "OUT"; initial?: Payment }) {
   const sp = useSearchParams();
   const router = useRouter();
   const { data: parties } = useFetch<Party[]>("/parties");
-  const [partyId, setPartyId] = useState<string | null>(sp.get("party"));
+  const [partyId, setPartyId] = useState<string | null>(initial?.party_id ?? sp.get("party"));
   const [voucherId, setVoucherId] = useState<string>(sp.get("voucher") ?? "");
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(today());
-  const [mode, setMode] = useState<PaymentMode>(type === "IN" ? "CASH" : "BANK");
-  const [reference, setReference] = useState("");
-  const [tds, setTds] = useState("");
-  const [accountId, setAccountId] = useState("");
-  const [chequeDate, setChequeDate] = useState("");
-  const [notes, setNotes] = useState("");
+  const [amount, setAmount] = useState(initial ? String(initial.amount) : "");
+  const [date, setDate] = useState(initial?.date ?? today());
+  const [mode, setMode] = useState<PaymentMode>(initial?.mode ?? (type === "IN" ? "CASH" : "BANK"));
+  const [reference, setReference] = useState(initial?.reference ?? "");
+  const [tds, setTds] = useState(initial?.tds_amount ? String(initial.tds_amount) : "");
+  const [accountId, setAccountId] = useState(initial?.account_id ?? "");
+  const [chequeDate, setChequeDate] = useState(initial?.cheque_date ?? "");
+  const [notes, setNotes] = useState(initial?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const { data: bills } = useFetch<(Voucher & { due: number })[]>(
@@ -40,7 +40,8 @@ function PaymentForm({ type }: { type: "IN" | "OUT" }) {
     setBusy(true);
     setError(null);
     try {
-      await api("/payments", {
+      await api(initial ? `/payments/${initial.id}` : "/payments", {
+        method: initial ? "PUT" : "POST",
         body: {
           type, date, party_id: partyId, amount: Math.round(Number(amount || 0) * 100) / 100,
           tds_amount: Math.round(Number(tds || 0) * 100) / 100, account_id: accountId || null, mode,
@@ -107,7 +108,7 @@ function PaymentForm({ type }: { type: "IN" | "OUT" }) {
         <Field label="Notes"><Input value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={() => router.back()}>Cancel</Button>
-          <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save payment"}</Button>
+          <Button type="submit" disabled={busy}>{busy ? "Saving…" : initial ? "Update payment" : "Save payment"}</Button>
         </div>
       </Card>
       <Card className="p-5 lg:col-span-2">
@@ -115,6 +116,11 @@ function PaymentForm({ type }: { type: "IN" | "OUT" }) {
         <p className="mb-3 text-xs text-gray-500">
           The payment settles the selected bill first, then the oldest unpaid bills. Any extra is kept as an advance.
         </p>
+        {initial && initial.allocations.length > 0 && (
+          <p className="mb-3 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">
+            Now settles {initial.allocations.map((a) => `${a.voucher_number} (${money(a.amount)})`).join(", ")} — these are settled again first when you update.
+          </p>
+        )}
         {!partyId ? (
           <p className="text-sm text-gray-500">Select a party to see unpaid bills.</p>
         ) : !bills ? (
@@ -150,16 +156,24 @@ function PaymentForm({ type }: { type: "IN" | "OUT" }) {
   );
 }
 
+function PaymentPage({ type }: { type: "IN" | "OUT" }) {
+  const editId = useSearchParams().get("edit");
+  const { data: existing, error } = useFetch<Payment>(editId ? `/payments/${editId}` : null);
+  return (
+    <>
+      <PageHeader title={editId ? `Edit ${existing?.number ?? "payment"}` : type === "IN" ? "Receive payment" : "Make payment"} />
+      {error ? <ErrorBox message={error} /> : editId && !existing ? <Loading /> : <PaymentForm type={type} initial={existing ?? undefined} />}
+    </>
+  );
+}
+
 export default function NewPaymentPage() {
   const { dir } = useParams<{ dir: string }>();
   if (dir !== "in" && dir !== "out") notFound();
   const type = dir === "in" ? "IN" : "OUT";
   return (
-    <>
-      <PageHeader title={type === "IN" ? "Receive payment" : "Make payment"} />
-      <Suspense fallback={<Loading />}>
-        <PaymentForm type={type} />
-      </Suspense>
-    </>
+    <Suspense fallback={<Loading />}>
+      <PaymentPage type={type} />
+    </Suspense>
   );
 }

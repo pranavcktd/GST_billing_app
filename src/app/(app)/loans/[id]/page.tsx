@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { AccountSelect } from "@/components/AccountSelect";
@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { fmtDate, money, today } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 import type { Loan } from "@/lib/types";
+import { CashEntryEditor } from "@/components/CashEntryEditor";
 
 interface LoanDetail {
   loan: Loan; opening: number; closing: number;
@@ -22,6 +23,7 @@ export default function LoanDetailPage() {
   const { data, error, reload } = useFetch<LoanDetail>(`/loans/${id}`);
   const [f, setF] = useState({ type: "EMI", principal: "", interest: "", date: today(), account_id: "", note: "" });
   const [formError, setFormError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
 
   if (error) return <ErrorBox message={error} />;
   if (!data) return <Loading />;
@@ -84,13 +86,14 @@ export default function LoanDetailPage() {
                   <td className="num">{e.type === "EMI" && e.principal ? money(e.principal) : ""}</td>
                   <td className="num">{e.interest ? money(e.interest) : ""}</td>
                   <td className="num">{money(e.balance)}</td>
-                  <td><button className="text-gray-400 hover:text-red-600" aria-label="Delete" onClick={async () => { if (confirm("Delete entry?")) { await api(`/loans/${id}/txns/${e.id}`, { method: "DELETE" }); reload(); } }}><Trash2 size={15} /></button></td>
+                  <td className="whitespace-nowrap"><button className="mr-2 text-gray-400 hover:text-gray-700" aria-label="Edit" onClick={() => setEditing(e.id)}><Pencil size={15} /></button><button className="text-gray-400 hover:text-red-600" aria-label="Delete" onClick={async () => { if (confirm("Delete entry?")) { await api(`/loans/${id}/txns/${e.id}`, { method: "DELETE" }); reload(); } }}><Trash2 size={15} /></button></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </Card>
       </div>
+    {editing && <CashEntryEditor kind="loan" loanId={id} id={editing} onClose={() => setEditing(null)} onSaved={reload} />}
     </>
   );
 }
