@@ -51,6 +51,7 @@ def _addr(text: str | None) -> tuple[str, str]:
 class PayloadError(HTTPException):
     def __init__(self, problems: list[str]):
         super().__init__(422, "Please complete these details first:\n• " + "\n• ".join(problems))
+        self.problems = problems
 
 
 def _party(db: Session, v: Voucher) -> Party | None:

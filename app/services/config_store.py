@@ -56,6 +56,8 @@ FIELDS: list[Field] = [
           "Rule 46: up to 16 characters."),
     Field("ewb_threshold", "GST rules", "e-Way bill required above (₹)", "money", 50000,
           "Consignment value above which an e-way bill is required (shown as a reminder on invoices)."),
+    Field("ewb_km_per_day", "GST rules", "e-Way bill validity: km per day", "int", 200,
+          "One day of validity for every this many km (or part of it); 20 km per day applies to over-dimensional cargo."),
     Field("einvoice_turnover_limit", "GST rules", "e-Invoicing mandatory above turnover (₹)", "money", 50000000,
           "Aggregate annual turnover from which e-invoicing is mandatory."),
     Field("composition_rates", "GST rules", "Composition scheme rates (%)", "map_number",
