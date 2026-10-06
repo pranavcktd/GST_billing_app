@@ -28,6 +28,7 @@ export default function OnboardingPage() {
         These details appear on your invoices. You can change them any time in Settings.
       </p>
       <BusinessForm
+        wizard
         initial={emptyBusiness}
         submitLabel="Create business"
         onSubmit={async (b) => {
