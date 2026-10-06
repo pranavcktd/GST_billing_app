@@ -79,7 +79,7 @@ def _meta_lines(doc: dict, business: str | None) -> list[str]:
 
 
 # ================================================================ Excel
-def to_xlsx(doc: dict, business: str | None = None, brand: str = "SmartHisab") -> bytes:
+def to_xlsx(doc: dict, business: str | None = None, brand: str = "SmartHisab", watermark: bool = False) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = (doc.get("title") or "Report")[:31].replace("/", "-").replace(":", "-") or "Report"
@@ -151,6 +151,11 @@ def to_xlsx(doc: dict, business: str | None = None, brand: str = "SmartHisab") -
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.append([])
     ws.append([f"Generated with {brand}. Please review before use in any filing."])
+    if watermark:  # Free plan: a note on top of the sheet and in the printed header
+        ws.insert_rows(1)
+        ws.cell(1, 1, f"Created with {brand} — Free plan")
+        ws.cell(1, 1).font = Font(bold=True, color="9CA3AF")
+        ws.oddHeader.center.text = f"{brand} · Free plan"
     ws.cell(ws.max_row, 1).font = Font(italic=True, color="9CA3AF", size=8)
     buf = io.BytesIO()
     wb.save(buf)
@@ -158,7 +163,7 @@ def to_xlsx(doc: dict, business: str | None = None, brand: str = "SmartHisab") -
 
 
 # ================================================================ PDF
-def to_pdf(doc: dict, business: str | None = None, brand: str = "SmartHisab") -> bytes:
+def to_pdf(doc: dict, business: str | None = None, brand: str = "SmartHisab", watermark: bool = False) -> bytes:
     sections = doc.get("sections") or []
     max_cols = max((len(s.get("columns") or []) for s in sections), default=1)
     size = landscape(A4) if max_cols > 6 else A4
@@ -171,6 +176,12 @@ def to_pdf(doc: dict, business: str | None = None, brand: str = "SmartHisab") ->
         canvas.setFillColor(colors.HexColor("#9CA3AF"))
         canvas.drawString(12 * mm, 8 * mm, f"{title} · Generated with {brand} — please review before use in any filing")
         canvas.drawRightString(size[0] - 12 * mm, 8 * mm, f"Page {d.page}")
+        if watermark:  # Free plan
+            canvas.setFont("Helvetica-Bold", 54)
+            canvas.setFillColor(colors.Color(0.45, 0.5, 0.6, alpha=0.08))
+            canvas.translate(size[0] / 2, size[1] / 2)
+            canvas.rotate(30)
+            canvas.drawCentredString(0, 0, f"{brand} · Free plan")
         canvas.restoreState()
 
     pdf = SimpleDocTemplate(buf, pagesize=size, leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm,

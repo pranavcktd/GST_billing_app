@@ -45,6 +45,12 @@ export function InvoiceDocument({ v, business, copy }: { v: VoucherDetail; busin
 
   return (
     <div className={`print-sheet relative mx-auto bg-white p-8 leading-relaxed text-gray-900 shadow-sm ${ps.paper === "A5" ? "max-w-[148mm] text-[10px]" : "max-w-[210mm] text-[12px]"}`}>
+      {business.plan?.watermark && (
+        // Free plan: faint diagonal mark across the page (prints too)
+        <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden" style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}>
+          <span className="-rotate-[30deg] text-6xl font-bold whitespace-nowrap select-none" style={{ color: "rgba(100,116,139,0.10)" }}><BrandName /> · Free plan</span>
+        </div>
+      )}
       {v.cancelled && (
         <div className="mb-3 rounded border border-red-300 bg-red-50 py-1 text-center text-sm font-semibold tracking-widest text-red-700">CANCELLED</div>
       )}

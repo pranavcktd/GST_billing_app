@@ -123,6 +123,8 @@ class Business(Base):
     auto_backup: Mapped[bool] = mapped_column(Boolean, default=True)
     backup_email: Mapped[str | None] = mapped_column(String(200))
     reminder_settings: Mapped[dict | None] = mapped_column(JSON)  # payment reminders (see services/reminders.py)
+    # date of GST registration (from the GST portal or typed in): the compliance calendar starts here
+    gst_registration_date: Mapped[dt.date | None] = mapped_column(Date)
     # constitution of the business (drives the compliance calendar): PROPRIETORSHIP, PARTNERSHIP, LLP, PRIVATE_LIMITED, ...
     entity_type: Mapped[str] = mapped_column(String(20), default="PROPRIETORSHIP", server_default="PROPRIETORSHIP")
     # which menus the business uses: {"mode": "BOTH" | "GOODS" | "SERVICES", "hidden": [module keys]}

@@ -105,3 +105,24 @@ def test_switched_off_rule_is_hidden():
     rules = [{**r, "disabled": True} if r["code"] == "GSTR1_M" else r for r in CC.DEFAULT_RULES]
     got = {i["code"] for i in CC.calendar_for(biz(), rules, {}, today=TODAY)["items"]}
     assert "GSTR1_M" not in got and "GSTR3B_M" in got
+
+
+def test_nothing_before_gst_registration():
+    b = biz(track_from="2025-07-01")
+    b.gst_registration_date = dt.date(2026, 6, 15)
+    s = CC.settings(b)
+    assert s["track_from"] == "2026-06-15" and s["registration_date"] == "2026-06-15"
+    items = CC.calendar_for(b, CC.DEFAULT_RULES, {}, today=TODAY)["items"]
+    keys = {(i["code"], i["period_key"]) for i in items}
+    assert ("GSTR3B_M", "2026-05") not in keys and ("GSTR3B_M", "2026-06") in keys  # June: registered mid-month
+    reg = CC.register(b, CC.DEFAULT_RULES, {}, 2026, "GST", today=TODAY)
+    assert all(r["period_key"] >= "2026-06" for r in reg["rows"] if r["code"] == "GSTR1_M")
+    assert CC.register(b, CC.DEFAULT_RULES, {}, 2025, "GST", today=TODAY)["rows"] == []
+
+
+def test_filed_items_listed_even_before_track_from():
+    b = biz(track_from="2026-09-01")
+    done = {("GSTR1_M", "2026-05"): {"id": "x", "source": "SYNC"}}
+    items = CC.calendar_for(b, CC.DEFAULT_RULES, done, today=TODAY)["items"]
+    assert any(i["code"] == "GSTR1_M" and i["period_key"] == "2026-05" and i["status"] == "DONE" for i in items)
+    assert not any(i["code"] == "GSTR3B_M" and i["period_key"] == "2026-05" for i in items)  # pending + before tracking: hidden

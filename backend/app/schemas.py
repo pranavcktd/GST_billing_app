@@ -218,6 +218,7 @@ class BusinessIn(BaseModel):
     lut_valid_till: dt.date | None = None
     composition_type: Literal["TRADER", "MANUFACTURER", "RESTAURANT", "SERVICE"] = "TRADER"
     entity_type: EntityType = "PROPRIETORSHIP"
+    gst_registration_date: dt.date | None = None
     print_settings: PrintSettings = PrintSettings()
     einvoice_username: Opt(100) = None
     einvoice_password: Opt(100) = None  # write-only; stored encrypted
@@ -284,6 +285,8 @@ class BusinessOut(ORM):
     lut_valid_till: dt.date | None
     composition_type: str
     entity_type: str = "PROPRIETORSHIP"
+    gst_registration_date: dt.date | None = None
+    gst_portal: dict | None = None  # registration details last fetched from the GST portal (read-only)
     modules: dict | None = None
     print_settings: PrintSettings | None
     einvoice_username: str | None

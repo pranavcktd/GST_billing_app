@@ -8,9 +8,18 @@ import { GstinVerify, type GstinInfo } from "@/components/GstinVerify";
 import { Button, Card, ErrorBox, Field, Input, Select, Textarea } from "@/components/ui";
 import { ENTITY_TYPES, guessEntityType, STATES } from "@/lib/constants";
 import { gstinError } from "@/lib/gst";
-import type { Business, BusinessGstType } from "@/lib/types";
+import type { Business, BusinessGstType, GstPortalDetails } from "@/lib/types";
 
-export type BusinessDraft = Omit<Business, "id" | "plan" | "einvoice_password_set"> & { einvoice_password?: string | null };
+export type BusinessDraft = Omit<Business, "id" | "plan" | "einvoice_password_set" | "gst_portal"> & { einvoice_password?: string | null };
+
+/** "01/10/2020", "01-10-2020" or "2020-10-01" -> "2020-10-01" */
+function isoDate(v: string | null | undefined): string | null {
+  if (!v) return null;
+  const t = v.trim().slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const m = /^(\d{2})[/-](\d{2})[/-](\d{4})$/.exec(t);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+}
 
 export const emptyBusiness: BusinessDraft = {
   name: "", legal_name: null, gst_type: "REGULAR", gstin: "", pan: null, state_code: "", address: null,
@@ -20,7 +29,7 @@ export const emptyBusiness: BusinessDraft = {
   receipt_prefix: "RCT", payment_prefix: "PAY", challan_prefix: "DC", sale_order_prefix: "SO",
   purchase_order_prefix: "PO", expense_prefix: "EXP", invoice_terms: null, auto_backup: true, backup_email: null,
   transfer_prefix: "ST", print_settings: null, einvoice_username: null,
-  lut_number: null, lut_valid_till: null, composition_type: "TRADER", entity_type: "PROPRIETORSHIP",
+  lut_number: null, lut_valid_till: null, composition_type: "TRADER", entity_type: "PROPRIETORSHIP", gst_registration_date: null,
 };
 
 const GST_TYPES: { value: BusinessGstType; label: string; hint: string }[] = [
@@ -45,8 +54,11 @@ export function BusinessForm({
   submitLabel,
   showUploads,
   wizard = false,
+  portal,
 }: {
   initial: BusinessDraft;
+  /** registration details last fetched from the GST portal (Settings) */
+  portal?: GstPortalDetails | null;
   onSubmit: (b: BusinessDraft) => Promise<void>;
   submitLabel: string;
   showUploads?: boolean;
@@ -86,6 +98,8 @@ export function BusinessForm({
     if (d.address) { next.address = d.address; got.add("address"); }
     if (d.city) { next.city = d.city; got.add("city"); }
     if (d.pincode) { next.pincode = d.pincode; got.add("pincode"); }
+    const reg = isoDate(d.registration_date);
+    if (reg) { next.gst_registration_date = reg; got.add("gst_registration_date"); }
     setB(next);
     setFromPortal(got);
     setFetched(d);
@@ -173,6 +187,28 @@ export function BusinessForm({
         </div>
       )}
 
+      {!wizard && portal && registered && (
+        <Card className="p-5">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="flex items-center gap-2 font-semibold text-gray-900"><BadgeCheck size={17} className="text-sky-600" /> GST registration details — from the GST portal</h2>
+            <span className="text-xs text-gray-500">Fetched {new Date(portal.fetched_at).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric" })} · use “Verify again” below to refresh</span>
+          </div>
+          <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
+            {([
+              ["Status", portal.status], ["Taxpayer type", portal.taxpayer_type], ["Constitution", portal.constitution],
+              ["Legal name", portal.legal_name], ["Trade name", portal.trade_name], ["Registered on", portal.registration_date],
+              ["Cancelled on", portal.cancellation_date], ["State", portal.state], ["Jurisdiction", portal.jurisdiction],
+              ["PAN", portal.pan], ["Nature of business", portal.nature_of_business?.join(", ")], ["Principal place", portal.address],
+            ] as [string, string | null | undefined][]).filter(([, v]) => v).map(([k, v]) => (
+              <div key={k} className={k === "Principal place" || k === "Nature of business" ? "sm:col-span-3" : ""}>
+                <dt className="text-xs text-gray-500">{k}</dt>
+                <dd className={k === "Status" ? (portal.active ? "font-medium text-emerald-700" : "font-medium text-red-700") : "text-gray-900"}>{v}</dd>
+              </div>
+            ))}
+          </dl>
+        </Card>
+      )}
+
       <Card className="p-5">
         <h2 className="mb-4 flex items-center gap-2 font-semibold text-gray-900"><Building2 size={17} /> {registered ? "As per GST registration" : "Business details"}</h2>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -210,6 +246,11 @@ export function BusinessForm({
             </Field>
           )}
           {registered && <Field label="Legal name (as per GST)" hint={hint("legal_name")}><Input {...text("legal_name")} /></Field>}
+          {registered && (
+            <Field label="GST registration date" hint={hint("gst_registration_date", "Your compliance calendar starts from this date")}>
+              <Input type="date" value={b.gst_registration_date ?? ""} onChange={(e) => set("gst_registration_date", e.target.value || null)} />
+            </Field>
+          )}
           <Field label={registered ? "Trade name (printed on bills)" : "Business name"} required hint={hint("name", registered ? "Usually your shop / brand name" : undefined)}>
             <Input required {...text("name")} />
           </Field>

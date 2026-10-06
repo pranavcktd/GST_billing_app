@@ -362,6 +362,13 @@ def render(v: Voucher, biz: Business, *, watermark: bool = False, copies: list[s
         canvas.drawRightString(page[0] - 10 * mm, 6 * mm, f"Page {doc.page}")
         if watermark:
             canvas.drawString(10 * mm, 6 * mm, f"Created with {brand} — free billing software")
+            canvas.saveState()
+            canvas.setFont(bold, 40 if small else 54)
+            canvas.setFillColor(colors.Color(0.45, 0.5, 0.6, alpha=0.09))
+            canvas.translate(page[0] / 2, page[1] * 0.42)
+            canvas.rotate(35)
+            canvas.drawCentredString(0, 0, f"{brand} · Free plan")
+            canvas.restoreState()
         if v.cancelled:
             canvas.setFont(bold, 60)
             canvas.setFillColor(colors.Color(0.85, 0.1, 0.1, alpha=0.12))

@@ -378,9 +378,9 @@ def platform_audit(db: DB, _: SuperAdmin, scope: Literal["platform", "business",
     if search:
         q = q.where(AuditLog.summary.ilike(f"%{search}%"))
     if date_from:
-        q = q.where(AuditLog.created_at >= dt.datetime.combine(date_from, dt.time.min, dt.timezone.utc))
+        q = q.where(AuditLog.created_at >= dt.datetime.combine(date_from, dt.time.min, dt.timezone(dt.timedelta(hours=5, minutes=30))))
     if date_to:
-        q = q.where(AuditLog.created_at < dt.datetime.combine(date_to + dt.timedelta(days=1), dt.time.min, dt.timezone.utc))
+        q = q.where(AuditLog.created_at < dt.datetime.combine(date_to + dt.timedelta(days=1), dt.time.min, dt.timezone(dt.timedelta(hours=5, minutes=30))))
     total = db.scalar(select(func.count()).select_from(q.subquery()))
     names = {b.id: b.name for b in db.scalars(select(Business))}
     rows = db.scalars(q.order_by(AuditLog.created_at.desc()).limit(min(limit, 500)).offset(offset)).all()

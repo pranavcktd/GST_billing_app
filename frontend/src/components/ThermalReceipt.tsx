@@ -11,6 +11,7 @@ export function ThermalReceipt({ v, business, width = 80 }: { v: VoucherDetail; 
   return (
     <div className="print-sheet mx-auto bg-white p-2 font-mono text-black" style={{ width: `${width}mm`, fontSize: narrow ? 10 : 11, lineHeight: 1.35 }}>
       <style>{`@media print { @page { size: ${width}mm auto; margin: 0 } }`}</style>
+      {business.plan?.watermark && <div className="mb-1 text-center" style={{ fontSize: 9 }}>*** <BrandName /> · Free plan ***</div>}
       <div className="text-center">
         {business.logo_url && <img src={business.logo_url} alt="" className="mx-auto mb-1 h-10 object-contain grayscale" />}
         <div className="font-bold" style={{ fontSize: narrow ? 12 : 14 }}>{business.name}</div>
