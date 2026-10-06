@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { EInvoicePanel } from "@/components/EInvoicePanel";
 import { PdfButton } from "@/components/PdfButton";
+import { RemindButton } from "@/components/RemindButton";
 import { CopyLinkButton, EmailButton, getShareLink } from "@/components/ShareDialog";
 import { InvoiceDocument } from "@/components/InvoiceDocument";
 import { Button, ErrorBox, LinkButton, Loading, PageHeader, StatusBadge } from "@/components/ui";
@@ -68,6 +69,7 @@ export default function VoucherViewPage() {
             {v.type === "SALE" && <LinkButton href={`/print/${v.id}?format=THERMAL_80`} variant="secondary"><Receipt size={16} /> Thermal</LinkButton>}
             <Button variant="secondary" onClick={share}><MessageCircle size={16} /> WhatsApp</Button>
             {!v.cancelled && <EmailButton v={v} />}
+            {!v.cancelled && v.type === "SALE" && v.balance > 0 && v.party_id && <RemindButton partyId={v.party_id} voucherId={v.id} />}
             {!v.cancelled && <CopyLinkButton id={v.id} />}
             {!v.cancelled && convertTo && !v.converted_to_id && can(convertTo === "purchases" ? "purchases" : "sales", "create") && (
               <LinkButton href={`/v/${convertTo}/new?from=${v.id}`} variant="secondary">

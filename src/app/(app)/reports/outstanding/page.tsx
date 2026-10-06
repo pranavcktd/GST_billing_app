@@ -37,7 +37,8 @@ export default function OutstandingPage() {
   const { data, error, loading } = useFetch<Outstanding>("/reports/outstanding");
   return (
     <>
-      <PageHeader title="Outstanding" sub="Who owes you, and whom you owe" />
+      <PageHeader title="Outstanding" sub="Who owes you, and whom you owe"
+        actions={<Link href="/reminders" className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-700">Send payment reminders</Link>} />
       <ErrorBox message={error} />
       {loading || !data ? <Loading /> : (
         <div className="grid gap-5 lg:grid-cols-2">
