@@ -1,6 +1,7 @@
 "use client";
 
-import { Download, ExternalLink, Upload } from "lucide-react";
+import { Download, Upload } from "lucide-react";
+import { PortalLink } from "@/components/PortalLink";
 import Link from "next/link";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
@@ -50,7 +51,7 @@ export default function EwayBillsPage() {
     <>
       <PageHeader title="E-way bills" sub={`Goods worth more than ${money(config.ewb_threshold)} need an e-way bill before they move`}
         actions={<>
-          <a href="https://ewaybillgst.gov.in" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"><ExternalLink size={15} /> E-way bill portal</a>
+          <PortalLink to="ewaybill_portal" button>E-way bill portal</PortalLink>
           <Button variant="secondary" onClick={() => setImporting(true)}><Upload size={15} /> Import generated list</Button>
         </>} />
       <PeriodPicker value={period} onChange={(p) => { setPeriod(p); setSel(new Set()); }} />

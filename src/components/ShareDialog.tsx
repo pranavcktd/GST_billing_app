@@ -5,15 +5,25 @@ import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Button, ErrorBox, Field, Input, Textarea } from "@/components/ui";
 import { api } from "@/lib/api";
-import type { VoucherDetail } from "@/lib/types";
+import type { Business, Party, VoucherDetail } from "@/lib/types";
 
-/** E-mail a document to the customer (with a view link), or copy its public link. */
+/** E-mail a document to the customer (with a view link), or copy its public link.
+ *  To = the party's e-mail and Cc = your business e-mail (from their profiles) — both can be changed before sending. */
 export function EmailButton({ v, defaultTo }: { v: VoucherDetail; defaultTo?: string | null }) {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ to: defaultTo ?? "", cc: "", message: "", attach: true });
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  async function openDialog() {
+    setOpen(true); setDone(null); setErr(null);
+    const [party, biz] = await Promise.all([
+      v.party_id ? api<Party>(`/parties/${v.party_id}`).catch(() => null) : Promise.resolve(null),
+      api<Business>("/businesses/current").catch(() => null),
+    ]);
+    setF((cur) => ({ ...cur, to: cur.to || defaultTo || party?.email || "", cc: cur.cc || biz?.email || "" }));
+  }
 
   async function send() {
     setBusy(true); setErr(null);
@@ -30,7 +40,7 @@ export function EmailButton({ v, defaultTo }: { v: VoucherDetail; defaultTo?: st
 
   return (
     <>
-      <Button variant="secondary" onClick={() => { setOpen(true); setDone(null); setErr(null); }}><Mail size={16} /> Email</Button>
+      <Button variant="secondary" onClick={openDialog}><Mail size={16} /> Email</Button>
       {open && (
         <Modal title={`E-mail ${v.number}`} onClose={() => setOpen(false)}>
           {done ? (
@@ -41,8 +51,8 @@ export function EmailButton({ v, defaultTo }: { v: VoucherDetail; defaultTo?: st
           ) : (
             <div className="space-y-3">
               <ErrorBox message={err} />
-              <Field label="To" hint="Separate several addresses with commas"><Input value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></Field>
-              <Field label="Cc"><Input value={f.cc} onChange={(e) => setF({ ...f, cc: e.target.value })} /></Field>
+              <Field label="To" hint="Party's e-mail from their profile — change it if needed. Separate several addresses with commas."><Input value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></Field>
+              <Field label="Cc" hint="Your business e-mail, so you keep a copy — remove or change it if you like"><Input value={f.cc} onChange={(e) => setF({ ...f, cc: e.target.value })} /></Field>
               <Field label="Message (optional)"><Textarea rows={3} value={f.message} onChange={(e) => setF({ ...f, message: e.target.value })} /></Field>
               <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.attach} onChange={(e) => setF({ ...f, attach: e.target.checked })} /> Attach the PDF</label>
               <p className="text-xs text-gray-500">The e-mail includes a summary and a secure link where the customer can view, print or save the full document as PDF.</p>

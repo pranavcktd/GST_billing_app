@@ -65,7 +65,8 @@ export function ItemForm({
             <button
               type="button"
               key={t}
-              onClick={() => set("type", t)}
+              onClick={() => setIt((prev) => ({ ...prev, type: t,
+                unit: t === "SERVICE" ? "NA" : prev.unit === "NA" ? "NOS" : prev.unit }))}
               className={`rounded-md px-4 py-1.5 text-sm ${it.type === t ? "bg-brand-600 text-white" : "text-gray-700"}`}
             >
               {t === "GOODS" ? "Product" : "Service"}
@@ -79,11 +80,17 @@ export function ItemForm({
             <HsnPicker value={it.hsn_sac ?? ""} service={!goods} onChange={(c) => set("hsn_sac", c as never)}
               onRate={(gst, cess) => setIt((prev) => ({ ...prev, gst_rate: gst, cess_rate: cess ?? prev.cess_rate }))} />
           </Field>
-          <Field label="Unit">
-            <Select value={it.unit} onChange={(e) => set("unit", e.target.value)}>
-              {Object.entries(UNITS).map(([c, n]) => <option key={c} value={c}>{c} - {n}</option>)}
-            </Select>
-          </Field>
+          {goods ? (
+            <Field label="Unit">
+              <Select value={it.unit === "NA" ? "NOS" : it.unit} onChange={(e) => set("unit", e.target.value)}>
+                {Object.entries(UNITS).map(([c, n]) => <option key={c} value={c}>{c} - {n}</option>)}
+              </Select>
+            </Field>
+          ) : (
+            <Field label="Unit" hint="Services have no unit — reported as “NA” in GST returns">
+              <Input value="Not applicable" disabled />
+            </Field>
+          )}
           <Field label="Category"><Input {...text("category")} /></Field>
         </div>
       </Card>

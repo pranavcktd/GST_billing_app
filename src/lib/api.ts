@@ -1,4 +1,5 @@
 import * as offline from "./offline";
+import { announceSave } from "./toast";
 
 // Empty = same origin (/api is proxied by Next.js, see next.config.ts). Set only to call the API directly.
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -92,8 +93,12 @@ export async function api<T = unknown>(
     }
     throw new ApiError(0, "You are offline or the server can't be reached — check your internet connection.");
   }
-  if (res.status === 204) return undefined as T;
+  if (res.status === 204) {
+    if (res.ok) announceSave(method, path, opts.body);
+    return undefined as T;
+  }
   const body = await res.json().catch(() => null);
+  if (res.ok) announceSave(method, path, opts.body);
   if (res.ok && method === "GET" && offline.cacheable(path)) offline.cachePut(bid, path, body);
   if (!res.ok) {
     if (res.status === 401 && typeof window !== "undefined" && !path.startsWith("/auth/")) {

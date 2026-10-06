@@ -7,6 +7,7 @@ import { DEFAULT_PRINT, InvoiceDocument } from "@/components/InvoiceDocument";
 import { ThermalReceipt } from "@/components/ThermalReceipt";
 import { Button, ErrorBox, Loading, Select } from "@/components/ui";
 import { kindOf } from "@/lib/constants";
+import { docFileName, useDocTitle } from "@/lib/docName";
 import { useFetch } from "@/lib/useFetch";
 import type { Business, VoucherDetail } from "@/lib/types";
 
@@ -21,6 +22,7 @@ function PrintView() {
   const { data: business } = useFetch<Business>("/businesses/current");
   const [format, setFormat] = useState<Format | null>((sp.get("format") as Format) ?? null);
   const [copies, setCopies] = useState<Copy[] | null>(null);
+  useDocTitle(v ? docFileName(v) : null);
 
   if (error) return <div className="p-6"><ErrorBox message={error} /></div>;
   if (!v || !business) return <Loading />;

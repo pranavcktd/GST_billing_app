@@ -11,6 +11,7 @@ import { useAuth, usePerms } from "@/lib/auth";
 import { useFetch } from "@/lib/useFetch";
 import type { Business, PrintSettings } from "@/lib/types";
 import { ReminderSettings } from "@/components/ReminderSettings";
+import { PortalLink } from "@/components/PortalLink";
 
 const TABS = [
   { key: "business", label: "Business" },
@@ -80,7 +81,7 @@ function EInvoiceSettings({ business, onSave }: { business: Business; onSave: (p
     <Card className="max-w-2xl space-y-4 p-5">
       <h2 className="font-semibold text-gray-900">e-Invoice / e-Way bill API user</h2>
       <p className="text-sm text-gray-600">
-        Create an API user on the e-invoice portal (einvoice1.gst.gov.in → API Registration → “Through GSP”, select our GSP) and enter it here.
+        Create an API user on the <PortalLink to="einvoice_portal">e-invoice portal</PortalLink> (API Registration → “Through GSP”, select our GSP) and enter it here.
         Without it you can still download the JSON and upload it on the portal yourself.
       </p>
       <p className="text-xs text-gray-500">Plan: {business.plan?.einvoice === "API" ? "direct generation included" : business.plan?.einvoice === "JSON" ? "JSON download (upgrade to Professional for direct generation)" : "not included — upgrade to Starter"}</p>

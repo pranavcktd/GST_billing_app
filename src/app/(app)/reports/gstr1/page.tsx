@@ -10,6 +10,7 @@ import { downloadFile, qs } from "@/lib/api";
 import { downloadCsv, fmtDate, monthRange, money, qty } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 import { ReviewNote } from "@/components/ReviewNote";
+import { PortalLink } from "@/components/PortalLink";
 
 type Tax = { taxable: number; igst: number; cgst: number; sgst: number; cess: number };
 type RateRow = Tax & { rate: number };
@@ -135,6 +136,7 @@ export default function Gstr1Page() {
     <>
       <PageHeader title="GSTR-1" sub="Details of outward supplies" actions={
         <>
+          <PortalLink to="gst_returns" button>GST portal</PortalLink>
           <ExportMenu compact build={() => (data ? gstr1Doc(data, period.from, period.to) : null)} disabled={!data?.applicable} />
           <Button variant="secondary" onClick={() => downloadFile(`/einvoice/bulk-json${qs({ date_from: period.from, date_to: period.to })}`).catch((e) => alert(e.message))}>
             <Download size={16} /> e-Invoice bulk JSON

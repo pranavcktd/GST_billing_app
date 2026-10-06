@@ -9,6 +9,7 @@ import { api, qs } from "@/lib/api";
 import { GST_RATES } from "@/lib/constants";
 import { fmtDate } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
+import { PortalLink } from "@/components/PortalLink";
 
 interface Hsn { id: string; code: string; description: string | null; gst_rate: number; cess_rate: number; effective_from: string | null }
 
@@ -59,6 +60,7 @@ export default function HsnPage() {
       <PageHeader title="HSN / SAC master" sub="Keep codes with their current GST rates. Items pick up the rate when you type the code, and you can push rate changes to all items."
         actions={
           <>
+            <PortalLink to="hsn_search" button>Search on GST portal</PortalLink>
             <ImportButton entity="hsn" title="HSN / SAC codes (add or update)" onDone={reload} />
             <Button variant="secondary" onClick={() => setRequesting(true)}><Send size={16} /> Request a missing code</Button>
             <Button variant="secondary" onClick={copyMaster} title="Copy the codes used on your items from the platform's official HSN master"><Download size={16} /> Sync from official master</Button>

@@ -45,6 +45,7 @@ import type { Action, Module } from "@/lib/types";
 import { BrandLogo } from "@/components/BrandLogo";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { OfflineSync } from "@/components/OfflineSync";
+import { PlanBadge } from "@/components/PlanBadge";
 import { UserBar } from "@/components/UserBar";
 
 type NavItem = { href: string; label: string; icon: React.ElementType; perm?: [Module, Action] | [Module, Action][] };
@@ -228,7 +229,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <Plus size={16} /> Sale
             </LinkButton>
           )}
-          <div className="ml-1 border-l border-gray-200 pl-3"><UserBar /></div>
+          <div className="ml-1 flex items-center gap-2 border-l border-gray-200 pl-3"><PlanBadge /><UserBar /></div>
         </header>
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">{children}</main>
       </div>

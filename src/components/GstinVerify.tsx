@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { BrandName } from "@/lib/config";
 import { gstinError } from "@/lib/gst";
+import { PortalLink } from "@/components/PortalLink";
 
 export interface GstinInfo {
   gstin: string; legal_name: string | null; trade_name: string | null; status: string; active: boolean;
@@ -134,6 +135,7 @@ export function GstinVerify({ gstin, onResult, filled }: { gstin: string | null;
           {known ? "Autofill from verified details (free)" : status?.verified ? "Verify again & autofill" : "Verify & autofill"}
         </button>
       )}
+      {valid && !info && <PortalLink to="gstin_search" className="ml-2 text-xs">Check free on the GST portal</PortalLink>}
       {err && <p className="text-xs text-red-700">{err}</p>}
       {info && !stale && (
         <div className={`rounded-lg border px-3 py-2 text-xs ${info.active ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-red-200 bg-red-50 text-red-900"}`}>
