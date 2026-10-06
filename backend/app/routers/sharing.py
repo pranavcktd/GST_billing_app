@@ -3,7 +3,7 @@
 import html
 import secrets
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 
@@ -11,7 +11,7 @@ from ..deps import DB, BCtx
 from ..models import Business, Voucher
 from ..permissions import voucher_module
 from ..schemas import VoucherDetailOut
-from ..services import mailer
+from ..services import invoice_pdf, mailer
 from ..services.plans import account_of, business_plan
 from ..services.platform_audit import log
 from ..services.vouchers import to_detail
@@ -59,6 +59,26 @@ class EmailIn(BaseModel):
     cc: list[EmailStr] = []
     subject: str | None = Field(None, max_length=200)
     message: str | None = Field(None, max_length=2000)
+    attach_pdf: bool = True
+
+
+def _pdf(db, v: Voucher, biz: Business, copies: str | None = None) -> bytes:
+    plan = business_plan(db, biz.id)
+    labels = ["ORIGINAL"] if copies == "original" else None
+    return invoice_pdf.render(v, biz, watermark=bool(plan["watermark"]), copies=labels)
+
+
+def _pdf_response(content: bytes, v: Voucher, download: bool) -> Response:
+    disp = "attachment" if download else "inline"
+    return Response(content, media_type="application/pdf",
+                    headers={"Content-Disposition": f'{disp}; filename="{invoice_pdf.filename(v)}"', "Cache-Control": "no-store"})
+
+
+@router.get("/vouchers/{vid}/pdf")
+def voucher_pdf(vid: str, ctx: BCtx, download: bool = False, copies: str | None = None):
+    """The document as a PDF (all copy labels from print settings, or copies=original)."""
+    v = _voucher(ctx, vid)
+    return _pdf_response(_pdf(ctx.db, v, ctx.business, copies), v, download)
 
 
 @router.post("/vouchers/{vid}/email")
@@ -81,8 +101,9 @@ def email_voucher(vid: str, data: EmailIn, ctx: BCtx, request: Request):
         <p style="text-align:center;margin:24px 0"><a href="{link}" style="background:#1f65bb;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">View / download the full document</a></p>""",
         footer=f"{e(biz.name)}{' · GSTIN ' + e(biz.gstin) if biz.gstin else ''}")
     cfg = mailer.business_smtp(ctx.db, ctx.bid, account_of(ctx.db, ctx.bid))
+    attachments = [(invoice_pdf.filename(v), _pdf(ctx.db, v, biz, "original"), "application/pdf")] if data.attach_pdf else None
     mailer.send(cfg, [str(x) for x in data.to], data.subject or f"{to_detail(ctx, v).title} {v.number} from {biz.name}", body,
-                cc=[str(x) for x in data.cc], reply_to=biz.email)
+                cc=[str(x) for x in data.cc], reply_to=biz.email, attachments=attachments)
     log(ctx.db, ctx.user, "ACTION", "e-mail", f"E-mailed {v.number} to {', '.join(map(str, data.to))}", entity_id=v.id,
         business_id=ctx.bid, request=request)
     ctx.db.commit()
@@ -109,3 +130,14 @@ def public_invoice(token: str, db: DB):
     return {"voucher": detail,
             "business": {**{k: getattr(biz, k) for k in PUBLIC_BUSINESS_FIELDS},
                          "gst_type": biz.gst_type.value, "plan": {"watermark": plan["watermark"]}}}
+
+
+@router.get("/public/invoice/{token}/pdf")
+def public_invoice_pdf(token: str, db: DB, download: bool = False):
+    if len(token) < 20:
+        raise HTTPException(404, "Link not found")
+    v = db.scalar(select(Voucher).where(Voucher.share_token == token))
+    if not v or v.cancelled:
+        raise HTTPException(404, "This link is no longer valid")
+    biz = db.get(Business, v.business_id)
+    return _pdf_response(_pdf(db, v, biz, "original"), v, download)

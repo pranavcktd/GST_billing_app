@@ -1,6 +1,6 @@
 "use client";
 
-import { Printer } from "lucide-react";
+import { Download, Printer } from "lucide-react";
 import { useParams } from "next/navigation";
 import { InvoiceDocument } from "@/components/InvoiceDocument";
 import { Button, Loading } from "@/components/ui";
@@ -24,7 +24,9 @@ export default function PublicInvoice() {
     <div className="min-h-screen bg-gray-100 py-6 print:bg-white print:py-0">
       <div className="no-print mx-auto mb-4 flex max-w-[210mm] items-center justify-between px-2">
         <div className="text-sm text-gray-600">{data.voucher.title} from <b>{data.business.name}</b></div>
-        <Button onClick={() => window.print()}><Printer size={16} /> Print / Save PDF</Button>
+        <a href={`${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/public/invoice/${token}/pdf?download=true`}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-700"><Download size={16} /> Download PDF</a>
+        <Button variant="secondary" onClick={() => window.print()}><Printer size={16} /> Print</Button>
       </div>
       <div className="overflow-x-auto">
         <div className="min-w-[760px]">

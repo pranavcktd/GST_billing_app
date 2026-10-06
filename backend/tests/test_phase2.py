@@ -221,3 +221,17 @@ def test_gstr2b_reconciliation(client):
     counts = {s["label"]: s["value"] for s in r.json()["summary"]}
     assert counts["Matched"] == 1 and counts["Amount mismatch"] == 1 and counts["Missing in books"] == 1
     assert counts["Not in 2B (ITC at risk)"] == 54  # W-003: 300 taxable x 18%
+
+
+def test_invoice_pdf_download_email_and_public(client, monkeypatch):
+    h, cust, item = setup(client)
+    v = sale(client, h, cust, item)
+    r = client.get(f"/api/vouchers/{v['id']}/pdf", headers=h)
+    assert r.status_code == 200 and r.content[:5] == b"%PDF-" and "inline" in r.headers["content-disposition"]
+    assert ".pdf" in r.headers["content-disposition"] and v["number"].replace("/", "-") in r.headers["content-disposition"]
+    assert client.get(f"/api/vouchers/{v['id']}/pdf", headers=h, params={"download": True}).headers["content-disposition"].startswith("attachment")
+    # public link
+    token = post(client, h, f"/api/vouchers/{v['id']}/share-link", {}, 200)["token"]
+    pub = client.get(f"/api/public/invoice/{token}/pdf")
+    assert pub.status_code == 200 and pub.content[:5] == b"%PDF-"
+    assert client.get("/api/public/invoice/" + "x" * 30 + "/pdf").status_code == 404

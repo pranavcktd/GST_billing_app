@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { EInvoicePanel } from "@/components/EInvoicePanel";
+import { PdfButton } from "@/components/PdfButton";
 import { CopyLinkButton, EmailButton, getShareLink } from "@/components/ShareDialog";
 import { InvoiceDocument } from "@/components/InvoiceDocument";
 import { Button, ErrorBox, LinkButton, Loading, PageHeader, StatusBadge } from "@/components/ui";
@@ -62,7 +63,8 @@ export default function VoucherViewPage() {
         sub={`${v.party_name} · ${fmtDate(v.date)}`}
         actions={
           <>
-            <LinkButton href={`/print/${v.id}`} variant="secondary"><Printer size={16} /> Print / PDF</LinkButton>
+            <PdfButton id={v.id} />
+            <LinkButton href={`/print/${v.id}`} variant="secondary"><Printer size={16} /> Print</LinkButton>
             {v.type === "SALE" && <LinkButton href={`/print/${v.id}?format=THERMAL_80`} variant="secondary"><Receipt size={16} /> Thermal</LinkButton>}
             <Button variant="secondary" onClick={share}><MessageCircle size={16} /> WhatsApp</Button>
             {!v.cancelled && <EmailButton v={v} />}
