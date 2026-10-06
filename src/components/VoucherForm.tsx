@@ -14,6 +14,7 @@ import { fmtDate, money, today } from "@/lib/format";
 import { calcInvoice } from "@/lib/gst";
 import { useFetch } from "@/lib/useFetch";
 import type { Business, Godown, Item, Party, PaymentMode, Transport, Voucher, VoucherDetail } from "@/lib/types";
+import { newClientRef, OfflineQueuedError } from "@/lib/offline";
 
 interface FormLine {
   key: number;
@@ -110,6 +111,7 @@ export function VoucherForm({
   const [currency, setCurrency] = useState(existing?.currency_code ?? "");
   const [fxRate, setFxRate] = useState(existing?.exchange_rate ? String(existing.exchange_rate) : "");
   const [error, setError] = useState<string | null>(null);
+  const [clientRef] = useState(newClientRef); // one per new document: an upload is never duplicated
   const [busy, setBusy] = useState(false);
   const [quickParty, setQuickParty] = useState<string | null>(null);
 
@@ -227,9 +229,14 @@ export function VoucherForm({
       };
       const saved = existing
         ? await api<VoucherDetail>(`/vouchers/${existing.id}`, { method: "PUT", body })
-        : await api<VoucherDetail>("/vouchers", { body });
+        : await api<VoucherDetail>("/vouchers", { body: { ...body, client_ref: clientRef } });
       router.push(andPrint ? `/print/${saved.id}` : `/v/${kind}/${saved.id}`);
     } catch (e) {
+      if (e instanceof OfflineQueuedError) {
+        alert(`${e.message}\n\n${e.doc.label}`);
+        router.push(`/v/${kind}`);
+        return;
+      }
       setError((e as Error).message);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {

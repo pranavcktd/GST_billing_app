@@ -11,6 +11,7 @@ import { money, today } from "@/lib/format";
 import { calcInvoice } from "@/lib/gst";
 import { useFetch } from "@/lib/useFetch";
 import type { Business, ExpenseCategory, ExpenseItem, Party, PaymentMode, VoucherDetail } from "@/lib/types";
+import { newClientRef, OfflineQueuedError } from "@/lib/offline";
 
 interface Line { key: number; expense_item_id: string | null; name: string; qty: string; rate: string; gst_rate: number; hsn_sac: string }
 let k = 1;
@@ -39,6 +40,7 @@ export function ExpenseForm({ existing }: { existing?: VoucherDetail }) {
   const [mode, setMode] = useState<PaymentMode>("CASH");
   const [accountId, setAccountId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [clientRef] = useState(newClientRef);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -99,9 +101,14 @@ export function ExpenseForm({ existing }: { existing?: VoucherDetail }) {
       };
       const saved = existing
         ? await api<VoucherDetail>(`/vouchers/${existing.id}`, { method: "PUT", body })
-        : await api<VoucherDetail>("/vouchers", { body });
+        : await api<VoucherDetail>("/vouchers", { body: { ...body, client_ref: clientRef } });
       router.push(`/v/expenses/${saved.id}`);
     } catch (e) {
+      if (e instanceof OfflineQueuedError) {
+        alert(e.message);
+        router.push("/v/expenses");
+        return;
+      }
       setError((e as Error).message);
     } finally {
       setBusy(false);

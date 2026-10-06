@@ -9,6 +9,7 @@ import { money, today } from "@/lib/format";
 import { calcInvoice } from "@/lib/gst";
 import { useFetch } from "@/lib/useFetch";
 import type { Business, Item, Party, PaymentMode, VoucherDetail } from "@/lib/types";
+import { newClientRef, OfflineQueuedError } from "@/lib/offline";
 
 interface CartLine { item: Item; qty: number; rate: number }
 
@@ -62,7 +63,7 @@ export default function PosPage() {
     setErr(null);
     try {
       const v = await api<VoucherDetail>("/vouchers", { body: {
-        type: "SALE", date: today(), party_id: partyId, party_name: partyId ? null : walkIn.name || null,
+        client_ref: newClientRef(), type: "SALE", date: today(), party_id: partyId, party_name: partyId ? null : walkIn.name || null,
         party_phone: partyId ? null : walkIn.phone || null, fully_paid: true, payment_mode: mode,
         lines: cart.map((l) => ({ item_id: l.item.id, name: l.item.name, hsn_sac: l.item.hsn_sac, unit: l.item.unit,
           qty: l.qty, rate: l.rate, gst_rate: l.item.gst_rate, cess_rate: l.item.cess_rate,
@@ -71,6 +72,12 @@ export default function PosPage() {
       setCart([]); setTendered(""); setPartyId(null); setWalkIn({ name: "", phone: "" });
       router.push(`/print/${v.id}?format=${business?.print_settings?.paper?.startsWith("THERMAL") ? business.print_settings.paper : "THERMAL_80"}&back=/pos`);
     } catch (e) {
+      if (e instanceof OfflineQueuedError) {
+        setCart([]); setTendered(""); setPartyId(null); setWalkIn({ name: "", phone: "" });
+        setErr(null);
+        alert(`${e.message}\nThe receipt can be printed after it uploads.`);
+        return;
+      }
       setErr((e as Error).message);
     } finally {
       setBusy(false);

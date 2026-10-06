@@ -1,3 +1,5 @@
+import * as offline from "./offline";
+
 // Empty = same origin (/api is proxied by Next.js, see next.config.ts). Set only to call the API directly.
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -70,14 +72,29 @@ export async function api<T = unknown>(
   if (token) headers.Authorization = `Bearer ${token}`;
   if (bid) headers["X-Business-Id"] = bid;
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+  const method = opts.method ?? (opts.body !== undefined || opts.form ? "POST" : "GET");
 
-  const res = await fetch(`${API_URL}/api${path}`, {
-    method: opts.method ?? (opts.body !== undefined || opts.form ? "POST" : "GET"),
-    headers,
-    body: opts.form ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/api${path}`, {
+      method,
+      headers,
+      body: opts.form ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
+    });
+  } catch (e) {
+    // the server can't be reached: answer from this device where possible (see lib/offline.ts)
+    if (method === "GET" && offline.cacheable(path)) {
+      const cached = offline.cacheGet<T>(bid, path);
+      if (cached !== undefined) return cached;
+    }
+    if (offline.queueable(method, path) && bid && opts.body && typeof opts.body === "object") {
+      throw new offline.OfflineQueuedError(offline.enqueue(bid, path, opts.body as Record<string, unknown>));
+    }
+    throw new ApiError(0, "You are offline or the server can't be reached — check your internet connection.");
+  }
   if (res.status === 204) return undefined as T;
   const body = await res.json().catch(() => null);
+  if (res.ok && method === "GET" && offline.cacheable(path)) offline.cachePut(bid, path, body);
   if (!res.ok) {
     if (res.status === 401 && typeof window !== "undefined" && !path.startsWith("/auth/")) {
       session.setToken(null);
