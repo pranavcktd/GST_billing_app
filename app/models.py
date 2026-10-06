@@ -858,6 +858,7 @@ class ComplianceFiling(Base):
     period_key: Mapped[str] = mapped_column(String(20))
     done_on: Mapped[dt.date] = mapped_column(Date)
     reference: Mapped[str | None] = mapped_column(String(100))  # ARN / SRN / challan no.
+    source: Mapped[str] = mapped_column(String(10), default="MANUAL", server_default="MANUAL")  # MANUAL / SYNC
     note: Mapped[str | None] = mapped_column(String(300))
     by: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
