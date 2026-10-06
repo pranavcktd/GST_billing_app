@@ -16,10 +16,10 @@ Income tax, TDS, MCA / LLP and PF / ESI have no public filing-status API — tho
 import datetime as dt
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from ..models import Business, ComplianceFiling
+from ..models import Business, ComplianceFiling, GstReturnStatus
 from . import compliance_calendar as CC
 from . import gstin_verify as G
 
@@ -74,22 +74,28 @@ def _rtype(s) -> str:
     return {"R1": "GSTR1", "R3B": "GSTR3B", "R9": "GSTR9", "R4": "GSTR4"}.get(t, t)
 
 
-def parse(body: dict) -> list[dict]:
-    """Provider answer -> [{type, year, month, filed_on, arn}] for filed returns."""
+def parse_all(body: dict) -> list[dict]:
+    """Provider answer -> every return listed (filed or not): {type, year, month, filed, status, filed_on, arn, mode}."""
     data = body.get("data") if isinstance(body.get("data"), dict) else body
     rows = data.get("returns") or data.get("EFiledlist") or data.get("filings") or []
     out = []
     for r in rows if isinstance(rows, list) else []:
-        status = str(r.get("filing_status") or r.get("status") or "Filed").lower()
+        raw_status = str(r.get("filing_status") or r.get("status") or "Filed")
+        status = raw_status.lower()
         valid = str(r.get("valid") or "Y").upper()
-        if "filed" not in status or "not" in status or "pending" in status or valid == "N":
-            continue
         per = _period(r.get("return_period") or r.get("ret_prd") or r.get("period"))
         if not per:
             continue
-        out.append(dict(type=_rtype(r.get("return_type") or r.get("rtntype")), year=per[0], month=per[1],
-                        filed_on=_parse_date(r.get("filing_date") or r.get("dof")), arn=(r.get("arn") or None)))
+        filed = "filed" in status and "not" not in status and "pending" not in status and valid != "N"
+        out.append(dict(type=_rtype(r.get("return_type") or r.get("rtntype")), year=per[0], month=per[1], filed=filed,
+                        status=raw_status[:30], filed_on=_parse_date(r.get("filing_date") or r.get("dof")),
+                        arn=(r.get("arn") or None), mode=(r.get("mof") or r.get("mode_of_filing") or None)))
     return out
+
+
+def parse(body: dict) -> list[dict]:
+    """Only the returns that were filed."""
+    return [r for r in parse_all(body) if r["filed"]]
 
 
 def keys_for(ret: dict) -> list[tuple[str, str]]:
@@ -109,7 +115,8 @@ def keys_for(ret: dict) -> list[tuple[str, str]]:
     return []
 
 
-def sync(db: Session, biz: Business, rules: list[dict], user_name: str, today: dt.date | None = None) -> dict:
+def sync(db: Session, biz: Business, rules: list[dict], user_name: str, today: dt.date | None = None,
+         only_fy: int | None = None) -> dict:
     s = G.settings(db)
     if not (s.get("enabled") and G._key(s)) or not s.get("filing_sync", True):
         raise HTTPException(503, "Fetching filing status is not switched on by the platform administrator — mark filings yourself.")
@@ -122,6 +129,10 @@ def sync(db: Session, biz: Business, rules: list[dict], user_name: str, today: d
     applicable = {i["code"] for i in cal["items"]}
     pending = [i for i in cal["items"] if i["code"] in SYNCABLE and i["status"] != "DONE"]
     years = sorted({_fy_of_item(i) for i in pending})
+    if only_fy is not None:
+        # one chosen year (GST register): fetched unless every GST return of that year is already recorded and the
+        # year was fetched before
+        years = [only_fy] if (only_fy in years or f"{only_fy}-{str(only_fy + 1)[-2:]}" not in (biz.compliance_settings or {}).get("sync", {})) else []
 
     cs = dict(biz.compliance_settings or {})
     log: dict = dict(cs.get("sync") or {})
@@ -140,7 +151,14 @@ def sync(db: Session, biz: Business, rules: list[dict], user_name: str, today: d
             continue
         fetched.append(label)
         log[label] = now.isoformat()
-        for ret in parse(body):
+        all_returns = parse_all(body)
+        # keep exactly what the portal said for this year (shown in the GST register)
+        db.execute(delete(GstReturnStatus).where(GstReturnStatus.business_id == biz.id, GstReturnStatus.fy == label))
+        for ret in all_returns:
+            db.add(GstReturnStatus(business_id=biz.id, fy=label, return_type=ret["type"], return_period=f"{ret['year']}-{ret['month']:02d}",
+                                   status=ret["status"], filed=ret["filed"], filed_on=ret["filed_on"], arn=ret["arn"],
+                                   mode=ret["mode"], fetched_at=now))
+        for ret in (r for r in all_returns if r["filed"]):
             for code, key in keys_for(ret):
                 if code not in applicable or (code, key) in done:
                     continue
@@ -152,7 +170,9 @@ def sync(db: Session, biz: Business, rules: list[dict], user_name: str, today: d
     cs["last_sync_at"] = now.isoformat()
     biz.compliance_settings = cs
     db.commit()
-    if not years:
+    if not years and only_fy is not None:
+        msg = "Every GST return of this year is already recorded and the year was fetched before — nothing to fetch."
+    elif not years:
         msg = "All GST returns in the calendar are already marked as filed — nothing to fetch."
     elif not fetched and skipped and not errors:
         msg = f"Already fetched in the last {hours} hours — try again later."

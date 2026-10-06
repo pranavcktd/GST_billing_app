@@ -4,6 +4,7 @@ import { AlertTriangle, CalendarClock, CheckCircle2, Clock, RefreshCw, Settings2
 import Link from "next/link";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
+import { ComplianceRegister, LAW_LABEL, type Markable, SourceBadge } from "@/components/ComplianceRegister";
 import { PortalLink } from "@/components/PortalLink";
 import { Button, Card, Empty, ErrorBox, Field, Input, Loading, PageHeader, Select } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -44,7 +45,10 @@ export default function CompliancePage() {
   const { can } = usePerms();
   const [filter, setFilter] = useState<"PENDING" | Status>("PENDING");
   const [authority, setAuthority] = useState("");
-  const [marking, setMarking] = useState<Item | null>(null);
+  const [marking, setMarking] = useState<Markable | null>(null);
+  const [tab, setTab] = useState("TODO");
+  const [version, setVersion] = useState(0);
+  const changed = () => { reload(); setVersion((v) => v + 1); };
   const [profile, setProfile] = useState(false);
   const { data: sync, reload: reloadSync } = useFetch<{ available: boolean; last_sync_at: string | null; min_hours: number }>("/compliance/sync/available");
   const [syncing, setSyncing] = useState(false);
@@ -55,7 +59,7 @@ export default function CompliancePage() {
     try {
       const r = await api<{ message: string }>("/compliance/sync", { body: {} });
       setSyncMsg(r.message);
-      reload(); reloadSync();
+      changed(); reloadSync();
     } catch (e) {
       setSyncMsg((e as Error).message);
     } finally {
@@ -67,12 +71,13 @@ export default function CompliancePage() {
   if (!data) return <Loading />;
 
   const authorities = [...new Map(data.items.map((i) => [i.authority, i.authority_label])).entries()];
+  const lawTabs = Object.keys(LAW_LABEL).filter((k) => data.items.some((i) => i.authority === k));
   const shown = data.items.filter((i) => (filter === "PENDING" ? i.status !== "DONE" : i.status === filter) && (!authority || i.authority === authority));
 
   async function undo(i: Item) {
     if (!i.done || !confirm(`Mark ${i.name} (${i.period}) as not filed?`)) return;
     await api(`/compliance/tasks/${i.done.id}`, { method: "DELETE" }).catch((e) => alert(e.message));
-    reload();
+    changed();
   }
 
   const cards: { status: Status; label: string; icon: React.ElementType }[] = [
@@ -100,6 +105,18 @@ export default function CompliancePage() {
         </p>
       )}
 
+      <div className="mb-4 flex flex-wrap gap-1 border-b border-gray-200">
+        {["TODO", ...lawTabs].map((k) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${tab === k ? "border-brand-600 text-brand-700" : "border-transparent text-gray-600 hover:text-gray-900"}`}>
+            {k === "TODO" ? `To do${data.summary.OVERDUE + data.summary.DUE_SOON ? ` (${data.summary.OVERDUE + data.summary.DUE_SOON})` : ""}` : LAW_LABEL[k] ?? k}
+          </button>
+        ))}
+      </div>
+
+      {tab !== "TODO" ? (
+        <ComplianceRegister law={tab} version={version} syncAvailable={!!sync?.available} onMark={setMarking} onChanged={() => { reload(); reloadSync(); }} />
+      ) : (<>
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {cards.map(({ status, label, icon: Icon }) => (
           <button key={status} onClick={() => setFilter(status)} className="text-left">
@@ -146,7 +163,7 @@ export default function CompliancePage() {
                   {i.status === "DUE_SOON" && <div className="mt-1.5 text-xs text-amber-800">If late: {i.penalty}</div>}
                   {i.done && (
                     <div className="mt-1.5 text-xs text-emerald-800">
-                      {i.done.source === "SYNC" && <span className="mr-1 rounded bg-emerald-100 px-1 py-0.5 text-[10px] font-medium">from GST portal</span>}
+                      <span className="mr-1.5"><SourceBadge source={i.done.source} /></span>
                       Filed on {fmtDate(i.done.done_on)}{i.done.reference ? ` · Ref. ${i.done.reference}` : ""}{i.done.by ? ` · marked by ${i.done.by}` : ""}{i.done.note ? ` · ${i.done.note}` : ""}
                     </div>
                   )}
@@ -163,15 +180,17 @@ export default function CompliancePage() {
         </div>
       )}
 
+      </>)}
+
       <p className="mt-5 text-xs text-gray-500">{data.disclaimer}</p>
 
-      {marking && <MarkDone item={marking} onClose={() => setMarking(null)} onDone={reload} />}
+      {marking && <MarkDone item={marking} onClose={() => setMarking(null)} onDone={changed} />}
       {profile && <ProfileDialog cal={data} canEdit={can("settings", "edit")} onClose={() => setProfile(false)} onSaved={reload} />}
     </>
   );
 }
 
-function MarkDone({ item, onClose, onDone }: { item: Item; onClose: () => void; onDone: () => void }) {
+function MarkDone({ item, onClose, onDone }: { item: Markable; onClose: () => void; onDone: () => void }) {
   const [f, setF] = useState({ done_on: today(), reference: "", note: "" });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

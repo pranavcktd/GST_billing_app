@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from ..deps import BCtx
-from ..models import ComplianceFiling
+from ..models import ComplianceFiling, GstReturnStatus
 from ..services import compliance_calendar as CC
 from ..services import config_store as C
 
@@ -32,12 +32,30 @@ def get_calendar(ctx: BCtx, ahead_days: int = 120):
 
 
 @router.post("/sync")
-def sync_status(ctx: BCtx):
-    """Fetch GST return filing status from the GST data service (see services/filing_sync.py)."""
+def sync_status(ctx: BCtx, fy: int | None = None):
+    """Fetch GST return filing status from the GST data service (see services/filing_sync.py); `fy` = one year only."""
     from ..services import filing_sync
 
     ctx.need("reports_gst", "view")
-    return filing_sync.sync(ctx.db, ctx.business, _rules(), ctx.user.name)
+    return filing_sync.sync(ctx.db, ctx.business, _rules(), ctx.user.name, only_fy=fy)
+
+
+@router.get("/register")
+def get_register(ctx: BCtx, law: str = "GST", fy: int | None = None):
+    """Month / quarter / year table of one law for one financial year, plus (GST) what the portal returned."""
+    ctx.need("reports_gst", "view")
+    today = dt.date.today()
+    fy = fy or (today.year if today.month >= 4 else today.year - 1)
+    if not 2017 <= fy <= today.year + 1:
+        raise HTTPException(422, "Choose a financial year from 2017-18")
+    out = CC.register(ctx.business, _rules(), _done(ctx), fy, law.upper())
+    if law.upper() == "GST":
+        rows = ctx.db.scalars(select(GstReturnStatus).where(GstReturnStatus.business_id == ctx.bid, GstReturnStatus.fy == out["fy_label"])
+                              .order_by(GstReturnStatus.return_period, GstReturnStatus.return_type)).all()
+        out["portal"] = [dict(return_type=r.return_type, return_period=r.return_period, status=r.status, filed=r.filed,
+                              filed_on=r.filed_on, arn=r.arn, mode=r.mode) for r in rows]
+        out["portal_fetched_at"] = max((r.fetched_at for r in rows), default=None)
+    return out
 
 
 @router.get("/sync/available")
