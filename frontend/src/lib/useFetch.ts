@@ -9,8 +9,9 @@ interface State<T> {
   error: string | null;
 }
 
-/** Minimal data loader: refetches whenever `path` changes; pass null to skip. */
-export function useFetch<T>(path: string | null) {
+/** Minimal data loader: refetches whenever `path` changes; pass null to skip. `refreshMs` reloads it periodically. */
+export function useFetch<T>(path: string | null, opts: { refreshMs?: number } = {}) {
+  const { refreshMs } = opts;
   const [state, setState] = useState<State<T>>({ key: null, data: null, error: null });
   const [nonce, setNonce] = useState(0);
   const key = path === null ? null : `${path}#${nonce}`;
@@ -27,6 +28,12 @@ export function useFetch<T>(path: string | null) {
       cancelled = true;
     };
   }, [path, nonce]);
+
+  useEffect(() => {
+    if (!refreshMs || path === null) return;
+    const t = setInterval(() => setNonce((n) => n + 1), refreshMs);
+    return () => clearInterval(t);
+  }, [refreshMs, path]);
 
   const reload = useCallback(() => setNonce((n) => n + 1), []);
   const setData = useCallback((data: T) => setState((s) => ({ ...s, data })), []);

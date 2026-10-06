@@ -75,6 +75,9 @@ class User(Base):
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     last_login_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     previous_login_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))  # shown as 'last login'
+    # set when a business owner created this login for a staff member (that business may reset its password
+    # while the person works for no other business)
+    created_by_business_id: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     memberships: Mapped[list["Membership"]] = relationship(back_populates="user")
@@ -126,6 +129,8 @@ class Business(Base):
     modules: Mapped[dict | None] = mapped_column(JSON)
     # compliance calendar answers: {"gst_filing": "MONTHLY" | "QUARTERLY", "tax_audit": bool, "tds": bool, ...}
     compliance_settings: Mapped[dict | None] = mapped_column(JSON)
+    # staff sign-in rules (approval / office IPs / hours) — see services/staff_access.py
+    staff_access: Mapped[dict | None] = mapped_column(JSON)
     transfer_prefix: Mapped[str] = mapped_column(String(8), default="ST")
     # exports / SEZ under Letter of Undertaking (zero-rated without paying IGST)
     lut_number: Mapped[str | None] = mapped_column(String(30))
@@ -149,6 +154,9 @@ class Membership(Base):
     role: Mapped[Role] = mapped_column(_enum(Role))
     permissions: Mapped[dict | None] = mapped_column(JSON)  # custom role matrix (Enterprise)
     approval_pin_hash: Mapped[str | None] = mapped_column(String(100))  # managers approve edits of old entries
+    # ACTIVE, or INVITED until a person who already has a login accepts the invitation
+    status: Mapped[str] = mapped_column(String(10), default="ACTIVE", server_default="ACTIVE")
+    invited_by: Mapped[str | None] = mapped_column(String(200))
 
     user: Mapped[User] = relationship(back_populates="memberships")
     business: Mapped[Business] = relationship()
@@ -817,6 +825,26 @@ class PracticeFile(Base):
     finalized_by: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class StaffSession(Base):
+    """A staff member's use of a business in one signed-in session (device): when, where, and its approval."""
+
+    __tablename__ = "staff_sessions"
+    __table_args__ = (UniqueConstraint("business_id", "user_id", "sid", name="uq_staff_session"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    sid: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(10))  # AUTO (no approval needed) / PENDING / APPROVED / DENIED
+    ip: Mapped[str | None] = mapped_column(String(64))
+    user_agent: Mapped[str | None] = mapped_column(String(300))
+    first_seen: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    last_seen: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    requested_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    decided_by: Mapped[str | None] = mapped_column(String(200))
+    decided_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    valid_until: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ComplianceFiling(Base):

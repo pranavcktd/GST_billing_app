@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Annotated
 
 import bcrypt
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Request, Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -15,16 +15,17 @@ from .db import get_db
 from .gst.constants import PlatformRole, Role
 from .models import Business, Membership, User
 from .permissions import MODULES, effective
-from .security import decode_token_full
+from .security import decode_token_full, token_sid
 
 DB = Annotated[Session, Depends(get_db)]
 _bearer = HTTPBearer(auto_error=False)
 
 
 def current_user(
-    db: DB, creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
+    db: DB, request: Request, creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
 ) -> User:
     decoded = decode_token_full(creds.credentials) if creds else None
+    request.state.sid = token_sid(creds.credentials) if decoded else None
     user = db.get(User, decoded[0]) if decoded else None
     # token_version changes on password change / reset / "sign out everywhere" / deactivation
     if not user or not user.is_active or decoded[1] != (user.token_version or 0):
@@ -101,7 +102,7 @@ class Ctx:
 
 
 def business_ctx(
-    db: DB, user: CurrentUser, x_business_id: Annotated[str | None, Header()] = None,
+    db: DB, user: CurrentUser, request: Request, x_business_id: Annotated[str | None, Header()] = None,
     x_approval_pin: Annotated[str | None, Header()] = None,
 ) -> Ctx:
     """Every tenant-scoped endpoint depends on this: it proves the user belongs to the business."""
@@ -110,8 +111,11 @@ def business_ctx(
     m = db.scalar(
         select(Membership).where(Membership.user_id == user.id, Membership.business_id == x_business_id)
     )
-    if not m:
+    if not m or m.status != "ACTIVE":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "You do not have access to this business")
+    from .services import staff_access  # local import: the service imports models that import this module's users
+
+    staff_access.check(db, request, user, m, m.business)
     return Ctx(db=db, user=user, business=m.business, role=m.role, membership=m,
                perms=effective(m.role, m.permissions), approval_pin=x_approval_pin)
 

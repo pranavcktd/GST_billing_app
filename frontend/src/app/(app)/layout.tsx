@@ -49,6 +49,7 @@ import { OfflineSync } from "@/components/OfflineSync";
 import { PlanBadge } from "@/components/PlanBadge";
 import { UserBar } from "@/components/UserBar";
 import { businessMode, hiddenHrefs, isHiddenHref } from "@/lib/modules";
+import { InvitationsBanner, PendingSignIns } from "@/components/StaffComponents";
 
 type NavItem = { href: string; label: string; icon: React.ElementType; perm?: [Module, Action] | [Module, Action][] };
 
@@ -225,6 +226,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex min-w-0 flex-1 justify-center"><GlobalSearch /></div>
           <OfflineSync />
+          <PendingSignIns />
           {can("purchases", "create") && (
             <LinkButton href="/v/purchases/new" variant="secondary" className="hidden xl:inline-flex">
               <Plus size={16} /> Purchase
@@ -237,7 +239,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           )}
           <div className="ml-1 flex items-center gap-2 border-l border-gray-200 pl-3"><PlanBadge /><UserBar /></div>
         </header>
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">{children}</main>
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6"><InvitationsBanner />{children}</main>
       </div>
     </div>
   );

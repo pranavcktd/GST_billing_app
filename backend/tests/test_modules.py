@@ -272,6 +272,9 @@ def test_members(client):
     staff = signup(client, "staff@x.in")
     post(client, owner, "/api/members", {"email": "staff@x.in", "role": "ACCOUNTANT"})
     h = {**staff, "X-Business-Id": owner["X-Business-Id"]}
+    assert client.get("/api/parties", headers=h).status_code == 403  # invited, not yet accepted
+    from tests.test_rbac import accept_invites
+    accept_invites(client, staff)
     assert client.get("/api/parties", headers=h).status_code == 200
     assert client.post("/api/parties", headers=h, json={"name": "x"}).status_code == 403  # accountant is read-only
-    assert client.post("/api/members", headers=owner, json={"email": "nobody@x.in", "role": "BILLING"}).status_code == 404
+    assert client.post("/api/members", headers=owner, json={"email": "nobody@x.in", "role": "BILLING"}).status_code == 422  # new login needs a name

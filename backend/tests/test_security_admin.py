@@ -235,7 +235,9 @@ def test_hierarchy_resets(client, monkeypatch):
     assert login(client, "trader@x.in", temp).status_code == 403
     # owner e-mails a reset link to their staff
     h, _, _ = setup(client)
-    signup(client, "staff9@x.in")
+    s9 = signup(client, "staff9@x.in")
     post(client, h, "/api/members", {"email": "staff9@x.in", "role": "BILLING"})
+    from tests.test_rbac import accept_invites
+    accept_invites(client, s9)
     m = next(x for x in client.get("/api/members", headers=h).json() if x["email"] == "staff9@x.in")
     assert post(client, h, f"/api/members/{m['id']}/reset-password", {}, 200)["sent"]

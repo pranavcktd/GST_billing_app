@@ -101,7 +101,7 @@ def export_table(doc: TableDoc, db: DB, user: CurrentUser, format: Literal["xlsx
         raise HTTPException(413, f"Too many rows to export at once ({rows}); narrow the filters")
     business = None
     if x_business_id:
-        m = db.scalar(select(Membership).where(Membership.user_id == user.id, Membership.business_id == x_business_id))
+        m = db.scalar(select(Membership).where(Membership.user_id == user.id, Membership.business_id == x_business_id, Membership.status == "ACTIVE"))
         business = m.business.name + (f" · GSTIN {m.business.gstin}" if m and m.business.gstin else "") if m else None
     data = doc.model_dump()
     brand = config_store.app_name()

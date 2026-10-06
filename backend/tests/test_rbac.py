@@ -6,9 +6,16 @@ from tests.test_modules import post
 from tests.test_phase2 import setup
 
 
+def accept_invites(client, auth):
+    """A person who already has a login joins a business only after accepting its invitation."""
+    for inv in client.get("/api/auth/me", headers=auth).json()["invitations"]:
+        assert client.post(f"/api/auth/invitations/{inv['id']}/accept", headers=auth).status_code == 200
+
+
 def staff(client, owner_h, email, role):
     member = signup(client, email)
-    post(client, owner_h, "/api/members", {"email": email, "role": role})
+    assert post(client, owner_h, "/api/members", {"email": email, "role": role})["invited"]
+    accept_invites(client, member)
     return {**member, "X-Business-Id": owner_h["X-Business-Id"]}
 
 

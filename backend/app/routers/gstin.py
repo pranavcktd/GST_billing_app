@@ -24,7 +24,7 @@ def verify(data: VerifyIn, db: DB, user: CurrentUser, x_business_id: Annotated[s
     """Works during onboarding too (no business yet); inside a business the business's limits apply."""
     bid = None
     if x_business_id:
-        m = db.scalar(select(Membership).where(Membership.user_id == user.id, Membership.business_id == x_business_id))
+        m = db.scalar(select(Membership).where(Membership.user_id == user.id, Membership.business_id == x_business_id, Membership.status == "ACTIVE"))
         if m is None:
             raise HTTPException(403, "You do not have access to this business")
         bid = x_business_id

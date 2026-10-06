@@ -1,6 +1,7 @@
 """Sign-up, sign-in (lockout + optional 2FA), password reset and session security."""
 
 import datetime as dt
+from typing import Literal
 import hashlib
 import logging
 import secrets
@@ -13,7 +14,7 @@ from ..config import get_settings
 from ..deps import DB, CurrentUser
 from ..models import Membership, PasswordReset, Subscription, User
 from ..permissions import effective
-from ..schemas import LoginIn, MeOut, MyBusinessOut, RegisterIn, TokenOut, UserOut
+from ..schemas import LoginIn, InvitationOut, MeOut, MyBusinessOut, RegisterIn, TokenOut, UserOut
 from ..security import (
     create_token,
     decrypt_secret,
@@ -54,8 +55,11 @@ def _practice_limit(db, user: User) -> int:
 
 
 def me_payload(db, user: User) -> MeOut:
-    memberships = db.scalars(select(Membership).where(Membership.user_id == user.id)).all()
+    rows = db.scalars(select(Membership).where(Membership.user_id == user.id)).all()
+    memberships = [m for m in rows if m.status == "ACTIVE"]
     return MeOut(
+        invitations=[InvitationOut(id=m.id, business_id=m.business_id, business_name=m.business.name, role=m.role, invited_by=m.invited_by)
+                     for m in rows if m.status == "INVITED"],
         user=UserOut.model_validate(user),
         platform_role=user.platform_role,
         last_login_at=user.last_login_at,
@@ -71,6 +75,23 @@ def me_payload(db, user: User) -> MeOut:
             for m in memberships
         ],
     )
+
+
+@router.post("/invitations/{membership_id}/{action}")
+def answer_invitation(membership_id: str, action: Literal["accept", "decline"], db: DB, user: CurrentUser, request: Request):
+    """A person who already has a login decides whether to join a business that added them as staff."""
+    m = db.get(Membership, membership_id)
+    if not m or m.user_id != user.id or m.status != "INVITED":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invitation not found")
+    name = m.business.name
+    if action == "accept":
+        m.status = "ACTIVE"
+    else:
+        db.delete(m)
+    log(db, user, "STAFF", "invitation", f"{'Accepted' if action == 'accept' else 'Declined'} invitation to {name}",
+        entity_id=membership_id, request=request)
+    db.commit()
+    return me_payload(db, user)
 
 
 def token_for(user: User) -> str:
