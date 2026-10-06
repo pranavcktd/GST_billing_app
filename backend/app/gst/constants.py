@@ -124,6 +124,8 @@ class StockMoveType(str, Enum):
     PURCHASE_RETURN = "PURCHASE_RETURN"
     ADJUSTMENT = "ADJUSTMENT"
     TRANSFER = "TRANSFER"  # between godowns; nets to zero overall
+    PRODUCTION = "PRODUCTION"    # finished goods made (in)
+    CONSUMPTION = "CONSUMPTION"  # raw material used in production (out)
 
 
 # Per voucher type: stock direction, party ledger direction (+ = party owes us more),

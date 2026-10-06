@@ -404,6 +404,7 @@ class StockMovement(Base):
     batch_no: Mapped[str | None] = mapped_column(String(50))
     godown_id: Mapped[str | None] = mapped_column(ForeignKey("godowns.id", ondelete="RESTRICT"), index=True)
     transfer_id: Mapped[str | None] = mapped_column(ForeignKey("stock_transfers.id", ondelete="CASCADE"), index=True)
+    production_id: Mapped[str | None] = mapped_column(ForeignKey("productions.id", ondelete="CASCADE"), index=True)
     voucher_id: Mapped[str | None] = mapped_column(ForeignKey("vouchers.id", ondelete="CASCADE"), index=True)
     note: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -874,3 +875,51 @@ class PriceListItem(Base):
     price_list_id: Mapped[str] = mapped_column(ForeignKey("price_lists.id", ondelete="CASCADE"), index=True)
     item_id: Mapped[str] = mapped_column(ForeignKey("items.id", ondelete="CASCADE"), index=True)
     rate: Mapped[Decimal] = mapped_column(Money)
+
+
+# ================================================================ manufacturing
+class Bom(Base):
+    """Bill of materials: what goes into making `output_qty` of a finished item."""
+
+    __tablename__ = "boms"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey("items.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    output_qty: Mapped[Decimal] = mapped_column(Qty, default=Decimal("1"))
+    other_cost: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"), server_default="0")  # labour / overheads per batch
+    notes: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    lines: Mapped[list["BomLine"]] = relationship(cascade="all, delete-orphan", order_by="BomLine.sort_order")
+
+
+class BomLine(Base):
+    __tablename__ = "bom_lines"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    bom_id: Mapped[str] = mapped_column(ForeignKey("boms.id", ondelete="CASCADE"), index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey("items.id", ondelete="RESTRICT"))
+    qty: Mapped[Decimal] = mapped_column(Qty)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class Production(Base):
+    """A production entry: raw materials consumed, finished goods added to stock."""
+
+    __tablename__ = "productions"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    number: Mapped[str] = mapped_column(String(30))
+    date: Mapped[dt.date] = mapped_column(Date, index=True)
+    bom_id: Mapped[str | None] = mapped_column(ForeignKey("boms.id", ondelete="SET NULL"))
+    item_id: Mapped[str] = mapped_column(ForeignKey("items.id", ondelete="RESTRICT"))
+    qty: Mapped[Decimal] = mapped_column(Qty)
+    godown_id: Mapped[str | None] = mapped_column(ForeignKey("godowns.id", ondelete="RESTRICT"))
+    batch_no: Mapped[str | None] = mapped_column(String(50))
+    material_cost: Mapped[Decimal] = mapped_column(Money)
+    other_cost: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    unit_cost: Mapped[Decimal] = mapped_column(Money)
+    consumed: Mapped[list] = mapped_column(JSON, default=list)  # [{item_id, name, qty, rate, amount}]
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)

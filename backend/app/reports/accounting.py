@@ -57,12 +57,13 @@ EPOCH = dt.date(1900, 1, 1)
 
 # ---------------------------------------------------------------- stock valuation
 def avg_costs(db: Session, bid: str, as_of: dt.date) -> dict[str, Decimal]:
-    """Weighted-average cost per item from opening stock and purchases up to `as_of`."""
+    """Weighted-average cost per item from opening stock, purchases and production up to `as_of`."""
     qty: dict[str, Decimal] = defaultdict(lambda: ZERO)
     val: dict[str, Decimal] = defaultdict(lambda: ZERO)
     for m in db.scalars(select(StockMovement).where(
             StockMovement.business_id == bid, StockMovement.date <= as_of,
-            StockMovement.type.in_([StockMoveType.OPENING, StockMoveType.PURCHASE]), StockMovement.qty > 0)):
+            StockMovement.type.in_([StockMoveType.OPENING, StockMoveType.PURCHASE, StockMoveType.PRODUCTION]),
+            StockMovement.qty > 0)):
         qty[m.item_id] += m.qty
         val[m.item_id] += m.qty * (m.rate or ZERO)
     costs = {i: (val[i] / qty[i]) for i in qty if qty[i]}

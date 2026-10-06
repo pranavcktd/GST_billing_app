@@ -45,6 +45,7 @@ export const ENTRIES: SearchEntry[] = [
   { group: "Go to", title: "Items & stock", href: "/items", k: "inventory products maal stock", perm: ["items", "view"] },
   { group: "Go to", title: "Godowns & stock transfers", href: "/godowns", k: "warehouse location branch", perm: ["items", "view"] },
   { group: "Go to", title: "Price lists (party-wise rates)", href: "/price-lists", k: "dealer wholesale special rate discount customer price mrp rate list", perm: ["items", "view"] },
+  { group: "Go to", title: "Manufacturing (BOM & production)", href: "/manufacturing", k: "bom bill of materials production produce assemble recipe raw material finished goods factory", perm: ["items", "view"] },
   { group: "Go to", title: "Barcode labels", href: "/items/labels", k: "print sticker", perm: ["items", "view"] },
   { group: "Go to", title: "Bank & cash", href: "/cash-bank", k: "accounts bank statement cash in hand", perm: ["cashbank", "view"] },
   { group: "Go to", title: "Cheques", href: "/cash-bank/cheques", k: "pdc bounce clear", perm: ["cashbank", "view"] },
