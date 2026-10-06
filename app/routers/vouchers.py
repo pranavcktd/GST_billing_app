@@ -74,7 +74,13 @@ def next_number(ctx: BCtx, type: VoucherType, date: dt.date | None = None):
 @router.post("", response_model=VoucherDetailOut, status_code=201)
 def create_voucher(data: VoucherIn, ctx: BCtx):
     ctx.need(voucher_module(data.type), "create")
+    if data.client_ref:
+        # a bill made offline that was already uploaded (e.g. the reply was lost): return it, never duplicate
+        done = ctx.db.scalar(select(Voucher).where(Voucher.business_id == ctx.bid, Voucher.client_ref == data.client_ref))
+        if done is not None:
+            return to_detail(ctx, done)
     v = save_voucher(ctx, data)
+    v.client_ref = data.client_ref
     ctx.db.commit()
     ctx.db.refresh(v)
     return to_detail(ctx, v)
