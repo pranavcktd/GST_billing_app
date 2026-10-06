@@ -54,7 +54,7 @@ export function InvitationsBanner() {
       await api(`/auth/invitations/${id}/${action}`, { body: {} });
       if (action === "accept") {
         session.setBusinessId(businessId); // open the business just joined
-        window.location.href = "/dashboard";
+        window.location.assign("/dashboard");
         return;
       }
       await refresh();
