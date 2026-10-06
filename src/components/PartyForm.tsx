@@ -5,13 +5,14 @@ import { GstinVerify, type GstinInfo } from "@/components/GstinVerify";
 import { Button, Card, ErrorBox, Field, Input, Select, Textarea } from "@/components/ui";
 import { PARTY_GST_TYPES, STATES } from "@/lib/constants";
 import { gstinError } from "@/lib/gst";
+import { useFetch } from "@/lib/useFetch";
 import type { Party, PartyGstType, PartyType } from "@/lib/types";
 
 export type PartyDraft = Omit<Party, "id" | "balance" | "is_active">;
 
 export const emptyParty = (type: PartyType = "CUSTOMER"): PartyDraft => ({
   type, name: "", gst_type: "UNREGISTERED", gstin: "", pan: null, phone: "", email: "", state_code: "",
-  billing_address: "", city: "", pincode: "", shipping_address: "", opening_balance: 0, credit_limit: null,
+  billing_address: "", city: "", pincode: "", shipping_address: "", opening_balance: 0, credit_limit: null, price_list_id: null,
 });
 
 const NEEDS_GSTIN: PartyGstType[] = ["REGISTERED", "COMPOSITION", "SEZ"];
@@ -37,6 +38,7 @@ export function PartyForm({
   });
 
   const needsGstin = NEEDS_GSTIN.includes(p.gst_type);
+  const { data: priceLists } = useFetch<{ id: string; name: string; is_active: boolean }[]>("/price-lists");
   const gstErr = p.gstin ? gstinError(p.gstin) : null;
 
   function onGstin(v: string) {
@@ -147,6 +149,14 @@ export function PartyForm({
           <Field label="Credit limit (₹)">
             <Input type="number" min={0} step="0.01" value={p.credit_limit ?? ""} onChange={(e) => set("credit_limit", e.target.value ? Number(e.target.value) : null)} />
           </Field>
+          {p.type !== "SUPPLIER" && (
+            <Field label="Price list" hint="Special selling rates for this customer">
+              <Select value={p.price_list_id ?? ""} onChange={(e) => set("price_list_id", e.target.value || null)}>
+                <option value="">Normal sale prices</option>
+                {(priceLists ?? []).filter((l) => l.is_active || l.id === p.price_list_id).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </Select>
+            </Field>
+          )}
         </div>
       </Card>
       <div className="flex justify-end">

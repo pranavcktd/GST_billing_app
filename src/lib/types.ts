@@ -63,7 +63,7 @@ export interface Party {
   id: string; type: PartyType; name: string; gst_type: PartyGstType; gstin: string | null; pan: string | null;
   phone: string | null; email: string | null; state_code: string | null; billing_address: string | null;
   city: string | null; pincode: string | null; shipping_address: string | null; opening_balance: number;
-  credit_limit: number | null; is_active: boolean; balance: number;
+  credit_limit: number | null; price_list_id?: string | null; is_active: boolean; balance: number;
 }
 
 export interface Item {

@@ -10,7 +10,7 @@ import { useConfig } from "@/lib/config";
 import { Button, Card, Combobox, ErrorBox, Field, Input, Loading, Select, Textarea } from "@/components/ui";
 import { api, qs } from "@/lib/api";
 import { GST_RATES, KINDS, type Kind, NON_LEDGER, PAYMENT_MODES, STATES, isOutward, stateLabel } from "@/lib/constants";
-import { money, today } from "@/lib/format";
+import { fmtDate, money, today } from "@/lib/format";
 import { calcInvoice } from "@/lib/gst";
 import { useFetch } from "@/lib/useFetch";
 import type { Business, Godown, Item, Party, PaymentMode, Transport, Voucher, VoucherDetail } from "@/lib/types";
@@ -114,6 +114,10 @@ export function VoucherForm({
   const [quickParty, setQuickParty] = useState<string | null>(null);
 
   const party = parties.find((p) => p.id === partyId) ?? null;
+  const usesPriceList = meta.party === "CUSTOMER" && vtype !== "SALE_RETURN";
+  const { data: partyRates } = useFetch<{ price_list: { name: string; adjust_pct: number } | null; rates: Record<string, number> }>(
+    usesPriceList && partyId ? `/parties/${partyId}/rates` : null);
+  const [lastRates, setLastRates] = useState<Record<number, { rate: number; discount_pct: number; date: string; number: string } | null>>({});
   // untouched terms fall back to the business default
   const termsValue = terms ?? (outward ? business?.invoice_terms ?? "" : "");
 
@@ -171,11 +175,17 @@ export function VoucherForm({
 
   const pickItem = (key: number, it: Item) => {
     const sale = meta.party === "CUSTOMER";
+    const listRate = usesPriceList ? partyRates?.rates?.[it.id] : undefined;
     updateLine(key, {
       item_id: it.id, name: it.name, hsn_sac: it.hsn_sac ?? "", unit: it.unit, gst_rate: it.gst_rate, cess_rate: it.cess_rate,
-      rate: String(sale ? it.sale_price : it.purchase_price),
+      rate: String(listRate ?? (sale ? it.sale_price : it.purchase_price)),
       tax_inclusive: sale ? it.sale_price_tax_inclusive : it.purchase_price_tax_inclusive,
     });
+    if (partyId && (vtype === "SALE" || vtype === "PURCHASE" || vtype === "ESTIMATE" || vtype === "SALE_ORDER" || vtype === "PURCHASE_ORDER")) {
+      api<{ rate: number; discount_pct: number; date: string; number: string } | null>(
+        `/items/${it.id}/last-rate${qs({ party_id: partyId, type: sale ? "SALE" : "PURCHASE" })}`)
+        .then((r) => setLastRates((m) => ({ ...m, [key]: r }))).catch(() => {});
+    }
   };
 
   async function save(andPrint: boolean) {
@@ -287,6 +297,11 @@ export function VoucherForm({
             {party ? (
               <p className="mt-2 text-xs text-gray-600">
                 {[party.gstin ? `GSTIN ${party.gstin}` : "Unregistered", stateLabel(party.state_code), party.phone].filter(Boolean).join(" · ")}
+                {partyRates?.price_list && (
+                  <span className="ml-2 rounded bg-brand-50 px-1.5 py-0.5 text-brand-700" title="Item rates come from this customer's price list">
+                    Price list: {partyRates.price_list.name}
+                  </span>
+                )}
                 {party.balance !== 0 && (
                   <span className={party.balance > 0 ? "ml-2 text-emerald-700" : "ml-2 text-red-700"}>
                     · Balance {money(Math.abs(party.balance))} {party.balance > 0 ? "to collect" : "to pay"}
@@ -493,6 +508,12 @@ export function VoucherForm({
                 </td>
                 <td>
                   <Input className="text-right" inputMode="decimal" value={l.rate} onChange={(e) => updateLine(l.key, { rate: e.target.value })} />
+                  {lastRates[l.key] && String(lastRates[l.key]!.rate) !== l.rate && (
+                    <button type="button" className="mt-1 block w-full text-right text-[11px] text-gray-500 hover:text-brand-600"
+                      title={`Last billed on ${lastRates[l.key]!.number}`} onClick={() => updateLine(l.key, { rate: String(lastRates[l.key]!.rate), discount_pct: String(lastRates[l.key]!.discount_pct || "") })}>
+                      Last: {money(lastRates[l.key]!.rate)}{lastRates[l.key]!.discount_pct ? ` −${lastRates[l.key]!.discount_pct}%` : ""} · {fmtDate(lastRates[l.key]!.date)}
+                    </button>
+                  )}
                   {taxApplicable && (
                     <button type="button" className="mt-1 block w-full text-right text-xs text-brand-600" onClick={() => updateLine(l.key, { tax_inclusive: !l.tax_inclusive })}>
                       {l.tax_inclusive ? "incl. tax" : "excl. tax"}
