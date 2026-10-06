@@ -59,6 +59,8 @@ def settings(biz) -> dict:
 
 
 def applies(rule: dict, biz, s: dict) -> bool:
+    if rule.get("disabled"):
+        return False  # switched off by the super admin
     a = rule.get("applies") or {}
     gst = biz.gst_type.value if hasattr(biz.gst_type, "value") else str(biz.gst_type)
     if a.get("gst") and gst not in a["gst"]:

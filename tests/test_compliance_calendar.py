@@ -99,3 +99,9 @@ def test_calendar_api(client, monkeypatch):
     assert client.post("/api/admin/config/versions", headers=root, json={"effective_from": "2026-01-01", "values": {"compliance_rules": changed}}).status_code == 201
     cal = client.get("/api/compliance/calendar", headers=h).json()
     assert all(i["due_date"].endswith("-25") for i in cal["items"] if i["code"] == "GSTR3B_M")
+
+
+def test_switched_off_rule_is_hidden():
+    rules = [{**r, "disabled": True} if r["code"] == "GSTR1_M" else r for r in CC.DEFAULT_RULES]
+    got = {i["code"] for i in CC.calendar_for(biz(), rules, {}, today=TODAY)["items"]}
+    assert "GSTR1_M" not in got and "GSTR3B_M" in got
