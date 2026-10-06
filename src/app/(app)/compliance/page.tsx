@@ -20,8 +20,24 @@ interface Item {
   days_left: number; late_fee_so_far: number | null;
   done: { id: string; done_on: string; reference: string | null; note: string | null; by: string | null; source?: string } | null;
 }
-interface Settings { gst_filing: "MONTHLY" | "QUARTERLY"; tax_audit: boolean; tds: boolean; payroll: boolean; track_from: string; registration_date?: string | null }
-interface Calendar { settings: Settings; items: Item[]; summary: Record<Status, number>; disclaimer: string; entity_type: string; gst_type: string }
+interface Settings {
+  gst_filing: "MONTHLY" | "QUARTERLY"; tax_audit: boolean; tds: boolean; pf: boolean; esi: boolean; employees: number | null;
+  track_from: string; registration_date?: string | null; profile_done?: boolean;
+}
+interface Calendar {
+  settings: Settings; items: Item[]; summary: Record<Status, number>; disclaimer: string; entity_type: string; gst_type: string;
+  laws_enabled: string[]; laws_applicable: string[];
+}
+
+/** Why a law shows nothing for this business (tabs of laws that do not apply). */
+const NOT_APPLICABLE: Record<string, string> = {
+  GST: "This business is not registered under GST.",
+  INCOME_TAX: "No income-tax filings apply with your current answers.",
+  TDS: "You told us you do not deduct TDS. Turn it on in your compliance profile if you have a TAN.",
+  MCA: "MCA filings apply to private / public limited companies and OPCs. Your type of business is set in Settings → Business.",
+  LLP: "LLP filings apply only to Limited Liability Partnerships. Your type of business is set in Settings → Business.",
+  PAYROLL: "EPF and ESI apply when you have employees: EPF from 20 employees, ESI from 10 (most states). Add your employee count in your compliance profile.",
+};
 
 const GST_LABEL: Record<string, string> = { REGULAR: "GST regular", COMPOSITION: "GST composition", UNREGISTERED: "Not GST registered" };
 const TONE: Record<Status, string> = {
@@ -71,7 +87,7 @@ export default function CompliancePage() {
   if (!data) return <Loading />;
 
   const authorities = [...new Map(data.items.map((i) => [i.authority, i.authority_label])).entries()];
-  const lawTabs = Object.keys(LAW_LABEL).filter((k) => data.items.some((i) => i.authority === k));
+  const lawTabs = (data.laws_enabled ?? Object.keys(LAW_LABEL)).filter((k) => k in LAW_LABEL);
   const shown = data.items.filter((i) => (filter === "PENDING" ? i.status !== "DONE" : i.status === filter) && (!authority || i.authority === authority));
 
   async function undo(i: Item) {
@@ -105,6 +121,14 @@ export default function CompliancePage() {
         </p>
       )}
 
+      {!data.settings.profile_done && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm">
+          <Settings2 size={18} className="text-brand-700" />
+          <span className="flex-1"><b>Answer 4 quick questions</b> (GST returns, tax audit, TDS, employees) so the calendar shows exactly the filings — GST, income tax, TDS, MCA, EPF / ESI — that apply to you.</span>
+          <Button onClick={() => setProfile(true)}>Set up now</Button>
+        </div>
+      )}
+
       <div className="mb-4 flex flex-wrap gap-1 border-b border-gray-200">
         {["TODO", ...lawTabs].map((k) => (
           <button key={k} onClick={() => setTab(k)}
@@ -115,7 +139,15 @@ export default function CompliancePage() {
       </div>
 
       {tab !== "TODO" ? (
-        <ComplianceRegister law={tab} version={version} syncAvailable={!!sync?.available} onMark={setMarking} onChanged={() => { reload(); reloadSync(); }} />
+        (data.laws_applicable ?? []).includes(tab)
+          ? <ComplianceRegister law={tab} version={version} syncAvailable={!!sync?.available} onMark={setMarking} onChanged={() => { reload(); reloadSync(); }} />
+          : (
+            <Card className="p-6 text-sm text-gray-600">
+              <p><b>{LAW_LABEL[tab] ?? tab}</b> — not applicable to this business right now.</p>
+              <p className="mt-1">{NOT_APPLICABLE[tab]}</p>
+              <Button className="mt-3" variant="secondary" onClick={() => setProfile(true)}><Settings2 size={15} /> Update compliance profile</Button>
+            </Card>
+          )
       ) : (<>
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {cards.map(({ status, label, icon: Icon }) => (
@@ -240,7 +272,12 @@ function ProfileDialog({ cal, canEdit, onClose, onSaved }: { cal: Calendar; canE
       setErr((x as Error).message);
     }
   }
-  const check = (k: "tax_audit" | "tds" | "payroll", label: string, hint: string) => (
+  const setEmployees = (v: string) => {
+    const n = v === "" ? null : Math.max(0, Math.floor(Number(v) || 0));
+    // suggest EPF from 20 and ESI from 10 employees; voluntary registration can still be ticked by hand
+    setS({ ...s, employees: n, pf: n !== null && n >= 20 ? true : s.pf, esi: n !== null && n >= 10 ? true : s.esi });
+  };
+  const check = (k: "tax_audit" | "tds" | "pf" | "esi", label: string, hint: string) => (
     <label className="flex items-start gap-2.5 text-sm">
       <input type="checkbox" className="mt-0.5" disabled={!canEdit} checked={s[k]} onChange={(e) => setS({ ...s, [k]: e.target.checked })} />
       <span><span className="font-medium text-gray-900">{label}</span><span className="block text-xs text-gray-500">{hint}</span></span>
@@ -262,9 +299,19 @@ function ProfileDialog({ cal, canEdit, onClose, onSaved }: { cal: Calendar; canE
             </Select>
           </Field>
         )}
-        {check("tax_audit", "Our accounts need a tax audit", "Turnover above the income-tax audit limit (or other audit cases) — return due 31 Oct")}
-        {check("tds", "We deduct TDS (we have a TAN)", "Shows monthly TDS deposit and quarterly TDS returns")}
-        {check("payroll", "We have employees under PF / ESI", "Shows monthly PF and ESI deposits")}
+        <div className="space-y-2 rounded-lg border border-gray-200 p-3">
+          <div className="text-xs font-semibold tracking-wide text-gray-500 uppercase">Income tax</div>
+          {check("tax_audit", "Our accounts need a tax audit", "Usually when turnover is above ₹1 crore (₹10 crore if almost all receipts and payments are digital), or other audit cases — return due 31 Oct")}
+          {check("tds", "We deduct TDS (we have a TAN)", "Paying rent, contractors, professionals or salaries above the limits — shows monthly TDS deposits and quarterly returns")}
+        </div>
+        <div className="space-y-2 rounded-lg border border-gray-200 p-3">
+          <div className="text-xs font-semibold tracking-wide text-gray-500 uppercase">Employees — EPF / ESI</div>
+          <Field label="How many employees do you have?" hint="EPF applies from 20 employees, ESI from 10 (most states). We tick them for you; you can also register voluntarily.">
+            <Input type="number" min={0} className="max-w-32" disabled={!canEdit} value={s.employees ?? ""} onChange={(e) => setEmployees(e.target.value)} />
+          </Field>
+          {check("pf", "Registered under EPF", "Shows the monthly PF contribution / ECR (due 15th)")}
+          {check("esi", "Registered under ESI", "Shows the monthly ESI contribution (due 15th)")}
+        </div>
         <Field label="Show filings due from" hint={s.registration_date
           ? `GST registered on ${fmtDate(s.registration_date)} — nothing before that date is shown. Pending filings due before this date are hidden; filed ones always show.`
           : "Pending filings due before this date are hidden (filed ones always show). Set an older date to track past returns too."}>

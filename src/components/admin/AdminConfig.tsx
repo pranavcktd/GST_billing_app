@@ -6,7 +6,7 @@ import { Button, Card, ErrorBox, Field, Input, Loading, Textarea } from "@/compo
 import { api, qs } from "@/lib/api";
 import { fmtDate } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
-import { ComplianceRulesEditor, type Rule } from "@/components/admin/ComplianceRulesEditor";
+import { ComplianceLawSwitches, ComplianceRulesEditor, type Rule } from "@/components/admin/ComplianceRulesEditor";
 
 type FieldType = "money" | "int" | "number" | "text" | "bool" | "rates" | "list" | "map_text" | "map_number" | "json";
 interface ConfigField { key: string; group: string; label: string; type: FieldType; default: unknown; help: string }
@@ -123,7 +123,16 @@ export function AdminConfig() {
               const multi = f.type === "list" || f.type.startsWith("map_") || f.type === "json";
               const hint = f.type === "rates" ? "Comma separated, e.g. 0, 5, 18, 40" : f.type === "json" ? "JSON — edit carefully; it is checked when you save."
                 : multi ? (f.type === "list" ? "One per line" : "One per line: CODE = value") : undefined;
-              if (f.key === "compliance_rules") {
+              if (f.key === "compliance_laws") {
+                const laws = value.split("\n").map((x) => x.trim()).filter(Boolean);
+                return (
+                  <div key={f.key} className="md:col-span-2">
+                    <div className="mb-1 text-xs font-medium text-gray-600">{f.label}{dirty ? " •" : ""}</div>
+                    <ComplianceLawSwitches laws={laws} onChange={(next) => setEdits({ ...edits, [f.key]: next.join("\n") })} />
+                  </div>
+                );
+              }
+                            if (f.key === "compliance_rules") {
                 let rules: Rule[] = [];
                 try { rules = JSON.parse(value); } catch { /* shown as text below */ }
                 return (

@@ -75,7 +75,7 @@ export function AdminIntegrations() {
             <Input inputMode="numeric" value={String(s.trial_live_limit ?? 1)} onChange={(e) => setEdit({ ...edit, trial_live_limit: Number(e.target.value) || 0 })} />
           </Field>
           <Field label="GST return filing status (compliance calendar)" hint="Businesses can click “Sync GST returns”: one paid call per financial year with unfiled returns.">
-            <label className="flex items-center gap-2 pt-2 text-sm"><input type="checkbox" checked={s.filing_sync ?? true} onChange={(e) => setEdit({ ...edit, filing_sync: e.target.checked })} /> {s.filing_sync ?? true ? "Allowed" : "Off"}</label>
+            <label className="flex items-center gap-2 pt-2 text-sm"><input type="checkbox" checked={!!s.filing_sync} onChange={(e) => setEdit({ ...edit, filing_sync: e.target.checked })} /> {s.filing_sync ? "On — businesses see the sync buttons" : "Off — manual entry only"}</label>
           </Field>
           <Field label="Fetch the same year again after (hours)" hint="Stops repeated clicks from using credit">
             <Input inputMode="numeric" value={String(s.filing_sync_hours ?? 24)} onChange={(e) => setEdit({ ...edit, filing_sync_hours: Number(e.target.value) || 24 })} />

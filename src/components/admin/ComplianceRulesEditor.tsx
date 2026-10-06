@@ -4,7 +4,9 @@ import { Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Button, ErrorBox, Field, Input, Select, Textarea } from "@/components/ui";
+import { api } from "@/lib/api";
 import { ENTITY_TYPES } from "@/lib/constants";
+import { useFetch } from "@/lib/useFetch";
 
 /**
  * Form editor for the compliance calendar rules (Admin → GST config → Compliance calendar). No JSON needed:
@@ -22,9 +24,9 @@ export interface Rule {
   fee_per_day?: number | string | null; fee_cap?: number | null;
 }
 
-const LAWS: Record<string, string> = { GST: "GST", INCOME_TAX: "Income tax", TDS: "TDS", MCA: "Company law (MCA)", LLP: "LLP (MCA)", PAYROLL: "PF / ESI", OTHER: "Other" };
+const LAWS: Record<string, string> = { GST: "GST", INCOME_TAX: "Income tax", TDS: "TDS", MCA: "Company law (MCA)", LLP: "LLP (MCA)", PAYROLL: "EPF / ESI", OTHER: "Other" };
 const GST_TYPES: Record<string, string> = { REGULAR: "GST regular", COMPOSITION: "GST composition", UNREGISTERED: "Not GST registered" };
-const FLAGS: Record<string, string> = { tax_audit: "Tax audit applies", tds: "Deducts TDS (has TAN)", payroll: "Has PF / ESI employees" };
+const FLAGS: Record<string, string> = { tax_audit: "Tax audit applies", tds: "Deducts TDS (has TAN)", pf: "Registered under EPF", esi: "Registered under ESI" };
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const AFTER = ["the same month", "the next month", "the 2nd month after", "the 3rd month after"];
 const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
@@ -291,5 +293,46 @@ function RuleForm({ initial, codes, links, onCancel, onSave }: {
         </div>
       </form>
     </Modal>
+  );
+}
+
+/** Super admin: which laws businesses see, and which can be fetched automatically (API) instead of marked by hand. */
+export function ComplianceLawSwitches({ laws, onChange }: { laws: string[]; onChange: (laws: string[]) => void }) {
+  const { data: gst, reload } = useFetch<{ settings: { enabled: boolean; filing_sync?: boolean; api_key_set: boolean } }>("/admin/gstin-api");
+  const [busy, setBusy] = useState(false);
+  async function setGstSync(on: boolean) {
+    setBusy(true);
+    try { await api("/admin/gstin-api", { method: "PUT", body: { filing_sync: on } }); reload(); } catch (e) { alert((e as Error).message); } finally { setBusy(false); }
+  }
+  const ready = !!gst?.settings.enabled && !!gst?.settings.api_key_set;
+  return (
+    <div className="overflow-x-auto rounded-lg border border-gray-200">
+      <table className="tbl">
+        <thead><tr><th>Law</th><th>Shown to businesses</th><th>Automatic status (API)</th></tr></thead>
+        <tbody>
+          {Object.entries(LAWS).filter(([k]) => k !== "OTHER").map(([k, label]) => (
+            <tr key={k}>
+              <td className="font-medium">{label}</td>
+              <td>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={laws.includes(k)} onChange={(e) => onChange(e.target.checked ? [...laws, k] : laws.filter((x) => x !== k))} />
+                  {laws.includes(k) ? "On" : "Hidden"}
+                </label>
+              </td>
+              <td className="text-sm">
+                {k === "GST" ? (
+                  <label className={`flex items-center gap-2 ${ready ? "" : "opacity-60"}`} title={ready ? "Businesses see “Sync / Fetch from GST portal”; every fetch uses API credit" : "Set up the GSTIN API (key + Enabled) in Admin → Integrations first"}>
+                    <input type="checkbox" disabled={!ready || busy} checked={!!gst?.settings.filing_sync} onChange={(e) => setGstSync(e.target.checked)} />
+                    {gst?.settings.filing_sync ? "On — sync buttons visible" : "Off — manual entry only"}
+                    {!ready && <span className="text-xs text-gray-500">(API not set up)</span>}
+                  </label>
+                ) : <span className="text-gray-500">Manual entry only — API coming later</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="px-4 py-2 text-xs text-gray-500">“Shown to businesses” is saved with the “Save change” bar below. The GST automatic-status switch applies immediately.</p>
+    </div>
   );
 }
