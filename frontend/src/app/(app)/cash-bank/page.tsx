@@ -10,6 +10,7 @@ import { fmtDate, fyRange, money, today } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 import type { Account } from "@/lib/types";
 import { ExportMenu, simpleDoc } from "@/components/ExportMenu";
+import { CashEntryEditor, type CashEntryKind } from "@/components/CashEntryEditor";
 
 interface Statement {
   opening: number; closing: number;
@@ -27,9 +28,10 @@ export default function CashBankPage() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [transfer, setTransfer] = useState<{ from: string; to: string; amount: string; date: string; note: string } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ kind: CashEntryKind; id: string } | null>(null);
 
   const current = accounts?.find((a) => a.id === (selected ?? accounts?.[0]?.id));
-  const { data: st } = useFetch<Statement>(current ? `/accounts/${current.id}/statement${qs({ date_from: range.from, date_to: range.to })}` : null);
+  const { data: st, reload: reloadSt } = useFetch<Statement>(current ? `/accounts/${current.id}/statement${qs({ date_from: range.from, date_to: range.to })}` : null);
 
   if (!accounts) return error ? <ErrorBox message={error} /> : <Loading />;
   const active = accounts.filter((a) => a.is_active);
@@ -62,6 +64,30 @@ export default function CashBankPage() {
     } catch (err) {
       setFormError((err as Error).message);
     }
+  }
+
+  const refresh = () => { reload(); reloadSt(); };
+  const EDITABLE: Record<string, CashEntryKind> = { transfer: "transfer", capital: "capital", tax: "tax" };
+  const icon = "inline-block p-1 text-gray-400 hover:text-gray-700";
+  function rowActions(e: Statement["entries"][number]) {
+    if (EDITABLE[e.ref_type]) {
+      return <button className={icon} title="Edit or delete" aria-label="Edit" onClick={() => setEditing({ kind: EDITABLE[e.ref_type], id: e.ref_id })}><Pencil size={14} /></button>;
+    }
+    if (e.ref_type === "payment") {
+      const dir = e.deposit ? "in" : "out";
+      return (
+        <>
+          <Link className={icon} title="Edit payment" aria-label="Edit" href={`/payments/${dir}/new?edit=${e.ref_id}`}><Pencil size={14} /></Link>
+          <button className="inline-block p-1 text-gray-400 hover:text-red-600" title="Delete payment" aria-label="Delete" onClick={async () => {
+            if (!confirm(`Delete ${e.number}? Bills it settled become unpaid again.`)) return;
+            await api(`/payments/${e.ref_id}`, { method: "DELETE" }).catch((x) => alert(x.message));
+            refresh();
+          }}><Trash2 size={14} /></button>
+        </>
+      );
+    }
+    if (e.ref_type === "loan") return <Link className={`${icon} text-xs`} href={`/loans/${e.ref_id}`} title="Open the loan to edit this entry"><Pencil size={14} /></Link>;
+    return null;
   }
 
   async function remove(a: Account) {
@@ -133,19 +159,20 @@ export default function CashBankPage() {
           </div>
           {!st ? <Loading /> : (
             <table className="tbl">
-              <thead><tr><th>Date</th><th>Type</th><th>Ref</th><th>Party / note</th><th className="num">Money in</th><th className="num">Money out</th><th className="num">Balance</th></tr></thead>
+              <thead><tr><th>Date</th><th>Type</th><th>Ref</th><th>Party / note</th><th className="num">Money in</th><th className="num">Money out</th><th className="num">Balance</th><th /></tr></thead>
               <tbody>
-                <tr className="bg-gray-50"><td>{fmtDate(range.from)}</td><td colSpan={5} className="text-gray-600">Opening balance</td><td className="num">{money(st.opening)}</td></tr>
+                <tr className="bg-gray-50"><td>{fmtDate(range.from)}</td><td colSpan={5} className="text-gray-600">Opening balance</td><td className="num">{money(st.opening)}</td><td /></tr>
                 {st.entries.map((e, i) => (
                   <tr key={i}>
                     <td>{fmtDate(e.date)}</td><td>{e.kind}</td><td>{e.number}</td><td>{e.party ?? e.note ?? ""}</td>
                     <td className="num text-emerald-700">{e.deposit ? money(e.deposit) : ""}</td>
                     <td className="num text-red-700">{e.withdrawal ? money(e.withdrawal) : ""}</td>
                     <td className="num">{money(e.balance)}</td>
+                    <td className="whitespace-nowrap text-right">{rowActions(e)}</td>
                   </tr>
                 ))}
               </tbody>
-              <tfoot><tr><td colSpan={6}>Closing balance</td><td className="num">{money(st.closing)}</td></tr></tfoot>
+              <tfoot><tr><td colSpan={6}>Closing balance</td><td className="num">{money(st.closing)}</td><td /></tr></tfoot>
             </table>
           )}
         </Card>
@@ -182,6 +209,8 @@ export default function CashBankPage() {
           </form>
         </Modal>
       )}
+
+      {editing && <CashEntryEditor kind={editing.kind} id={editing.id} onClose={() => setEditing(null)} onSaved={refresh} />}
 
       {transfer && (
         <Modal title="Transfer money" onClose={() => setTransfer(null)}>

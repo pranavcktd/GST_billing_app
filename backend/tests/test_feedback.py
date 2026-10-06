@@ -47,3 +47,57 @@ def test_portal_links_are_configurable(client, monkeypatch):
     bad = client.post("/api/admin/config/versions", headers=root, json={
         "effective_from": "2026-01-01", "values": {"links": {"gst_portal": "javascript:alert(1)"}}})
     assert bad.status_code == 422
+
+
+def test_money_entries_can_be_corrected(client):
+    import datetime as dt
+    h = make_business(client, signup(client))
+    today = dt.date.today().isoformat()  # today's entries need no manager approval
+    accounts = client.get("/api/accounts", headers=h).json()
+    cash = next(a for a in accounts if a["is_default_cash"])
+    bank = post(client, h, "/api/accounts", {"type": "BANK", "name": "HDFC", "opening_balance": 0})
+    bal = lambda acc: next(a for a in client.get("/api/accounts", headers=h).json() if a["id"] == acc["id"])["balance"]  # noqa: E731
+
+    t = post(client, h, "/api/transfers", {"date": today, "from_account_id": cash["id"], "to_account_id": bank["id"], "amount": 500})
+    r = client.put(f"/api/transfers/{t['id']}", headers=h, json={**t, "amount": 300})
+    assert r.status_code == 200 and bal(bank) == 300
+    assert client.put(f"/api/transfers/{t['id']}", headers=h, json={**t, "to_account_id": cash["id"]}).status_code == 400
+
+    c = post(client, h, "/api/capital", {"date": today, "type": "INTRODUCED", "amount": 1000, "account_id": bank["id"]})
+    assert client.put(f"/api/capital/{c['id']}", headers=h, json={**c, "amount": 1500}).json()["amount"] == 1500
+    assert bal(bank) == 1800
+
+    tp = post(client, h, "/api/tax-payments", {"date": today, "type": "GST", "amount": 100, "account_id": bank["id"]})
+    assert client.put(f"/api/tax-payments/{tp['id']}", headers=h, json={**tp, "type": "TDS", "reference": "CIN1"}).json()["type"] == "TDS"
+
+    loan = post(client, h, "/api/loans", {"name": "Term loan", "opening_balance": 10000})
+    e = post(client, h, f"/api/loans/{loan['id']}/txns", {"date": today, "type": "EMI", "principal": 1000, "interest": 100})
+    r = client.put(f"/api/loans/{loan['id']}/txns/{e['id']}", headers=h, json={**e, "principal": 2000})
+    assert r.status_code == 200 and client.get(f"/api/loans/{loan['id']}", headers=h).json()["loan"]["outstanding"] == 8000
+    assert client.put(f"/api/loans/{loan['id']}/txns/{e['id']}", headers=h, json={**e, "principal": 20000}).status_code == 400
+
+    # a payment re-settles its bills when corrected
+    p = post(client, h, "/api/parties", {"name": "Ravi", "gst_type": "UNREGISTERED"})
+    bills = [post(client, h, "/api/vouchers", {"type": "SALE", "date": today, "party_id": p["id"],
+              "lines": [{"name": "Work", "qty": 1, "rate": amt, "gst_rate": 0}]}) for amt in (1000, 1000)]
+    pay = post(client, h, "/api/payments", {"type": "IN", "date": today, "party_id": p["id"], "amount": 1000, "voucher_id": bills[1]["id"]})
+    assert [a["voucher_id"] for a in pay["allocations"]] == [bills[1]["id"]]
+    r = client.put(f"/api/payments/{pay['id']}", headers=h, json={"type": "IN", "date": today, "party_id": p["id"], "amount": 1500, "mode": "UPI"})
+    assert r.status_code == 200, r.text
+    alloc = {a["voucher_id"]: a["amount"] for a in r.json()["allocations"]}
+    assert alloc == {bills[1]["id"]: 1000, bills[0]["id"]: 500} and r.json()["number"] == pay["number"]
+    assert client.put(f"/api/payments/{pay['id']}", headers=h, json={"type": "OUT", "date": today, "party_id": p["id"], "amount": 1}).status_code == 400
+
+    # older entries need a manager's approval (or the edit-past right) — the owner has it
+    old = post(client, h, "/api/capital", {"date": "2026-04-01", "type": "DRAWINGS", "amount": 10})
+    assert client.delete(f"/api/capital/{old['id']}", headers=h).status_code == 204
+
+    # manual stock adjustment can be deleted; other movements can't
+    item = post(client, h, "/api/items", {"name": "Box", "unit": "PCS", "opening_stock": 5})
+    client.post(f"/api/items/{item['id']}/adjust", headers=h, json={"qty": 2, "direction": "ADD", "date": today})
+    moves = client.get(f"/api/items/{item['id']}/movements", headers=h).json()
+    adj = next(m for m in moves if m["type"] == "ADJUSTMENT")
+    opening = next(m for m in moves if m["type"] == "OPENING")
+    assert client.delete(f"/api/items/{item['id']}/movements/{opening['id']}", headers=h).status_code == 400
+    assert client.delete(f"/api/items/{item['id']}/movements/{adj['id']}", headers=h).status_code == 204
+    assert client.get(f"/api/items/{item['id']}", headers=h).json()["stock"] == 5

@@ -94,7 +94,7 @@ export default function ItemDetailPage() {
           <Card className="overflow-x-auto lg:col-span-2">
             <h2 className="px-5 pt-4 pb-2 font-semibold text-gray-900">Stock history</h2>
             <table className="tbl">
-              <thead><tr><th>Date</th><th>Type</th><th>Note</th><th className="num">Qty</th></tr></thead>
+              <thead><tr><th>Date</th><th>Type</th><th>Note</th><th className="num">Qty</th><th /></tr></thead>
               <tbody>
                 {moves?.map((m) => (
                   <tr key={m.id}>
@@ -102,6 +102,18 @@ export default function ItemDetailPage() {
                     <td>{m.voucher_id ? <Link href={`/doc/${m.voucher_id}`} className="text-brand-600 hover:underline">{MOVE_LABEL[m.type]}</Link> : MOVE_LABEL[m.type]}</td>
                     <td className="text-gray-600">{m.note ?? ""}</td>
                     <td className={`num ${m.qty < 0 ? "text-red-700" : "text-emerald-700"}`}>{m.qty > 0 ? "+" : ""}{qty(m.qty)}</td>
+                    <td>
+                      {m.type === "ADJUSTMENT" && (
+                        <button className="text-gray-400 hover:text-red-600" title="Delete this adjustment" aria-label="Delete adjustment" onClick={async () => {
+                          if (!confirm("Delete this stock adjustment? Stock will be recalculated.")) return;
+                          try {
+                            await api(`/items/${id}/movements/${m.id}`, { method: "DELETE" });
+                            setData(await api<Item>(`/items/${id}`));
+                            reload();
+                          } catch (x) { alert((x as Error).message); }
+                        }}><Trash2 size={14} /></button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

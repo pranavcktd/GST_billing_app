@@ -1,13 +1,13 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { notFound, useParams } from "next/navigation";
 import { useState } from "react";
 import { ImportButton } from "@/components/ImportDialog";
 import { Card, Empty, ErrorBox, Field, Input, LinkButton, Loading, PageHeader } from "@/components/ui";
 import { api, qs } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
+import { usePerms } from "@/lib/auth";
 import { PAYMENT_MODES } from "@/lib/constants";
 import { fmtDate, fyRange, money } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
@@ -19,7 +19,6 @@ export default function PaymentsPage() {
   const { dir } = useParams<{ dir: string }>();
   if (dir !== "in" && dir !== "out") notFound();
   const type = dir === "in" ? "IN" : "OUT";
-  const { business } = useAuth();
   const [range, setRange] = useState(fyRange());
   const { data, error, loading, reload } = useFetch<Payment[]>(
     `/payments${qs({ type, date_from: range.from, date_to: range.to, limit: 10000 })}`,
@@ -30,7 +29,10 @@ export default function PaymentsPage() {
     ["Date", "Number", "Party", "Mode", "Account", "Reference", "Amount", "TDS", "Allocated"],
     data.map((p) => [p.date, p.number, p.party_name, PAYMENT_MODES[p.mode], p.account_name, p.reference, p.amount, p.tds_amount, p.allocated]),
     { subtitle: `${fmtDate(range.from)} to ${fmtDate(range.to)}`, filename: `payments-${dir}-${range.from}-to-${range.to}` });
-  const canDelete = business?.role === "OWNER" || business?.role === "ADMIN";
+  const { can } = usePerms();
+  const mod = type === "IN" ? "payments_in" : "payments_out";
+  const canDelete = can(mod, "delete");
+  const canEdit = can(mod, "edit");
 
   async function remove(p: Payment) {
     if (!confirm(`Delete payment ${p.number} of ${money(p.amount)}? Bills it settled will become unpaid again.`)) return;
@@ -91,7 +93,12 @@ export default function PaymentsPage() {
                     {p.amount + p.tds_amount - p.allocated > 0.005 && p.cheque_status !== "BOUNCED" && <span className="text-amber-700">Advance {money(p.amount + p.tds_amount - p.allocated)}</span>}
                   </td>
                   <td className="num font-medium">{money(p.amount)}</td>
-                  <td>
+                  <td className="whitespace-nowrap">
+                    {canEdit && (
+                      <Link href={`/payments/${dir}/new?edit=${p.id}`} className="mr-2 inline-block text-gray-400 hover:text-gray-700" aria-label="Edit payment" title="Edit">
+                        <Pencil size={15} />
+                      </Link>
+                    )}
                     {canDelete && (
                       <button className="text-gray-400 hover:text-red-600" aria-label="Delete payment" onClick={() => remove(p)}>
                         <Trash2 size={16} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { AccountSelect } from "@/components/AccountSelect";
@@ -8,6 +8,7 @@ import { Button, Card, Empty, ErrorBox, Field, Input, Loading, PageHeader, Selec
 import { api } from "@/lib/api";
 import { fmtDate, money, today } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
+import { CashEntryEditor } from "@/components/CashEntryEditor";
 
 interface Entry { id: string; date: string; type: "INTRODUCED" | "DRAWINGS"; amount: number; account_id: string; note: string | null }
 
@@ -15,6 +16,7 @@ export default function CapitalPage() {
   const { data, error, reload } = useFetch<Entry[]>("/capital");
   const [f, setF] = useState({ type: "INTRODUCED", amount: "", date: today(), account_id: "", note: "" });
   const [formError, setFormError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -65,7 +67,7 @@ export default function CapitalPage() {
                     <td>{x.type === "INTRODUCED" ? "Capital introduced" : "Drawings"}</td>
                     <td className="text-gray-600">{x.note}</td>
                     <td className={`num ${x.type === "DRAWINGS" ? "text-red-700" : "text-emerald-700"}`}>{money(x.amount)}</td>
-                    <td><button className="text-gray-400 hover:text-red-600" aria-label="Delete" onClick={async () => { if (confirm("Delete entry?")) { await api(`/capital/${x.id}`, { method: "DELETE" }); reload(); } }}><Trash2 size={15} /></button></td>
+                    <td className="whitespace-nowrap"><button className="mr-2 text-gray-400 hover:text-gray-700" aria-label="Edit" onClick={() => setEditing(x.id)}><Pencil size={15} /></button><button className="text-gray-400 hover:text-red-600" aria-label="Delete" onClick={async () => { if (confirm("Delete entry?")) { await api(`/capital/${x.id}`, { method: "DELETE" }); reload(); } }}><Trash2 size={15} /></button></td>
                   </tr>
                 ))}
               </tbody>
@@ -73,6 +75,7 @@ export default function CapitalPage() {
           )}
         </Card>
       </div>
+    {editing && <CashEntryEditor kind="capital" id={editing} onClose={() => setEditing(null)} onSaved={reload} />}
     </>
   );
 }
