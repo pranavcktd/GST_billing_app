@@ -43,6 +43,23 @@ class Field:
     options: list = field(default_factory=list)
 
 
+LINKS = {
+    "gst_portal": "https://www.gst.gov.in",
+    "gst_returns": "https://return.gst.gov.in/returns/auth/dashboard",
+    "gst_payment": "https://payment.gst.gov.in/payment/",
+    "gstin_search": "https://services.gst.gov.in/services/searchtp",
+    "hsn_search": "https://services.gst.gov.in/services/searchhsnsac",
+    "gst_offline_tool": "https://tutorial.gst.gov.in/offlineutilities/returns/",
+    "ewaybill_portal": "https://ewaybillgst.gov.in",
+    "einvoice_portal": "https://einvoice1.gst.gov.in",
+    "income_tax_portal": "https://www.incometax.gov.in/iec/foportal/",
+    "tds_traces": "https://www.tdscpc.gov.in",
+    "mca_portal": "https://www.mca.gov.in",
+    "epfo_portal": "https://unifiedportal-emp.epfindia.gov.in",
+    "esic_portal": "https://www.esic.gov.in",
+    "whatsapp_send": "https://wa.me/",
+}
+
 CREDIT_NOTE_REASONS = ["Sales return", "Post-sale discount", "Deficiency in services", "Correction in invoice",
                        "Change in POS", "Finalization of provisional assessment", "Others"]
 
@@ -93,6 +110,10 @@ FIELDS: list[Field] = [
           "use for less than 180 days in the year. Check against the latest rules."),
     Field("ca_residual_value_pct", "Final accounts", "Companies Act residual value (% of cost)", "number", 5,
           "Used for useful-life depreciation (Schedule II)."),
+    # ---- external portals (every "open portal" button in the app reads these)
+    Field("links", "Portals & links", "Government portals and external links", "map_text", dict(LINKS),
+          "Where the app's portal buttons go. If a department moves a page, change the address here — every user "
+          "gets the new link immediately. Addresses must start with https://."),
     # ---- billing & brand
     Field("subscription_gst_rate", "Subscription & company", "GST on subscription fees (%)", "number", 18),
     Field("trial_days", "Subscription & company", "Free trial days", "int", 14),
@@ -106,6 +127,11 @@ FIELDS: list[Field] = [
            "gstin": "", "website": ""}),
 ]
 BY_KEY = {f.key: f for f in FIELDS}
+
+
+def link(key: str) -> str:
+    """Configured address of an external portal (falls back to the built-in one)."""
+    return (effective().get("links") or {}).get(key) or LINKS.get(key, "")
 EPOCH = dt.date(2017, 7, 1)
 
 _versions: list[dict] = []
@@ -271,6 +297,8 @@ def clean_values(values: dict) -> dict:
                     raise ConfigError(f"{f.label}: code cannot be empty")
                 m[k.upper() if key in ("uqc", "composition_rates") else k] = (
                     _num(x, f"{f.label} {k}") if f.type == "map_number" else str(x).strip())
+            if key == "links" and any(not x.startswith(("https://", "http://")) or " " in x for x in m.values()):
+                raise ConfigError("Links must be full web addresses starting with https://")
             if key == "states" and any(not (c.isdigit() and len(c) == 2) for c in m):
                 raise ConfigError("State codes must be 2 digits")
             out[key] = m

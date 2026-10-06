@@ -74,7 +74,7 @@ def gstr1(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) -> d
             if l.gst_rate == 0:
                 key = ("inter_" if v.inter_state else "intra_") + ("registered" if registered else "unregistered")
                 nil[key] += sign * l.taxable
-            hkey = ("B2B" if registered else "B2C", l.hsn_sac or "", l.unit or "OTH", l.gst_rate)
+            hkey = ("B2B" if registered else "B2C", l.hsn_sac or "", "NA" if (l.hsn_sac or "").startswith("99") else (l.unit or "OTH"), l.gst_rate)
             h = hsn.setdefault(hkey, dict(qty=ZERO, value=ZERO, **_zero()))
             h["qty"] += sign * l.qty
             h["value"] += sign * l.total

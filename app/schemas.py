@@ -325,6 +325,8 @@ class PartyOut(ORM):
 
 
 # ---------- items ----------
+SERVICE_UNIT = "NA"  # unit of services (no quantity unit)
+
 class ItemIn(BaseModel):
     type: ItemType = ItemType.GOODS
     name: Name
@@ -349,13 +351,18 @@ class ItemIn(BaseModel):
 
     _rate = field_validator("gst_rate")(_check_gst_rate)
 
-    @field_validator("unit")
-    @classmethod
-    def _unit(cls, v: str):
-        v = v.upper()
-        if v not in UQC:
+    @model_validator(mode="after")
+    def _unit(self):
+        # services are not measured in units: the GST portal reports SAC codes with UQC "NA"
+        if self.type == ItemType.SERVICE:
+            self.unit = SERVICE_UNIT
+            return self
+        self.unit = (self.unit or "").upper()
+        if self.unit == SERVICE_UNIT:
+            raise ValueError("Choose a unit for the product")
+        if self.unit not in UQC:
             raise ValueError("Unknown unit")
-        return v
+        return self
 
 
 class ItemOut(ORM):
