@@ -4,7 +4,7 @@ import datetime as dt
 import json
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -12,6 +12,7 @@ from ..deps import BCtx
 from ..models import Voucher
 from ..schemas import TransportIn, VoucherDetailOut
 from ..services import einvoice as ei
+from ..services import ewaybill as ewb
 from ..permissions import voucher_module
 from ..services.plans import check_api_quota, require_einvoice
 from ..services.vouchers import to_detail
@@ -160,7 +161,40 @@ class ManualEwb(BaseModel):
 @router.put("/vouchers/{vid}/ewaybill", response_model=VoucherDetailOut)
 def record_ewb(vid: str, data: ManualEwb, ctx: BCtx):
     v = _get(ctx, vid, "edit")
-    v.ewb_no, v.ewb_date, v.ewb_valid_till = data.ewb_no, data.ewb_date, data.valid_till
+    v.ewb_no, v.ewb_date = data.ewb_no, data.ewb_date
+    v.ewb_valid_till = data.valid_till or ewb.valid_till(data.ewb_date, (v.transport or {}).get("distance_km"))
     ctx.db.commit()
     return to_detail(ctx, v)
+
+
+# ---------------------------------------------------------------- e-way bill register (no API needed)
+@router.get("/ewaybills")
+def ewb_list(ctx: BCtx, date_from: dt.date, date_to: dt.date):
+    ctx.need("sales", "view")
+    return ewb.listing(ctx.db, ctx.business, date_from, date_to)
+
+
+class BulkIn(BaseModel):
+    voucher_ids: list[str] = Field(min_length=1, max_length=500)
+
+
+@router.post("/ewaybills/bulk-json")
+def ewb_bulk(data: BulkIn, ctx: BCtx):
+    """One JSON file for the portal's 'Generate Bulk' upload; bills with missing details are listed."""
+    require_einvoice(ctx.db, ctx.bid, "JSON")
+    ctx.need("sales", "export")
+    payload, skipped = ewb.bulk(ctx.db, ctx.business, data.voucher_ids)
+    return {"json": payload, "count": len(payload["billLists"]), "skipped": skipped}
+
+
+@router.post("/ewaybills/import")
+async def ewb_import(ctx: BCtx, file: UploadFile = File(...)):
+    """Upload the e-way bill list downloaded from the portal: numbers and validity are filled on matching bills."""
+    ctx.need("sales", "edit")
+    content = await file.read()
+    try:
+        rows = ewb.parse_import(file.filename or "", content)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    return ewb.apply_import(ctx.db, ctx.business, rows)
 
