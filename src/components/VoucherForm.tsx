@@ -6,8 +6,9 @@ import { useEffect, useMemo, useState } from "react";
 import { AccountSelect } from "@/components/AccountSelect";
 import { QuickPartyDialog } from "@/components/QuickPartyDialog";
 import { TransportFields } from "@/components/TransportFields";
+import { TERMS } from "@/lib/help";
 import { useConfig } from "@/lib/config";
-import { Button, Card, Combobox, ErrorBox, Field, Input, Loading, Select, Textarea } from "@/components/ui";
+import { Button, Card, Combobox, ErrorBox, Field, Info, Input, Loading, Select, Textarea } from "@/components/ui";
 import { api, qs } from "@/lib/api";
 import { GST_RATES, KINDS, type Kind, NON_LEDGER, PAYMENT_MODES, STATES, isOutward, stateLabel } from "@/lib/constants";
 import { fmtDate, money, today } from "@/lib/format";
@@ -408,12 +409,12 @@ export function VoucherForm({
           <div className="mt-4 flex flex-wrap gap-5 text-sm">
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={taxApplicable} onChange={(e) => setSupplierCharged(e.target.checked)} />
-              Supplier charged GST on this bill
+              Supplier charged GST on this bill <Info text={TERMS.supplierCharged} />
             </label>
             {taxApplicable && (
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={reverseCharge} onChange={(e) => setReverseCharge(e.target.checked)} />
-                Reverse charge (RCM) — you pay the GST
+                Reverse charge (RCM) — you pay the GST <Info text={TERMS.reverseCharge} />
               </label>
             )}
           </div>
@@ -450,11 +451,11 @@ export function VoucherForm({
             <tr>
               <th className="w-8">#</th>
               <th className="min-w-64">Item</th>
-              <th className="w-24">HSN/SAC</th>
+              <th className="w-24">HSN/SAC<Info below text={TERMS.hsn} /></th>
               <th className="w-24 text-right">Qty</th>
               <th className="w-32 text-right">Rate (₹)</th>
-              <th className="w-20 text-right">Disc %</th>
-              <th className="w-24">GST</th>
+              <th className="w-20 text-right">Disc %<Info below text={TERMS.discount} /></th>
+              <th className="w-24">GST<Info below text={TERMS.gst} /></th>
               <th className="w-32 text-right">Amount</th>
               <th className="w-10" />
             </tr>
@@ -574,7 +575,7 @@ export function VoucherForm({
             {!isOrder && vtype !== "EXPENSE" && (
               <div className="flex items-center justify-between text-gray-600">
                 <label className="flex items-center gap-2">
-                  TCS %
+                  TCS % <Info text={TERMS.tcs} />
                   <input className="input !w-16 !py-0.5 text-right" inputMode="decimal" value={tcsRate} placeholder="0"
                     onChange={(e) => setTcsRate(e.target.value)} />
                 </label>
@@ -584,7 +585,7 @@ export function VoucherForm({
             {reverseCharge && !outward && <p className="text-xs text-amber-800">GST under reverse charge is payable by you, not to the supplier.</p>}
             <div className="flex items-center justify-between text-gray-600">
               <label className="flex items-center gap-2">
-                <input type="checkbox" checked={roundOff} onChange={(e) => setRoundOff(e.target.checked)} /> Round off
+                <input type="checkbox" checked={roundOff} onChange={(e) => setRoundOff(e.target.checked)} /> Round off <Info text={TERMS.roundOff} />
               </label>
               <span className="tabular-nums">{money(totals.round_off)}</span>
             </div>
