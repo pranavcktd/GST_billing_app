@@ -24,7 +24,7 @@ from decimal import Decimal
 
 from . import config_store as C
 
-from .compliance_rules import DEFAULT_RULES  # noqa: F401 — re-exported
+from .compliance_rules import COMPANIES, DEFAULT_RULES  # noqa: F401 — re-exported
 
 AUTHORITIES = {"GST": "GST", "INCOME_TAX": "Income tax", "TDS": "TDS", "MCA": "Company law (MCA)",
                "LLP": "LLP (MCA)", "PAYROLL": "PF / ESI"}
@@ -33,7 +33,18 @@ DISCLAIMER = ("Due dates and penalties are indicative and are kept up to date by
               "extends due dates or changes rules — please confirm on the official portal or with your tax professional "
               "before relying on them.")
 
-SETTINGS_DEFAULT = {"gst_filing": "MONTHLY", "tax_audit": False, "tds": False, "payroll": False, "track_from": None}
+SETTINGS_DEFAULT = {"gst_filing": "MONTHLY", "tax_audit": False, "tds": False, "pf": False, "esi": False, "employees": None,
+                    "track_from": None, "profile_done": False}
+LAWS = ["GST", "INCOME_TAX", "TDS", "MCA", "LLP", "PAYROLL"]
+
+
+def enabled_laws() -> list[str]:
+    """Laws the super admin shows in the compliance calendar (Admin → GST config → Compliance calendar)."""
+    try:
+        v = C.get("compliance_laws")
+    except KeyError:
+        v = None
+    return [x for x in (v or LAWS) if x in LAWS]
 
 
 # ================================================================ helpers
@@ -57,7 +68,13 @@ def registration_date(biz) -> dt.date | None:
 
 def settings(biz) -> dict:
     """Business answers. Tracking starts on the GST registration date when known (else the day the business joined)."""
-    s = {**SETTINGS_DEFAULT, **(biz.compliance_settings or {})}
+    stored = dict(biz.compliance_settings or {})
+    if "payroll" in stored and "pf" not in stored:  # answers saved before PF and ESI were separate
+        stored["pf"] = stored["esi"] = bool(stored["payroll"])
+    if "tds" not in stored and (biz.entity_type or "") in COMPANIES + ["LLP"]:
+        stored["tds"] = True  # companies and LLPs almost always deduct TDS — until the owner says otherwise
+    s = {**SETTINGS_DEFAULT, **stored}
+    s["payroll"] = bool(s["pf"] or s["esi"])  # rules written before the split
     reg = registration_date(biz)
     if not s.get("track_from"):
         s["track_from"] = (reg or (biz.created_at.date() if biz.created_at else dt.date.today())).isoformat()
@@ -73,8 +90,8 @@ def _before_registration(o: dict, reg: dt.date | None) -> bool:
 
 
 def applies(rule: dict, biz, s: dict) -> bool:
-    if rule.get("disabled"):
-        return False  # switched off by the super admin
+    if rule.get("disabled") or rule.get("authority") not in enabled_laws():
+        return False  # switched off by the super admin (the filing, or its whole law)
     a = rule.get("applies") or {}
     gst = biz.gst_type.value if hasattr(biz.gst_type, "value") else str(biz.gst_type)
     if a.get("gst") and gst not in a["gst"]:
@@ -196,7 +213,9 @@ def calendar_for(biz, rules: list[dict], done: dict[tuple[str, str], dict], toda
     order = {"OVERDUE": 0, "DUE_SOON": 1, "UPCOMING": 2, "DONE": 3}
     items.sort(key=lambda x: (order[x["status"]], x["due_date"] if x["status"] != "DONE" else -x["due_date"].toordinal()))
     summary = {k: sum(1 for i in items if i["status"] == k) for k in order}
-    return dict(settings=s, items=items, summary=summary, disclaimer=DISCLAIMER,
+    on = enabled_laws()
+    return dict(settings=s, items=items, summary=summary, disclaimer=DISCLAIMER, laws_enabled=on,
+                laws_applicable=[a for a in on if any(r.get("authority") == a and applies(r, biz, s) for r in rules)],
                 entity_type=biz.entity_type, gst_type=biz.gst_type.value if hasattr(biz.gst_type, "value") else biz.gst_type)
 
 

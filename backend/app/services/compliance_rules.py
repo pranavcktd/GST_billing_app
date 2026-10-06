@@ -126,11 +126,11 @@ DEFAULT_RULES: list[dict] = [
          penalty="Additional fee ₹100 per day of delay, with no upper limit."),
     # ------------------------------------------------------------------ payroll
     dict(code="PF", name="PF contribution and ECR", authority="PAYROLL", link="epfo_portal", frequency="MONTHLY",
-         applies={"requires": ["payroll"]}, due={"months_after": 1, "day": 15},
-         description="Employees' and employer's provident fund for the month's wages.",
+         applies={"requires": ["pf"]}, due={"months_after": 1, "day": 15},
+         description="Employees' and employer's provident fund for the month's wages (EPF applies from 20 employees, or by voluntary registration).",
          penalty="Interest 12% a year and damages of 5%–25% a year on late deposits."),
     dict(code="ESI", name="ESI contribution", authority="PAYROLL", link="esic_portal", frequency="MONTHLY",
-         applies={"requires": ["payroll"]}, due={"months_after": 1, "day": 15},
-         description="ESI contribution for the month's wages (if ESI applies to you).",
+         applies={"requires": ["esi"]}, due={"months_after": 1, "day": 15},
+         description="ESI contribution for the month's wages (ESI applies from 10 employees in most states, for wages up to ₹21,000 a month).",
          penalty="Interest 12% a year and damages on late deposits."),
 ]

@@ -23,7 +23,7 @@ interface Register {
   track_from: string; portal?: PortalRow[]; portal_fetched_at?: string | null;
 }
 
-export const LAW_LABEL: Record<string, string> = { GST: "GST", INCOME_TAX: "Income tax", TDS: "TDS", MCA: "Company (MCA)", LLP: "LLP", PAYROLL: "PF / ESI" };
+export const LAW_LABEL: Record<string, string> = { GST: "GST", INCOME_TAX: "Income tax", TDS: "TDS", MCA: "Company (MCA)", LLP: "LLP", PAYROLL: "EPF / ESI" };
 const MONTHS = ["Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar"];
 const RET_NAME: Record<string, string> = { GSTR1: "GSTR-1", GSTR3B: "GSTR-3B", GSTR9: "GSTR-9", GSTR9C: "GSTR-9C", GSTR4: "GSTR-4", CMP08: "CMP-08", IFF: "IFF", GSTR2X: "GSTR-2X" };
 
