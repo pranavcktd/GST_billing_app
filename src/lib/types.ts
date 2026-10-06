@@ -16,6 +16,13 @@ export type PaymentMode = "CASH" | "BANK" | "UPI" | "CHEQUE" | "CARD" | "OTHER";
 
 export interface User { id: string; name: string; email: string; phone: string | null }
 export type EntityType = "PROPRIETORSHIP" | "PARTNERSHIP" | "LLP" | "PRIVATE_LIMITED" | "OPC" | "PUBLIC_LIMITED" | "HUF" | "TRUST_SOCIETY" | "OTHER";
+/** What the GST portal returned for the business's GSTIN (last lookup on the platform). */
+export interface GstPortalDetails {
+  legal_name: string | null; trade_name: string | null; status: string | null; active: boolean | null; taxpayer_type: string | null;
+  constitution: string | null; registration_date: string | null; cancellation_date: string | null; state: string | null;
+  jurisdiction: string | null; address: string | null; pincode: string | null; nature_of_business: string[] | null; pan: string | null;
+  fetched_at: string;
+}
 export interface MyBusiness {
   id: string; name: string; gstin: string | null; gst_type: BusinessGstType; role: Role; owned: boolean;
   permissions: Permissions; modules: { mode: "BOTH" | "GOODS" | "SERVICES"; hidden: string[] } | null; entity_type: EntityType;
@@ -59,6 +66,7 @@ export interface Business {
   print_settings: PrintSettings | null; einvoice_username: string | null; einvoice_password_set: boolean;
   lut_number: string | null; lut_valid_till: string | null;
   composition_type: "TRADER" | "MANUFACTURER" | "RESTAURANT" | "SERVICE"; entity_type: EntityType;
+  gst_registration_date: string | null; gst_portal?: GstPortalDetails | null;
   plan: PlanInfo | null;
 }
 

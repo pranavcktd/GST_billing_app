@@ -20,7 +20,7 @@ interface Item {
   days_left: number; late_fee_so_far: number | null;
   done: { id: string; done_on: string; reference: string | null; note: string | null; by: string | null; source?: string } | null;
 }
-interface Settings { gst_filing: "MONTHLY" | "QUARTERLY"; tax_audit: boolean; tds: boolean; payroll: boolean; track_from: string }
+interface Settings { gst_filing: "MONTHLY" | "QUARTERLY"; tax_audit: boolean; tds: boolean; payroll: boolean; track_from: string; registration_date?: string | null }
 interface Calendar { settings: Settings; items: Item[]; summary: Record<Status, number>; disclaimer: string; entity_type: string; gst_type: string }
 
 const GST_LABEL: Record<string, string> = { REGULAR: "GST regular", COMPOSITION: "GST composition", UNREGISTERED: "Not GST registered" };
@@ -265,8 +265,10 @@ function ProfileDialog({ cal, canEdit, onClose, onSaved }: { cal: Calendar; canE
         {check("tax_audit", "Our accounts need a tax audit", "Turnover above the income-tax audit limit (or other audit cases) — return due 31 Oct")}
         {check("tds", "We deduct TDS (we have a TAN)", "Shows monthly TDS deposit and quarterly TDS returns")}
         {check("payroll", "We have employees under PF / ESI", "Shows monthly PF and ESI deposits")}
-        <Field label="Show filings due from" hint="Earlier filings are not listed — set an older date to track past returns too">
-          <Input type="date" disabled={!canEdit} value={s.track_from} onChange={(e) => setS({ ...s, track_from: e.target.value })} />
+        <Field label="Show filings due from" hint={s.registration_date
+          ? `GST registered on ${fmtDate(s.registration_date)} — nothing before that date is shown. Pending filings due before this date are hidden; filed ones always show.`
+          : "Pending filings due before this date are hidden (filed ones always show). Set an older date to track past returns too."}>
+          <Input type="date" disabled={!canEdit} min={s.registration_date ?? undefined} value={s.track_from} onChange={(e) => setS({ ...s, track_from: e.target.value })} />
         </Field>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>{canEdit ? "Cancel" : "Close"}</Button>

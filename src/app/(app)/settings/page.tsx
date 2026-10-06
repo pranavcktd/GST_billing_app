@@ -60,7 +60,7 @@ export default function SettingsPage() {
 
       {tab === "business" && (
         <div className="max-w-4xl">
-          <BusinessForm initial={data} showUploads submitLabel="Save settings" onSubmit={(b) => saveBusiness(b as Partial<Business>)} />
+          <BusinessForm initial={data} portal={data.gst_portal} showUploads submitLabel="Save settings" onSubmit={(b) => saveBusiness(b as Partial<Business>)} />
         </div>
       )}
       {tab === "print" && <PrintSettingsForm business={data} onSave={(ps: PrintSettings) => saveBusiness({ print_settings: ps })} />}
