@@ -7,6 +7,7 @@ import { Card, ErrorBox, Loading, PageHeader, StatusBadge } from "@/components/u
 import { KINDS, kindOf } from "@/lib/constants";
 import { fmtDate, money, qty } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
+import { ComplianceAlert } from "@/components/ComplianceAlert";
 import { RateNotices } from "@/components/RateNotices";
 import type { Voucher } from "@/lib/types";
 
@@ -42,6 +43,7 @@ export default function DashboardPage() {
   return (
     <>
       <PageHeader title="Dashboard" sub="Your business at a glance" />
+      <ComplianceAlert />
       <RateNotices />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <Tile label="Sales today" value={data.sales_today} href="/v/sales" />

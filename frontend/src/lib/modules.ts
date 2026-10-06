@@ -25,6 +25,7 @@ export const MODULES: ModuleDef[] = [
   { key: "price_lists", label: "Price lists", hint: "Different rates for dealers, wholesale or special customers", hrefs: ["/price-lists"], kind: "general" },
   { key: "reminders", label: "Collect payments (reminders)", hint: "Automatic payment reminders by e-mail / WhatsApp", hrefs: ["/reminders"], kind: "general" },
   { key: "cheques", label: "Cheques", hint: "Track cheques received and issued until they clear", hrefs: ["/cash-bank/cheques"], kind: "general" },
+  { key: "compliance", label: "Compliance calendar", hint: "GST, income-tax, TDS, MCA / LLP and PF due dates — what is pending and what is filed", hrefs: ["/compliance"], kind: "general" },
   { key: "loans", label: "Loan accounts", hint: "Business loans and EMIs", hrefs: ["/loans"], kind: "general" },
 ];
 

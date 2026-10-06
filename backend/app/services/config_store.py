@@ -18,6 +18,7 @@ changes immediately.
 
 import copy
 import datetime as dt
+import json
 import uuid
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
@@ -30,6 +31,7 @@ from ..db import get_db
 from ..gst.constants import GST_RATES, UQC
 from ..gst.states import STATES
 from ..models import PlatformSetting
+from .compliance_rules import DEFAULT_RULES
 
 
 @dataclass
@@ -37,7 +39,7 @@ class Field:
     key: str
     group: str
     label: str
-    type: str          # money | int | number | text | bool | rates | list | map_text | map_number
+    type: str          # money | int | number | text | bool | rates | list | map_text | map_number | json
     default: Any
     help: str = ""
     options: list = field(default_factory=list)
@@ -110,6 +112,11 @@ FIELDS: list[Field] = [
           "use for less than 180 days in the year. Check against the latest rules."),
     Field("ca_residual_value_pct", "Final accounts", "Companies Act residual value (% of cost)", "number", 5,
           "Used for useful-life depreciation (Schedule II)."),
+    # ---- compliance calendar (Compliance page of every business)
+    Field("compliance_rules", "Compliance calendar", "Filings, due dates and penalties", "json", DEFAULT_RULES,
+          "Each filing: code, name, authority, who it applies to, frequency, due date rule and the penalty text "
+          "shown when it is late. {late_fee_per_day} and {interest_rate} are replaced with the values above. "
+          "When the government extends a due date, add a version from the relevant date with the new rule."),
     # ---- external portals (every "open portal" button in the app reads these)
     Field("links", "Portals & links", "Government portals and external links", "map_text", dict(LINKS),
           "Where the app's portal buttons go. If a department moves a page, change the address here — every user "
@@ -187,9 +194,12 @@ def app_name() -> str:
     return effective()["brand"].get("app_name") or "SmartHisab"
 
 
-def public(on: dt.date | None = None) -> dict:
-    """What every client may see (used by /api/meta)."""
-    return copy.deepcopy(effective(on))
+SERVER_ONLY = {"compliance_rules"}  # large and only used by the server — not sent with /api/meta
+
+
+def public(on: dt.date | None = None, full: bool = False) -> dict:
+    """What every client may see (used by /api/meta); `full` adds server-only values (admin screen)."""
+    return copy.deepcopy({k: v for k, v in effective(on).items() if full or k not in SERVER_ONLY})
 
 
 # ================================================================ loading / applying
@@ -287,6 +297,19 @@ def clean_values(values: dict) -> dict:
         elif f.type == "list":
             items = [str(x).strip() for x in (v or []) if str(x).strip()]
             out[key] = items
+        elif f.type == "json":
+            if isinstance(v, str):
+                try:
+                    v = json.loads(v)
+                except ValueError as e:
+                    raise ConfigError(f"{f.label}: not valid JSON ({e})") from None
+            if key == "compliance_rules":
+                from .compliance_calendar import clean_rules  # local import: that module reads this one
+                try:
+                    v = clean_rules(v)
+                except (ValueError, TypeError) as e:
+                    raise ConfigError(f"{f.label}: {e}") from None
+            out[key] = v
         elif f.type in ("map_text", "map_number"):
             if not isinstance(v, dict) or not v:
                 raise ConfigError(f"{f.label}: add at least one entry")

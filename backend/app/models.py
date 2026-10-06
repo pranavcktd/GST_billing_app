@@ -819,6 +819,22 @@ class PracticeFile(Base):
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
 
+class ComplianceFiling(Base):
+    """A filing the business marked as done on the compliance calendar (rule code + period)."""
+
+    __tablename__ = "compliance_filings"
+    __table_args__ = (UniqueConstraint("business_id", "rule_code", "period_key", name="uq_compliance_filing"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    rule_code: Mapped[str] = mapped_column(String(30))
+    period_key: Mapped[str] = mapped_column(String(20))
+    done_on: Mapped[dt.date] = mapped_column(Date)
+    reference: Mapped[str | None] = mapped_column(String(100))  # ARN / SRN / challan no.
+    note: Mapped[str | None] = mapped_column(String(300))
+    by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class ReminderLog(Base):
     """A payment reminder sent to a customer (automatic or by a user)."""
 

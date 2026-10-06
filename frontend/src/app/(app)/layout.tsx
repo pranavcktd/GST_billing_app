@@ -2,6 +2,7 @@
 
 import {
   BellRing,
+  CalendarCheck,
   Factory,
   Route,
   Repeat,
@@ -114,6 +115,7 @@ const NAV: { section?: string; items: NavItem[] }[] = [
     items: [
       { href: "/reports", label: "Reports", icon: BarChart3,
         perm: [["reports_sales", "view"], ["reports_stock", "view"], ["reports_financial", "view"], ["reports_gst", "view"]] },
+      { href: "/compliance", label: "Compliance calendar", icon: CalendarCheck, perm: ["reports_gst", "view"] },
       { href: "/utilities/audit", label: "Audit Trail", icon: History, perm: ["audit", "view"] },
       { href: "/utilities", label: "Utilities", icon: Wrench },
       { href: "/billing", label: "Subscription", icon: Crown },
