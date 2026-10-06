@@ -231,9 +231,23 @@ def list_members(ctx: BCtx):
     ctx.need("users", "view")
     rows = ctx.db.execute(select(Membership, User).join(User, User.id == Membership.user_id)
                           .where(Membership.business_id == ctx.bid).order_by(User.name)).all()
-    return [dict(id=m.id, user_id=u.id, name=u.name, email=u.email, role=m.role.value, you=u.id == ctx.user.id,
+    others = _other_business_counts(ctx, [u.id for _, u in rows])
+    return [dict(id=m.id, user_id=u.id, name=u.name, email=u.email, phone=u.phone, role=m.role.value, you=u.id == ctx.user.id,
                  custom=bool(m.permissions), permissions=effective(m.role, m.permissions),
-                 has_pin=bool(m.approval_pin_hash)) for m, u in rows]
+                 has_pin=bool(m.approval_pin_hash), status=m.status, last_login_at=u.last_login_at,
+                 other_businesses=others.get(u.id, 0), managed=_managed(ctx, u, others.get(u.id, 0)))
+            for m, u in rows]
+
+
+def _other_business_counts(ctx, user_ids: list[str]) -> dict[str, int]:
+    rows = ctx.db.execute(select(Membership.user_id, func.count()).where(
+        Membership.user_id.in_(user_ids), Membership.business_id != ctx.bid).group_by(Membership.user_id)).all()
+    return {uid: n for uid, n in rows}
+
+
+def _managed(ctx, u: User, other_businesses: int) -> bool:
+    """This business may set the person's password: it created the login and they work nowhere else."""
+    return u.created_by_business_id == ctx.bid and other_businesses == 0 and not u.platform_role
 
 
 @router.get("/permissions/meta")
@@ -281,22 +295,72 @@ STAFF_ROLES = Literal["ADMIN", "MANAGER", "BILLING", "INVENTORY", "ACCOUNTANT"]
 class MemberIn(BaseModel):
     email: EmailStr
     role: STAFF_ROLES
+    name: str | None = Field(None, max_length=120)
+    phone: str | None = Field(None, max_length=20)
+    password: str | None = Field(None, min_length=8, max_length=128)  # optional; generated when empty
+
+
+def _temp_password() -> str:
+    import secrets
+
+    alphabet = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(10))
 
 
 @router.post("/members", status_code=201)
-def add_member(data: MemberIn, ctx: BCtx):
+def add_member(data: MemberIn, ctx: BCtx, request: Request):
+    """Add a staff member. A new e-mail gets a login created here (temporary password, changed at first
+    sign-in). An e-mail that already has a login — e.g. an accountant who also works for other businesses —
+    is invited instead: they keep their own password and accept the invitation after signing in."""
+    from ..security import hash_password
+    from ..services import mailer
+    from ..services.platform_audit import log as plog
+
     ctx.need("users", "create")
-    u = ctx.db.scalar(select(User).where(func.lower(User.email) == data.email.lower()))
-    if not u:
-        raise HTTPException(404, "No account with this email — ask them to sign up first, then add them here")
-    check_user_limit(ctx.db, ctx.bid, u.id)
     if data.role == "ADMIN" and ctx.role != Role.OWNER:
         raise HTTPException(403, "Only the owner can add business admins")
-    if ctx.db.scalar(select(Membership).where(Membership.user_id == u.id, Membership.business_id == ctx.bid)):
-        raise HTTPException(409, "Already a member of this company")
-    ctx.db.add(Membership(user_id=u.id, business_id=ctx.bid, role=Role(data.role)))
+    email = data.email.lower().strip()
+    u = ctx.db.scalar(select(User).where(func.lower(User.email) == email))
+    if u and ctx.db.scalar(select(Membership).where(Membership.user_id == u.id, Membership.business_id == ctx.bid)):
+        raise HTTPException(409, "This person already has access to this business")
+    check_user_limit(ctx.db, ctx.bid, u.id if u else None)
+    if u is None:
+        if not (data.name or "").strip():
+            raise HTTPException(422, "Enter the staff member's name")
+        password = data.password or _temp_password()
+        u = User(name=data.name.strip(), email=email, phone=(data.phone or "").strip() or None,
+                 password_hash=hash_password(password), must_change_password=True, created_by_business_id=ctx.bid)
+        ctx.db.add(u)
+        ctx.db.flush()
+        ctx.db.add(Membership(user_id=u.id, business_id=ctx.bid, role=Role(data.role), status="ACTIVE", invited_by=ctx.user.name))
+        plog(ctx.db, ctx.user, "STAFF", "staff", f"Created staff login {email} ({data.role}) for {ctx.business.name}",
+             entity_id=u.id, request=request)
+        ctx.db.commit()
+        mailed = False
+        try:
+            from .auth import frontend_url
+            from html import escape
+
+            from ..services import config_store
+
+            cfg = mailer.business_smtp(ctx.db, ctx.bid, None) or mailer.system_smtp(ctx.db)
+            if cfg:
+                body = mailer.layout(f"Your login for {escape(ctx.business.name)}", f"""
+                    <p>Hello {escape(u.name)},</p>
+                    <p>{escape(ctx.user.name)} has created a {config_store.app_name()} login for you to work in <b>{escape(ctx.business.name)}</b>.</p>
+                    <p>Sign in at <a href="{frontend_url(request)}/login">{frontend_url(request)}/login</a><br>
+                    E-mail: <b>{escape(email)}</b><br>Temporary password: <b style="font-family:monospace">{password}</b></p>
+                    <p>You will choose your own password at the first sign-in.</p>""")
+                mailer.send(cfg, [email], f"Your login for {ctx.business.name}", body)
+                mailed = True
+        except Exception:  # noqa: BLE001 — no mail server: the owner shares the details
+            pass
+        return {"created": True, "invited": False, "email": email, "temp_password": password, "mailed": mailed}
+    ctx.db.add(Membership(user_id=u.id, business_id=ctx.bid, role=Role(data.role), status="INVITED", invited_by=ctx.user.name))
+    plog(ctx.db, ctx.user, "STAFF", "staff", f"Invited existing login {email} ({data.role}) to {ctx.business.name}",
+         entity_id=u.id, request=request)
     ctx.db.commit()
-    return {"ok": True}
+    return {"created": False, "invited": True, "email": email, "name": u.name}
 
 
 class RoleIn(BaseModel):
@@ -332,14 +396,41 @@ def member_reset(member_id: str, ctx: BCtx, request: Request):
     from ..services import mailer
     from .auth import issue_reset
 
+    from ..config import get_settings
+
     ctx.need("users", "edit")
     m = ctx.db.get(Membership, member_id)
     if not m or m.business_id != ctx.bid or m.role == Role.OWNER:
         raise HTTPException(404, "Member not found")
     u = ctx.db.get(User, m.user_id)
+    # the link goes only to the person's own mailbox, so a shared staff member is never locked out elsewhere
     link = issue_reset(ctx.db, u, request, actor=ctx.user)
     ctx.db.commit()
-    return {"sent": True, "dev_link": link if not mailer.system_smtp(ctx.db) else None}
+    show = get_settings().is_dev and not mailer.system_smtp(ctx.db)
+    return {"sent": True, "dev_link": link if show else None}
+
+
+@router.post("/members/{member_id}/temp-password")
+def member_temp_password(member_id: str, ctx: BCtx, request: Request):
+    """Set a new temporary password for a login this business created — only while the person works for no
+    other business (otherwise they reset it themselves from the sign-in page)."""
+    from ..security import hash_password
+    from ..services.platform_audit import log as plog
+
+    ctx.need("users", "edit")
+    m = ctx.db.get(Membership, member_id)
+    if not m or m.business_id != ctx.bid or m.role == Role.OWNER:
+        raise HTTPException(404, "Member not found")
+    u = ctx.db.get(User, m.user_id)
+    if not _managed(ctx, u, _other_business_counts(ctx, [u.id]).get(u.id, 0)):
+        raise HTTPException(403, "This person also uses their login for other businesses (or created it themselves). "
+                                 "Send them a reset link instead — only they can change their password.")
+    password = _temp_password()
+    u.password_hash, u.must_change_password = hash_password(password), True
+    u.token_version = (u.token_version or 0) + 1
+    plog(ctx.db, ctx.user, "STAFF", "staff", f"Set a temporary password for {u.email}", entity_id=u.id, request=request)
+    ctx.db.commit()
+    return {"temp_password": password, "email": u.email}
 
 
 class DeleteCompany(BaseModel):

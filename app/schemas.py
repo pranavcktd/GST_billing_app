@@ -120,7 +120,16 @@ class MyBusinessOut(BaseModel):
     entity_type: str = "PROPRIETORSHIP"
 
 
+class InvitationOut(BaseModel):
+    id: str
+    business_id: str
+    business_name: str
+    role: Role
+    invited_by: str | None = None
+
+
 class MeOut(BaseModel):
+    invitations: list[InvitationOut] = []
     user: UserOut
     platform_role: str | None = None
     last_login_at: dt.datetime | None = None       # this session

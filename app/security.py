@@ -19,10 +19,14 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
-def create_token(user_id: str, version: int = 0) -> str:
+def create_token(user_id: str, version: int = 0, sid: str | None = None) -> str:
+    """`sid` identifies the signed-in session (device) — staff sign-in approval works per session."""
+    import secrets
+
     s = get_settings()
     now = dt.datetime.now(dt.timezone.utc)
-    payload = {"sub": user_id, "ver": version, "iat": now, "exp": now + dt.timedelta(minutes=s.jwt_expire_minutes)}
+    payload = {"sub": user_id, "ver": version, "sid": sid or secrets.token_hex(8), "iat": now,
+               "exp": now + dt.timedelta(minutes=s.jwt_expire_minutes)}
     return jwt.encode(payload, s.jwt_secret, algorithm=ALGORITHM)
 
 
@@ -31,6 +35,13 @@ def decode_token_full(token: str) -> tuple[str, int] | None:
         data = jwt.decode(token, get_settings().jwt_secret, algorithms=[ALGORITHM])
         return data["sub"], int(data.get("ver", 0))
     except (jwt.PyJWTError, KeyError, ValueError):
+        return None
+
+
+def token_sid(token: str) -> str | None:
+    try:
+        return jwt.decode(token, get_settings().jwt_secret, algorithms=[ALGORITHM]).get("sid")
+    except jwt.PyJWTError:
         return None
 
 
