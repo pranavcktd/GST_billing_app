@@ -20,7 +20,9 @@ export interface MyBusiness {
   id: string; name: string; gstin: string | null; gst_type: BusinessGstType; role: Role; owned: boolean;
   permissions: Permissions; modules: { mode: "BOTH" | "GOODS" | "SERVICES"; hidden: string[] } | null; entity_type: EntityType;
 }
+export interface Invitation { id: string; business_id: string; business_name: string; role: Role; invited_by: string | null }
 export interface Me {
+  invitations: Invitation[];
   user: User; businesses: MyBusiness[]; platform_role: "SUPERADMIN" | "RESELLER" | null;
   last_login_at: string | null; previous_login_at: string | null; practice_clients: number;
   totp_enabled: boolean; must_change_password: boolean;

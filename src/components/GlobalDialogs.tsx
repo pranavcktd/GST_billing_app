@@ -1,11 +1,12 @@
 "use client";
 
-import { Crown, KeyRound } from "lucide-react";
+import { Crown, Hourglass, KeyRound, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Button, Input } from "@/components/ui";
-import { uiHooks } from "@/lib/api";
+import { api, type ApiError, session, uiHooks } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 const PLAN_NAMES: Record<string, string> = { STARTER: "Starter", PROFESSIONAL: "Professional", ENTERPRISE: "Enterprise" };
 
@@ -15,6 +16,7 @@ export function GlobalDialogs() {
   const [pin, setPin] = useState("");
   const resolver = useRef<((v: string | null) => void) | null>(null);
   const [upgrade, setUpgrade] = useState<{ message: string; plan?: string } | null>(null);
+  const [blocked, setBlocked] = useState<{ code: string; message: string } | null>(null);
 
   useEffect(() => {
     uiHooks.askApprovalPin = (message) =>
@@ -24,9 +26,11 @@ export function GlobalDialogs() {
         setPinAsk({ message });
       });
     uiHooks.showUpgrade = (message, plan) => setUpgrade({ message, plan });
+    uiHooks.accessBlocked = (code, message) => setBlocked({ code, message });
     return () => {
       uiHooks.askApprovalPin = undefined;
       uiHooks.showUpgrade = undefined;
+      uiHooks.accessBlocked = undefined;
     };
   }, []);
 
@@ -38,6 +42,7 @@ export function GlobalDialogs() {
 
   return (
     <>
+      {blocked && <AccessBlocked code={blocked.code} message={blocked.message} />}
       {pinAsk && (
         <Modal title="Manager approval needed" onClose={() => answer(null)}>
           <form onSubmit={(e) => { e.preventDefault(); answer(pin); }} className="space-y-4">
@@ -66,5 +71,35 @@ export function GlobalDialogs() {
         </Modal>
       )}
     </>
+  );
+}
+
+/** Full-screen notice while a staff sign-in waits for approval or is outside the allowed network / hours. */
+function AccessBlocked({ code, message }: { code: string; message: string }) {
+  const { logout, me, switchBusiness } = useAuth();
+  const waiting = code === "ACCESS_PENDING";
+  // while waiting, check again every 10 seconds — the page reloads once the owner approves
+  useEffect(() => {
+    if (!waiting) return;
+    const t = setInterval(() => {
+      api("/staff/policy").then(() => window.location.reload(), (e: ApiError) => { if (e.code !== "ACCESS_PENDING") window.location.reload(); });
+    }, 10000);
+    return () => clearInterval(t);
+  }, [waiting]);
+  const others = (me?.businesses ?? []).filter((b) => b.id !== session.businessId());
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-gray-900/60 p-4">
+      <div className="w-full max-w-md rounded-xl bg-white p-6 text-center shadow-xl">
+        {waiting ? <Hourglass size={36} className="mx-auto text-amber-500" /> : <ShieldAlert size={36} className="mx-auto text-red-600" />}
+        <h2 className="mt-3 text-lg font-semibold text-gray-900">{waiting ? "Waiting for approval" : "Sign-in not allowed"}</h2>
+        <p className="mt-1 text-sm text-gray-600">{message}</p>
+        {waiting && <p className="mt-2 text-xs text-gray-500">This page continues by itself once approved.</p>}
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          {others.length > 0 && <Button variant="secondary" onClick={() => switchBusiness(others[0].id)}>Open {others[0].name}</Button>}
+          <Button variant="secondary" onClick={() => window.location.reload()}>Check again</Button>
+          <Button variant="danger" onClick={logout}>Sign out</Button>
+        </div>
+      </div>
+    </div>
   );
 }

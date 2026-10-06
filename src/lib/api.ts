@@ -43,7 +43,11 @@ type Structured = { message: string; code?: string; plan?: string; plan_name?: s
 export const uiHooks: {
   askApprovalPin?: (message: string) => Promise<string | null>;
   showUpgrade?: (message: string, plan?: string) => void;
+  accessBlocked?: (code: string, message: string) => void;
 } = {};
+
+/** Staff sign-in rules of a business (approval / office network / hours) — see GlobalDialogs. */
+export const ACCESS_CODES = ["ACCESS_PENDING", "ACCESS_DENIED", "IP_NOT_ALLOWED", "OUTSIDE_HOURS"];
 
 function errorMessage(body: unknown, status: number): string {
   const detail = (body as { detail?: unknown })?.detail;
@@ -112,6 +116,7 @@ export async function api<T = unknown>(
       const pin = await uiHooks.askApprovalPin(structured.message);
       if (pin) return api<T>(path, { ...opts, approvalPin: pin });
     }
+    if (res.status === 403 && structured?.code && ACCESS_CODES.includes(structured.code)) uiHooks.accessBlocked?.(structured.code, structured.message);
     if (res.status === 402 && structured?.code === "UPGRADE") uiHooks.showUpgrade?.(structured.message, structured.plan);
     throw new ApiError(res.status, errorMessage(body, res.status), structured?.code, structured?.plan);
   }

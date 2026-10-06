@@ -9,8 +9,12 @@ import { api, session } from "@/lib/api";
 import { useAuth, usePerms } from "@/lib/auth";
 import { useFetch } from "@/lib/useFetch";
 import type { Action, Business, Module, Permissions } from "@/lib/types";
+import { CredentialsDialog, StaffSignIns } from "@/components/StaffComponents";
 
-interface Member { id: string; user_id: string; name: string; email: string; role: string; you: boolean; custom: boolean; permissions: Permissions; has_pin: boolean }
+interface Member {
+  id: string; user_id: string; name: string; email: string; phone: string | null; role: string; you: boolean; custom: boolean;
+  permissions: Permissions; has_pin: boolean; status: "ACTIVE" | "INVITED"; last_login_at: string | null; other_businesses: number; managed: boolean;
+}
 interface Meta {
   modules: Record<Module, string>; actions: Action[]; flags: string[];
   roles: Record<string, { label: string; defaults: Permissions }>;
@@ -32,7 +36,9 @@ export default function CompaniesPage() {
   const { data: members, error, reload } = useFetch<Member[]>(can("users") ? "/members" : null);
   const { data: meta } = useFetch<Meta>("/permissions/meta");
   const { data: biz } = useFetch<Business>("/businesses/current");
-  const [invite, setInvite] = useState({ email: "", role: "BILLING" });
+  const [invite, setInvite] = useState({ name: "", email: "", phone: "", role: "BILLING", password: "" });
+  const [creds, setCreds] = useState<{ name: string; email: string; password: string; mailed: boolean; phone?: string } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [confirmName, setConfirmName] = useState("");
   const [editing, setEditing] = useState<{ member: Member; perms: Permissions } | null>(null);
@@ -60,6 +66,7 @@ export default function CompaniesPage() {
       <PageHeader title="Companies & staff" sub="One login can run several businesses. Give each person exactly the access they need."
         actions={<LinkButton href="/onboarding"><Plus size={16} /> New business</LinkButton>} />
       <ErrorBox message={err ?? error} />
+      {notice && <p className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{notice}</p>}
       <div className="grid gap-5 lg:grid-cols-5">
         <Card className="overflow-x-auto lg:col-span-2">
           <h2 className="px-5 pt-4 pb-2 font-semibold text-gray-900">Your businesses</h2>
@@ -88,7 +95,15 @@ export default function CompaniesPage() {
               <tbody>
                 {members.map((m) => (
                   <tr key={m.id}>
-                    <td>{m.name}{m.you && " (you)"}<div className="text-xs text-gray-500">{m.email}</div></td>
+                    <td>
+                      {m.name}{m.you && " (you)"}
+                      {m.status === "INVITED" && <span className="ml-1.5 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-800">invited — not accepted yet</span>}
+                      <div className="text-xs text-gray-500">{m.email}</div>
+                      {m.role !== "OWNER" && <div className="text-[11px] text-gray-400">
+                        {m.last_login_at ? `Last sign-in ${new Date(m.last_login_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "Never signed in"}
+                        {m.other_businesses > 0 && ` · also works for ${m.other_businesses} other business${m.other_businesses === 1 ? "" : "es"}`}
+                      </div>}
+                    </td>
                     <td>
                       {m.role === "OWNER" || !can("users", "edit") ? meta.roles[m.role]?.label ?? m.role : (
                         <Select value={m.role} onChange={(e) => run(() => api(`/members/${m.id}`, { method: "PUT", body: { role: e.target.value } }))}>
@@ -99,12 +114,19 @@ export default function CompaniesPage() {
                       {m.has_pin && <div className="text-xs text-gray-500">has approval PIN</div>}
                     </td>
                     <td className="whitespace-nowrap text-right">
-                      {m.role !== "OWNER" && can("users", "edit") && (
-                        <button className="mr-3 text-xs text-brand-600 hover:underline" onClick={() => run(async () => {
-                          const r = await api<{ dev_link: string | null }>(`/members/${m.id}/reset-password`, { body: {} });
-                          alert(r.dev_link ? `E-mail isn't set up. Share this reset link with ${m.name}:\n${r.dev_link}` : `A password reset link was e-mailed to ${m.email}.`);
-                        })}>Reset password</button>
-                      )}
+                      {m.role !== "OWNER" && m.status === "ACTIVE" && can("users", "edit") && (m.managed ? (
+                        <button className="mr-3 text-xs text-brand-600 hover:underline" title="Give a new temporary password — they choose their own at the next sign-in"
+                          onClick={() => confirm(`Set a new temporary password for ${m.name}? They will be signed out.`) && run(async () => {
+                            const r = await api<{ temp_password: string; email: string }>(`/members/${m.id}/temp-password`, { body: {} });
+                            setCreds({ name: m.name, email: r.email, password: r.temp_password, mailed: false, phone: m.phone ?? undefined });
+                          })}>New password</button>
+                      ) : (
+                        <button className="mr-3 text-xs text-brand-600 hover:underline" title="Only they can change their password — a reset link goes to their own e-mail"
+                          onClick={() => run(async () => {
+                            const r = await api<{ dev_link: string | null }>(`/members/${m.id}/reset-password`, { body: {} });
+                            setNotice(r.dev_link ? `E-mail isn't set up (development). Reset link for ${m.name}: ${r.dev_link}` : `A password reset link was e-mailed to ${m.email}. Only they can set the new password.`);
+                          })}>Send reset link</button>
+                      ))}
                       {m.role !== "OWNER" && can("users", "edit") && (
                         <button className="mr-3 text-gray-400 hover:text-gray-700" title="Permissions" aria-label="Permissions" onClick={() => setEditing({ member: m, perms: m.permissions })}><SlidersHorizontal size={15} /></button>
                       )}
@@ -118,17 +140,37 @@ export default function CompaniesPage() {
             </table>
           )}
           {can("users", "create") && (
-            <form className="grid gap-2 border-t border-gray-100 p-4 sm:grid-cols-[1fr_auto_auto]" onSubmit={(e) => { e.preventDefault(); run(async () => { await api("/members", { body: invite }); setInvite({ ...invite, email: "" }); }); }}>
-              <Input type="email" required placeholder="Email of a registered user" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} />
-              <Select value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })}>
-                {STAFF_ROLES.filter((r) => r !== "ADMIN" || isOwner).map((r) => <option key={r} value={r}>{meta.roles[r].label}</option>)}
-              </Select>
-              <Button type="submit">Add</Button>
-              <p className="text-xs text-gray-500 sm:col-span-3">{ROLE_HELP[invite.role]}. They sign up first with this email. Users count towards your plan across all businesses.</p>
+            <form className="space-y-2 border-t border-gray-100 p-4" onSubmit={(e) => { e.preventDefault(); run(async () => {
+              setNotice(null);
+              const r = await api<{ created: boolean; invited: boolean; email: string; temp_password?: string; mailed?: boolean; name?: string }>("/members",
+                { body: { ...invite, name: invite.name || null, phone: invite.phone || null, password: invite.password || null } });
+              if (r.created && r.temp_password) setCreds({ name: invite.name, email: r.email, password: r.temp_password, mailed: !!r.mailed, phone: invite.phone });
+              else setNotice(`${r.name ?? r.email} already has a login (maybe with another business). They were invited — after they accept, they work here with their own password.`);
+              setInvite({ name: "", email: "", phone: "", role: invite.role, password: "" });
+            }); }}>
+              <h3 className="text-sm font-semibold text-gray-900">Add staff</h3>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Input placeholder="Name" value={invite.name} maxLength={120} onChange={(e) => setInvite({ ...invite, name: e.target.value })} />
+                <Input type="email" required placeholder="E-mail (their login ID)" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} />
+                <Input placeholder="Mobile (optional, to share on WhatsApp)" value={invite.phone} maxLength={20} onChange={(e) => setInvite({ ...invite, phone: e.target.value })} />
+                <Select value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value })}>
+                  {STAFF_ROLES.filter((r) => r !== "ADMIN" || isOwner).map((r) => <option key={r} value={r}>{meta.roles[r].label}</option>)}
+                </Select>
+                <Input type="text" placeholder="Temporary password (optional — we make one)" minLength={8} value={invite.password} onChange={(e) => setInvite({ ...invite, password: e.target.value })} />
+                <Button type="submit">Add staff</Button>
+              </div>
+              <p className="text-xs text-gray-500">
+                {ROLE_HELP[invite.role]}. A new e-mail gets a login with a temporary password. If the person already has a login (for example an
+                accountant who works for several businesses), they get an invitation instead and keep their own password. Staff count towards your plan.
+              </p>
             </form>
           )}
         </Card>
       </div>
+
+      {can("users") && <div className="mt-5"><StaffSignIns /></div>}
+
+      {creds && <CredentialsDialog {...creds} onClose={() => setCreds(null)} />}
 
       {editing && (
         <Modal title={`Permissions — ${editing.member.name}`} onClose={() => setEditing(null)} wide>
