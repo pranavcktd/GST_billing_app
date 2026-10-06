@@ -8,7 +8,7 @@ import { useFetch } from "@/lib/useFetch";
 
 interface Settings {
   enabled: boolean; base_url: string; cache_days: number; daily_limit_business: number; daily_limit_user: number;
-  min_plan: string; api_key_set: boolean; api_key_hint: string | null; trial_live_limit: number;
+  min_plan: string; api_key_set: boolean; api_key_hint: string | null; trial_live_limit: number; filing_sync: boolean; filing_sync_hours: number;
 }
 interface Usage {
   days: number; live_ok: number; live_failed: number; cache: number; credits_remaining: number | null; saved_by_cache_pct: number;
@@ -73,6 +73,12 @@ export function AdminIntegrations() {
           <Field label="Paid lookups per user per day"><Input inputMode="numeric" value={String(s.daily_limit_user)} onChange={(e) => setEdit({ ...edit, daily_limit_user: Number(e.target.value) || 0 })} /></Field>
           <Field label="Paid lookups per trial / Free account" hint="Lifetime, shared by all users of the account. Answers already on the platform stay free. Paid plans are not capped.">
             <Input inputMode="numeric" value={String(s.trial_live_limit ?? 1)} onChange={(e) => setEdit({ ...edit, trial_live_limit: Number(e.target.value) || 0 })} />
+          </Field>
+          <Field label="GST return filing status (compliance calendar)" hint="Businesses can click “Sync GST returns”: one paid call per financial year with unfiled returns.">
+            <label className="flex items-center gap-2 pt-2 text-sm"><input type="checkbox" checked={s.filing_sync ?? true} onChange={(e) => setEdit({ ...edit, filing_sync: e.target.checked })} /> {s.filing_sync ?? true ? "Allowed" : "Off"}</label>
+          </Field>
+          <Field label="Fetch the same year again after (hours)" hint="Stops repeated clicks from using credit">
+            <Input inputMode="numeric" value={String(s.filing_sync_hours ?? 24)} onChange={(e) => setEdit({ ...edit, filing_sync_hours: Number(e.target.value) || 24 })} />
           </Field>
           <Field label="Available from plan">
             <Select value={s.min_plan} onChange={(e) => setEdit({ ...edit, min_plan: e.target.value })}>

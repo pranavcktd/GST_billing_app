@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CalendarClock, CheckCircle2, Clock, Settings2, Undo2 } from "lucide-react";
+import { AlertTriangle, CalendarClock, CheckCircle2, Clock, RefreshCw, Settings2, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
@@ -17,7 +17,7 @@ interface Item {
   code: string; name: string; authority: string; authority_label: string; description: string; penalty: string;
   link: string | null; period_key: string; period: string; due_date: string; status: Status; days_overdue: number;
   days_left: number; late_fee_so_far: number | null;
-  done: { id: string; done_on: string; reference: string | null; note: string | null; by: string | null } | null;
+  done: { id: string; done_on: string; reference: string | null; note: string | null; by: string | null; source?: string } | null;
 }
 interface Settings { gst_filing: "MONTHLY" | "QUARTERLY"; tax_audit: boolean; tds: boolean; payroll: boolean; track_from: string }
 interface Calendar { settings: Settings; items: Item[]; summary: Record<Status, number>; disclaimer: string; entity_type: string; gst_type: string }
@@ -46,6 +46,22 @@ export default function CompliancePage() {
   const [authority, setAuthority] = useState("");
   const [marking, setMarking] = useState<Item | null>(null);
   const [profile, setProfile] = useState(false);
+  const { data: sync, reload: reloadSync } = useFetch<{ available: boolean; last_sync_at: string | null; min_hours: number }>("/compliance/sync/available");
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
+  async function runSync() {
+    setSyncing(true); setSyncMsg(null);
+    try {
+      const r = await api<{ message: string }>("/compliance/sync", { body: {} });
+      setSyncMsg(r.message);
+      reload(); reloadSync();
+    } catch (e) {
+      setSyncMsg((e as Error).message);
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   if (error) return <ErrorBox message={error} />;
   if (!data) return <Loading />;
@@ -68,7 +84,21 @@ export default function CompliancePage() {
     <>
       <PageHeader title="Compliance calendar"
         sub={`${ENTITY_TYPES[data.entity_type] ?? data.entity_type} · ${GST_LABEL[data.gst_type] ?? data.gst_type} — returns and filings that apply to you, with due dates`}
-        actions={<Button variant="secondary" onClick={() => setProfile(true)}><Settings2 size={16} /> Your compliance profile</Button>} />
+        actions={<>
+          {sync?.available && (
+            <Button onClick={runSync} disabled={syncing} title="Fetches the filing status of your GST returns from the GST portal. Years already complete are not fetched again.">
+              <RefreshCw size={16} className={syncing ? "animate-spin" : ""} /> {syncing ? "Syncing…" : "Sync GST returns"}
+            </Button>
+          )}
+          <Button variant="secondary" onClick={() => setProfile(true)}><Settings2 size={16} /> Your compliance profile</Button>
+        </>} />
+      {(syncMsg || sync?.last_sync_at) && (
+        <p className="mb-3 text-xs text-gray-600">
+          {syncMsg && <b className="mr-2 text-gray-900">{syncMsg}</b>}
+          {sync?.last_sync_at && `Last synced ${new Date(sync.last_sync_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}. `}
+          GST returns are fetched from the GST portal; income-tax, TDS, MCA and PF filings have no public status service — mark them yourself.
+        </p>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {cards.map(({ status, label, icon: Icon }) => (
@@ -116,6 +146,7 @@ export default function CompliancePage() {
                   {i.status === "DUE_SOON" && <div className="mt-1.5 text-xs text-amber-800">If late: {i.penalty}</div>}
                   {i.done && (
                     <div className="mt-1.5 text-xs text-emerald-800">
+                      {i.done.source === "SYNC" && <span className="mr-1 rounded bg-emerald-100 px-1 py-0.5 text-[10px] font-medium">from GST portal</span>}
                       Filed on {fmtDate(i.done.done_on)}{i.done.reference ? ` · Ref. ${i.done.reference}` : ""}{i.done.by ? ` · marked by ${i.done.by}` : ""}{i.done.note ? ` · ${i.done.note}` : ""}
                     </div>
                   )}
