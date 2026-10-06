@@ -7,6 +7,8 @@ import { TransportFields } from "@/components/TransportFields";
 import { Button, Card, ErrorBox, Field, Input, Select } from "@/components/ui";
 import { api, downloadFile } from "@/lib/api";
 import type { Business, Transport, VoucherDetail } from "@/lib/types";
+import { useConfig } from "@/lib/config";
+import { money } from "@/lib/format";
 
 const within24h = (iso: string | null) => !!iso && Date.now() - new Date(iso).getTime() < 24 * 3600 * 1000;
 
@@ -23,6 +25,7 @@ export function EInvoicePanel({ v, business, onChange, canEdit }: {
 
   const plan = business.plan;
   const eligibleIrn = (v.type === "SALE" || v.type === "SALE_RETURN") && !!v.party_gstin && business.gst_type === "REGULAR";
+  const config = useConfig();
   const eligibleEwb = ["SALE", "DELIVERY_CHALLAN", "PURCHASE"].includes(v.type) && !!business.gstin;
   if (v.cancelled || (!eligibleIrn && !eligibleEwb)) return null;
 
@@ -55,7 +58,10 @@ export function EInvoicePanel({ v, business, onChange, canEdit }: {
           )}
           {eligibleEwb && (
             <div className="text-gray-600">
-              E-way bill: {v.ewb_no ? <span className="font-medium text-emerald-700">{v.ewb_no}{v.ewb_valid_till ? ` · valid till ${new Date(v.ewb_valid_till).toLocaleString("en-IN")}` : ""}</span> : <span className="text-gray-500">not generated</span>}
+              E-way bill: {v.ewb_no ? <span className="font-medium text-emerald-700">{v.ewb_no}{v.ewb_valid_till ? ` · valid till ${new Date(v.ewb_valid_till).toLocaleString("en-IN")}` : ""}</span>
+                : v.grand_total > config.ewb_threshold && v.lines.some((l) => !(l.hsn_sac ?? "").startsWith("99"))
+                  ? <span className="font-medium text-amber-700">needed — goods value is above {money(config.ewb_threshold)}</span>
+                  : <span className="text-gray-500">not generated</span>}
             </div>
           )}
           <div className="text-gray-600">

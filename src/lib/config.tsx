@@ -13,7 +13,7 @@ import { APP_NAME, BY_LINE, COMPANY_NAME, TAGLINE } from "@/lib/brand";
 import { GST_RATES, STATES, UNITS } from "@/lib/constants";
 
 export interface AppConfig {
-  gst_rates: number[]; b2cl_limit: number; invoice_number_max_len: number; ewb_threshold: number;
+  gst_rates: number[]; b2cl_limit: number; invoice_number_max_len: number; ewb_threshold: number; ewb_km_per_day?: number;
   einvoice_turnover_limit: number; composition_rates: Record<string, number>; hsn_digits_small: number;
   hsn_digits_large: number; late_fee_per_day: number; interest_rate: number; gstr1_due_day: number;
   gstr3b_due_day: number; gstr1_json_version: string; einvoice_schema_version: string;

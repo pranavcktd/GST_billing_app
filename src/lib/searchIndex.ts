@@ -61,6 +61,7 @@ export const ENTRIES: SearchEntry[] = [
   { group: "GST", title: "GSTR-1 (with portal JSON)", href: "/reports/gstr1", k: "gst return outward sales json", perm: ["reports_gst", "view"] },
   { group: "GST", title: "GSTR-3B (with portal JSON)", href: "/reports/gstr3b", k: "gst return summary itc payable", perm: ["reports_gst", "view"] },
   { group: "GST", title: "GSTR-2B matching", href: "/reports/gstr2b", k: "itc reconcile purchase", perm: ["reports_gst", "view"] },
+  { group: "GST", title: "E-way bills (bulk JSON, import, validity)", href: "/ewaybills", k: "ewb eway e-way waybill transport vehicle part b validity bulk", perm: ["sales", "view"] },
   { group: "GST", title: "HSN / SAC codes", href: "/utilities/hsn", k: "hsn sac code rate master", perm: ["settings", "view"] },
   { group: "GST", title: "GST calculator", href: "/utilities/gst-calculator", k: "calculate tax inclusive exclusive" },
   { group: "GST", title: "Update tax slab on items", href: "/utilities/tax-slab", k: "rate change gst rate", perm: ["items", "edit"] },
