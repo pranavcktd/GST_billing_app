@@ -5,7 +5,7 @@ from sqlalchemy import or_, select
 
 from ..deps import BCtx
 from ..gst.constants import PartyType
-from ..models import Party, Payment, Voucher
+from ..models import Party, Payment, Voucher, PriceList
 from ..schemas import PartyIn, PartyOut
 from ..services.ledger import party_balances, party_ledger
 
@@ -41,9 +41,17 @@ def list_parties(ctx: BCtx, search: str | None = None, type: PartyType | None = 
     return [_out(p, balances.get(p.id, 0)) for p in parties]
 
 
+def _check_price_list(ctx: BCtx, pl_id: str | None) -> None:
+    if pl_id:
+        pl = ctx.db.get(PriceList, pl_id)
+        if pl is None or pl.business_id != ctx.bid:
+            raise HTTPException(404, "Price list not found")
+
+
 @router.post("", response_model=PartyOut, status_code=201)
 def create_party(data: PartyIn, ctx: BCtx):
     ctx.need("parties", "create")
+    _check_price_list(ctx, data.price_list_id)
     p = Party(business_id=ctx.bid, **data.model_dump())
     ctx.db.add(p)
     ctx.db.commit()
@@ -61,6 +69,7 @@ def get_party(party_id: str, ctx: BCtx):
 def update_party(party_id: str, data: PartyIn, ctx: BCtx):
     ctx.need("parties", "edit")
     p = _get(ctx, party_id)
+    _check_price_list(ctx, data.price_list_id)
     for k, v in data.model_dump().items():
         setattr(p, k, v)
     ctx.db.commit()
