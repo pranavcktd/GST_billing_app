@@ -7,7 +7,7 @@ import { api, qs } from "@/lib/api";
 import { fmtDate } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 
-type FieldType = "money" | "int" | "number" | "text" | "bool" | "rates" | "list" | "map_text" | "map_number";
+type FieldType = "money" | "int" | "number" | "text" | "bool" | "rates" | "list" | "map_text" | "map_number" | "json";
 interface ConfigField { key: string; group: string; label: string; type: FieldType; default: unknown; help: string }
 interface Version { id: string; effective_from: string; values: Record<string, unknown>; note: string | null; by: string; at: string }
 interface ConfigData { fields: ConfigField[]; effective: Record<string, unknown>; on: string; versions: Version[] }
@@ -19,6 +19,7 @@ function toText(type: FieldType, v: unknown): string {
   if (v === null || v === undefined) return "";
   if (type === "rates") return (v as number[]).join(", ");
   if (type === "list") return (v as string[]).join("\n");
+  if (type === "json") return JSON.stringify(v, null, 2);
   if (type === "map_text" || type === "map_number") return Object.entries(v as Record<string, unknown>).map(([k, x]) => `${k} = ${x}`).join("\n");
   return String(v);
 }
@@ -26,6 +27,7 @@ function toText(type: FieldType, v: unknown): string {
 function fromText(type: FieldType, t: string): unknown {
   if (type === "rates") return t.split(/[,\s]+/).filter(Boolean).map(Number);
   if (type === "list") return t.split("\n").map((x) => x.trim()).filter(Boolean);
+  if (type === "json") return t; // checked on the server, which explains what is wrong
   if (type === "map_text" || type === "map_number") {
     const out: Record<string, unknown> = {};
     for (const line of t.split("\n")) {
@@ -44,7 +46,8 @@ function fromText(type: FieldType, t: string): unknown {
 
 const summary = (f: ConfigField | undefined, v: unknown) => {
   if (!f) return String(v);
-  const t = toText(f.type, v).replace(/\n/g, "; ");
+  if (f.type === "json") return Array.isArray(v) ? `${v.length} entries — ${(v as { name?: string }[]).slice(0, 3).map((x) => x.name).join(", ")}…` : "JSON";
+  const t =toText(f.type, v).replace(/\n/g, "; ");
   return t.length > 80 ? t.slice(0, 80) + "…" : t;
 };
 
@@ -116,8 +119,9 @@ export function AdminConfig() {
             {fields.map((f) => {
               const value = edits[f.key] ?? current(f);
               const dirty = f.key in edits && edits[f.key] !== current(f);
-              const multi = f.type === "list" || f.type.startsWith("map_");
-              const hint = f.type === "rates" ? "Comma separated, e.g. 0, 5, 18, 40" : multi ? (f.type === "list" ? "One per line" : "One per line: CODE = value") : undefined;
+              const multi = f.type === "list" || f.type.startsWith("map_") || f.type === "json";
+              const hint = f.type === "rates" ? "Comma separated, e.g. 0, 5, 18, 40" : f.type === "json" ? "JSON — edit carefully; it is checked when you save."
+                : multi ? (f.type === "list" ? "One per line" : "One per line: CODE = value") : undefined;
               return (
                 <Field key={f.key} label={f.label + (dirty ? " •" : "")} hint={[f.help, hint].filter(Boolean).join(" ")} className={multi ? "md:col-span-2" : ""}>
                   {f.type === "bool" ? (
@@ -126,7 +130,7 @@ export function AdminConfig() {
                       {value === "true" ? "On" : "Off"}
                     </label>
                   ) : multi ? (
-                    <Textarea rows={Math.min(10, Math.max(3, value.split("\n").length))} className={`font-mono text-xs ${dirty ? "!border-amber-400" : ""}`}
+                    <Textarea rows={Math.min(f.type === "json" ? 24 : 10, Math.max(3, value.split("\n").length))} className={`font-mono text-xs ${dirty ? "!border-amber-400" : ""}`}
                       value={value} onChange={(e) => setEdits({ ...edits, [f.key]: e.target.value })} />
                   ) : (
                     <Input className={dirty ? "!border-amber-400" : ""} inputMode={f.type === "text" ? undefined : "decimal"}
