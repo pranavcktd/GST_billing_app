@@ -168,6 +168,7 @@ class Party(Base):
     # Signed: positive = receivable (party owes us), negative = payable.
     opening_balance: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
     credit_limit: Mapped[Decimal | None] = mapped_column(Money)
+    price_list_id: Mapped[str | None] = mapped_column(ForeignKey("price_lists.id", ondelete="SET NULL"))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
@@ -850,3 +851,26 @@ class RecurringInvoice(Base):
     last_error: Mapped[str | None] = mapped_column(String(300))
     created_by: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class PriceList(Base):
+    """Special selling prices for a group of customers (wholesale, dealer, VIP …)."""
+
+    __tablename__ = "price_lists"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    based_on: Mapped[str] = mapped_column(String(12), default="SALE_PRICE", server_default="SALE_PRICE")  # SALE_PRICE | MRP
+    adjust_pct: Mapped[Decimal] = mapped_column(Rate, default=Decimal("0"), server_default="0")  # -5 = 5% below
+    note: Mapped[str | None] = mapped_column(String(300))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class PriceListItem(Base):
+    __tablename__ = "price_list_items"
+    __table_args__ = (UniqueConstraint("price_list_id", "item_id", name="uq_price_list_item"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    price_list_id: Mapped[str] = mapped_column(ForeignKey("price_lists.id", ondelete="CASCADE"), index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey("items.id", ondelete="CASCADE"), index=True)
+    rate: Mapped[Decimal] = mapped_column(Money)

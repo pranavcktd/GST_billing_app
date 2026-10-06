@@ -284,6 +284,7 @@ class PartyIn(BaseModel):
     shipping_address: Opt(500) = None
     opening_balance: Annotated[Decimal, Field(max_digits=14, decimal_places=2)] = Decimal("0")
     credit_limit: NonNeg | None = None
+    price_list_id: str | None = None
 
     _gstin = field_validator("gstin")(_check_gstin)
     _state = field_validator("state_code")(_check_state)
@@ -318,6 +319,7 @@ class PartyOut(ORM):
     shipping_address: str | None
     opening_balance: Num
     credit_limit: Num | None
+    price_list_id: str | None = None
     is_active: bool
     balance: Num = Decimal("0")  # + receivable / - payable
 
