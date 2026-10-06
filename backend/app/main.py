@@ -17,6 +17,7 @@ from .routers import (
     compliance,
     integrations,
     practice,
+    reminders,
     search,
     gstin,
     einvoice,
@@ -62,7 +63,7 @@ async def security_headers(request: Request, call_next):
 
 
 def _backup_loop():
-    """Daily automatic full platform backup (checked hourly)."""
+    """Hourly: daily automatic full platform backup and daily payment reminders."""
     import time
 
     from .db import SessionLocal
@@ -75,6 +76,12 @@ def _backup_loop():
             maybe_auto_full_backup(db)
         except Exception:  # noqa: BLE001
             logging.getLogger("gst_billing").exception("automatic full backup failed")
+            db.rollback()
+        try:
+            from .services.reminders import maybe_run_daily
+            maybe_run_daily(db)
+        except Exception:  # noqa: BLE001
+            logging.getLogger("gst_billing").exception("payment reminders failed")
         finally:
             db.close()
 
@@ -93,7 +100,7 @@ async def integrity_error(_: Request, exc: IntegrityError):
     return JSONResponse(status_code=409, content={"detail": msg})
 
 
-for r in (auth, businesses, compliance, gstin, integrations, practice, search, parties, items, vouchers, payments, reports, uploads, cashbank, loans, expenses,
+for r in (auth, businesses, compliance, gstin, integrations, practice, reminders, search, parties, items, vouchers, payments, reports, uploads, cashbank, loans, expenses,
           utilities, godowns, einvoice, billing, exports, platform, admin, smtp, sharing):
     app.include_router(r.router, prefix="/api")
 

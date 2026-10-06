@@ -51,6 +51,8 @@ export const ENTRIES: SearchEntry[] = [
   { group: "Go to", title: "Capital / drawings", href: "/cash-bank/capital", k: "owner investment", perm: ["cashbank", "view"] },
   { group: "Go to", title: "Tax payments", href: "/cash-bank/tax-payments", k: "gst challan pmt tds paid", perm: ["cashbank", "view"] },
   { group: "Go to", title: "All reports", href: "/reports", k: "report list" },
+  { group: "Go to", title: "Collect payments / reminders", href: "/reminders", k: "remind reminder overdue due udhar vasooli collection whatsapp payment follow up", perm: ["sales", "view"] },
+  { group: "Settings", title: "Automatic payment reminders", href: "/settings?tab=reminders", k: "reminder schedule overdue email", perm: ["settings", "view"] },
   { group: "Go to", title: "Receivables & payables (outstanding)", href: "/reports/outstanding", k: "udhar due collect aging", perm: ["reports_financial", "view"] },
 
   // ---- GST

@@ -36,7 +36,7 @@ def test_full_billing_flow(client):
         "opening_balance": -500}).json()
     item = client.post("/api/items", headers=h, json={
         "name": "Steel Bottle", "hsn_sac": "7323", "unit": "PCS", "sale_price": 500, "purchase_price": 300,
-        "gst_rate": 18, "opening_stock": 10}).json()
+        "gst_rate": 18, "opening_stock": 10, "opening_stock_date": "2026-04-01"}).json()
     assert item["stock"] == 10
 
     # bad GSTIN is rejected
