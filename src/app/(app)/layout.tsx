@@ -2,6 +2,7 @@
 
 import {
   BellRing,
+  Factory,
   Route,
   Repeat,
   Briefcase,
@@ -100,6 +101,7 @@ const NAV: { section?: string; items: NavItem[] }[] = [
       { href: "/parties", label: "Parties", icon: Users, perm: ["parties", "view"] },
       { href: "/items", label: "Items & Stock", icon: Boxes, perm: ["items", "view"] },
       { href: "/godowns", label: "Godowns & Transfers", icon: Warehouse, perm: ["items", "view"] },
+      { href: "/manufacturing", label: "Manufacturing", icon: Factory, perm: ["items", "view"] },
       { href: "/price-lists", label: "Price Lists", icon: Tags, perm: ["items", "view"] },
       { href: "/items/labels", label: "Barcode Labels", icon: Barcode, perm: ["items", "view"] },
     ],
