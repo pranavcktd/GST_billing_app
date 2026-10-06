@@ -5,7 +5,7 @@ import { ImageUpload } from "@/components/ImageUpload";
 import { DEFAULT_PRINT } from "@/components/InvoiceDocument";
 import { GstinVerify, type GstinInfo } from "@/components/GstinVerify";
 import { Button, Card, ErrorBox, Field, Input, Select, Textarea } from "@/components/ui";
-import { STATES } from "@/lib/constants";
+import { ENTITY_TYPES, guessEntityType, STATES } from "@/lib/constants";
 import { gstinError } from "@/lib/gst";
 import type { Business, BusinessGstType } from "@/lib/types";
 
@@ -19,7 +19,7 @@ export const emptyBusiness: BusinessDraft = {
   receipt_prefix: "RCT", payment_prefix: "PAY", challan_prefix: "DC", sale_order_prefix: "SO",
   purchase_order_prefix: "PO", expense_prefix: "EXP", invoice_terms: null, auto_backup: true, backup_email: null,
   transfer_prefix: "ST", print_settings: null, einvoice_username: null,
-  lut_number: null, lut_valid_till: null, composition_type: "TRADER",
+  lut_number: null, lut_valid_till: null, composition_type: "TRADER", entity_type: "PROPRIETORSHIP",
 };
 
 const GST_TYPES: { value: BusinessGstType; label: string; hint: string }[] = [
@@ -53,7 +53,9 @@ export function BusinessForm({
 
   function onGstin(v: string) {
     const g = v.toUpperCase();
-    setB((prev) => ({ ...prev, gstin: g, state_code: g.length >= 2 && STATES[g.slice(0, 2)] ? g.slice(0, 2) : prev.state_code }));
+    setB((prev) => ({ ...prev, gstin: g, state_code: g.length >= 2 && STATES[g.slice(0, 2)] ? g.slice(0, 2) : prev.state_code,
+      // a new business gets a first guess of its constitution from the PAN inside the GSTIN
+      entity_type: g.length === 15 && (prev.entity_type ?? "PROPRIETORSHIP") === "PROPRIETORSHIP" ? ((guessEntityType(null, g) as BusinessDraft["entity_type"]) ?? prev.entity_type) : prev.entity_type }));
   }
 
   const [filled, setFilled] = useState<string[]>([]);
@@ -61,6 +63,8 @@ export function BusinessForm({
   function applyGstin(d: GstinInfo) {
     const done = ["legal name", "state", "GST registration type"];
     const next: BusinessDraft = { ...b, legal_name: d.legal_name ?? b.legal_name, state_code: d.state_code, gst_type: d.business_gst_type };
+    const ent = guessEntityType(d.constitution, b.gstin);
+    if (ent) { next.entity_type = ent as BusinessDraft["entity_type"]; done.push("type of business"); }
     if (!b.name.trim() && (d.trade_name || d.legal_name)) { next.name = (d.trade_name || d.legal_name)!; done.unshift("business name"); }
     if (d.address) { next.address = d.address; done.push("address"); }
     if (d.city) { next.city = d.city; done.push("city"); }
@@ -95,6 +99,11 @@ export function BusinessForm({
           </Field>
           <Field label="Legal name (as per GST)">
             <Input {...text("legal_name")} />
+          </Field>
+          <Field label="Type of business (constitution)" hint="Used to show the compliances that apply to you (GST, MCA, income tax)">
+            <Select value={b.entity_type ?? "PROPRIETORSHIP"} onChange={(e) => set("entity_type", e.target.value as BusinessDraft["entity_type"])}>
+              {Object.entries(ENTITY_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </Select>
           </Field>
           <Field label="GST registration" className="sm:col-span-2">
             <div className="grid gap-2 sm:grid-cols-3">

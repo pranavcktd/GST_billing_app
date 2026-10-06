@@ -116,6 +116,8 @@ class MyBusinessOut(BaseModel):
     role: Role
     owned: bool = False
     permissions: dict | None = None
+    modules: dict | None = None
+    entity_type: str = "PROPRIETORSHIP"
 
 
 class MeOut(BaseModel):
@@ -160,6 +162,15 @@ class PrintSettings(BaseModel):
     custom_fields: Annotated[list[CustomField], Field(max_length=8)] = []
 
 
+EntityType = Literal["PROPRIETORSHIP", "PARTNERSHIP", "LLP", "PRIVATE_LIMITED", "OPC", "PUBLIC_LIMITED", "HUF",
+                     "TRUST_SOCIETY", "OTHER"]
+
+
+class ModulesIn(BaseModel):
+    mode: Literal["BOTH", "GOODS", "SERVICES"] = "BOTH"
+    hidden: Annotated[list[Annotated[str, StringConstraints(pattern=r"^[a-z_]{2,30}$")]], Field(max_length=40)] = []
+
+
 class BusinessIn(BaseModel):
     name: Name
     legal_name: Opt() = None
@@ -197,6 +208,7 @@ class BusinessIn(BaseModel):
     lut_number: Opt(30) = None
     lut_valid_till: dt.date | None = None
     composition_type: Literal["TRADER", "MANUFACTURER", "RESTAURANT", "SERVICE"] = "TRADER"
+    entity_type: EntityType = "PROPRIETORSHIP"
     print_settings: PrintSettings = PrintSettings()
     einvoice_username: Opt(100) = None
     einvoice_password: Opt(100) = None  # write-only; stored encrypted
@@ -262,6 +274,8 @@ class BusinessOut(ORM):
     lut_number: str | None
     lut_valid_till: dt.date | None
     composition_type: str
+    entity_type: str = "PROPRIETORSHIP"
+    modules: dict | None = None
     print_settings: PrintSettings | None
     einvoice_username: str | None
     einvoice_password_set: bool = False

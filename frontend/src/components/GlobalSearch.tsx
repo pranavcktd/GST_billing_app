@@ -11,6 +11,7 @@ import { kindOf } from "@/lib/constants";
 import { fmtDate, money } from "@/lib/format";
 import { ENTRIES, type Group, score } from "@/lib/searchIndex";
 import type { ReportMeta, VoucherType } from "@/lib/types";
+import { hiddenHrefs, isHiddenHref } from "@/lib/modules";
 
 interface Found {
   parties: { id: string; name: string; gstin: string | null; phone: string | null; type: string }[];
@@ -63,7 +64,7 @@ export function GlobalSearch() {
 
 function Palette({ onClose }: { onClose: () => void }) {
   const router = useRouter();
-  const { me } = useAuth();
+  const { me, business } = useAuth();
   const { can } = usePerms();
   const [q, setQ] = useState("");
   const [found, setFound] = useState<Found | null>(null);
@@ -83,7 +84,8 @@ function Palette({ onClose }: { onClose: () => void }) {
 
   const hits = useMemo<Hit[]>(() => {
     const term = q.trim();
-    const allowed = ENTRIES.filter((e) => (!e.perm || can(...e.perm)) && (!e.platform || me?.platform_role === e.platform || me?.platform_role === "SUPERADMIN") && (!e.practice || (me?.practice_clients ?? 0) > 0));
+    const hidden = hiddenHrefs(business);
+    const allowed = ENTRIES.filter((e) => !isHiddenHref(e.href, hidden) && (!e.perm || can(...e.perm)) && (!e.platform || me?.platform_role === e.platform || me?.platform_role === "SUPERADMIN") && (!e.practice || (me?.practice_clients ?? 0) > 0));
     if (!term) {
       const sug = SUGGEST.map((t) => allowed.find((e) => e.title === t)).filter(Boolean)
         .map((e) => ({ key: e!.href, section: "Suggestions", title: e!.title, href: e!.href, icon: GROUP_ICON[e!.group] }));
@@ -107,7 +109,7 @@ function Palette({ onClose }: { onClose: () => void }) {
     // actions first when the query reads like a command ("add party"), records first otherwise
     const commandy = /^(add|new|create|make|receive|pay|go|open)\b/i.test(term) || data.length === 0;
     return commandy ? [...pages, ...data, ...reps] : [...data, ...pages, ...reps];
-  }, [q, found, reports, can, me, recent]);
+  }, [q, found, reports, can, me, recent, business]);
 
   const current = Math.min(active, Math.max(0, hits.length - 1));
 

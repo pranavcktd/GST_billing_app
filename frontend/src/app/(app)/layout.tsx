@@ -47,6 +47,7 @@ import { GlobalSearch } from "@/components/GlobalSearch";
 import { OfflineSync } from "@/components/OfflineSync";
 import { PlanBadge } from "@/components/PlanBadge";
 import { UserBar } from "@/components/UserBar";
+import { businessMode, hiddenHrefs, isHiddenHref } from "@/lib/modules";
 
 type NavItem = { href: string; label: string; icon: React.ElementType; perm?: [Module, Action] | [Module, Action][] };
 
@@ -139,7 +140,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const allowed = (i: NavItem) =>
     !i.perm || (Array.isArray(i.perm[0]) ? (i.perm as [Module, Action][]).some(([m, a]) => can(m, a)) : can(...(i.perm as [Module, Action])));
-  const nav = NAV.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length);
+  const hidden = hiddenHrefs(business);
+  const services = businessMode(business) === "SERVICES";
+  const nav = NAV.map((g) => ({ ...g, items: g.items.filter((i) => allowed(i) && !isHiddenHref(i.href, hidden))
+    .map((i) => (services && i.href === "/items" ? { ...i, label: "Services & Items" } : i)) })).filter((g) => g.items.length);
   const platformItems: NavItem[] = [];
   if (me.practice_clients > 0) platformItems.push({ href: "/practice", label: "Practitioner workspace", icon: Briefcase });
   if (me.platform_role === "SUPERADMIN") platformItems.push({ href: "/admin", label: "Super Admin", icon: Shield });

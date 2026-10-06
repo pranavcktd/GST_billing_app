@@ -4,7 +4,9 @@ import { useState } from "react";
 import { HsnPicker } from "@/components/HsnPicker";
 import { ImageUpload } from "@/components/ImageUpload";
 import { Button, Card, ErrorBox, Field, Input, Select, Textarea } from "@/components/ui";
+import { useAuth } from "@/lib/auth";
 import { GST_RATES, UNITS } from "@/lib/constants";
+import { businessMode } from "@/lib/modules";
 import { today } from "@/lib/format";
 import type { Item, ItemType } from "@/lib/types";
 
@@ -26,7 +28,10 @@ export function ItemForm({
   isNew: boolean;
   onSubmit: (i: ItemDraft) => Promise<void>;
 }) {
-  const [it, setIt] = useState<ItemDraft>(initial);
+  const mode = businessMode(useAuth().business);
+  // a products-only / services-only business starts new items as that type and does not see the switch
+  const [it, setIt] = useState<ItemDraft>(() => (isNew && mode === "SERVICES" && initial.type === "GOODS" ? { ...initial, type: "SERVICE", unit: "NA" } : initial));
+  const showSwitch = mode === "BOTH" || !isNew || (mode === "SERVICES" ? it.type !== "SERVICE" : it.type !== "GOODS");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof ItemDraft>(k: K, v: ItemDraft[K]) => setIt((prev) => ({ ...prev, [k]: v }));
@@ -60,7 +65,7 @@ export function ItemForm({
     <form onSubmit={submit} className="space-y-5">
       <ErrorBox message={error} />
       <Card className="p-5">
-        <div className="mb-4 inline-flex rounded-lg border border-gray-200 p-0.5">
+        {showSwitch && <div className="mb-4 inline-flex rounded-lg border border-gray-200 p-0.5">
           {(["GOODS", "SERVICE"] as ItemType[]).map((t) => (
             <button
               type="button"
@@ -72,7 +77,7 @@ export function ItemForm({
               {t === "GOODS" ? "Product" : "Service"}
             </button>
           ))}
-        </div>
+        </div>}
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Item name" required className="sm:col-span-2"><Input required autoFocus {...text("name")} /></Field>
           <Field label="Item code / SKU"><Input {...text("code")} /></Field>

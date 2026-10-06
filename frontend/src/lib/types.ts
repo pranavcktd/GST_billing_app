@@ -15,9 +15,10 @@ export type PaymentType = "IN" | "OUT";
 export type PaymentMode = "CASH" | "BANK" | "UPI" | "CHEQUE" | "CARD" | "OTHER";
 
 export interface User { id: string; name: string; email: string; phone: string | null }
+export type EntityType = "PROPRIETORSHIP" | "PARTNERSHIP" | "LLP" | "PRIVATE_LIMITED" | "OPC" | "PUBLIC_LIMITED" | "HUF" | "TRUST_SOCIETY" | "OTHER";
 export interface MyBusiness {
   id: string; name: string; gstin: string | null; gst_type: BusinessGstType; role: Role; owned: boolean;
-  permissions: Permissions;
+  permissions: Permissions; modules: { mode: "BOTH" | "GOODS" | "SERVICES"; hidden: string[] } | null; entity_type: EntityType;
 }
 export interface Me {
   user: User; businesses: MyBusiness[]; platform_role: "SUPERADMIN" | "RESELLER" | null;
@@ -55,7 +56,7 @@ export interface Business {
   invoice_terms: string | null; auto_backup: boolean; backup_email: string | null; transfer_prefix: string;
   print_settings: PrintSettings | null; einvoice_username: string | null; einvoice_password_set: boolean;
   lut_number: string | null; lut_valid_till: string | null;
-  composition_type: "TRADER" | "MANUFACTURER" | "RESTAURANT" | "SERVICE";
+  composition_type: "TRADER" | "MANUFACTURER" | "RESTAURANT" | "SERVICE"; entity_type: EntityType;
   plan: PlanInfo | null;
 }
 

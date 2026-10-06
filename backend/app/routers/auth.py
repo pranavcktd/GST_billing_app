@@ -66,7 +66,8 @@ def me_payload(db, user: User) -> MeOut:
         businesses=[
             MyBusinessOut(id=m.business.id, name=m.business.name, gstin=m.business.gstin,
                           gst_type=m.business.gst_type, role=m.role, owned=m.business.owner_id == user.id,
-                          permissions=effective(m.role, m.permissions))
+                          permissions=effective(m.role, m.permissions), modules=m.business.modules,
+                          entity_type=m.business.entity_type or "PROPRIETORSHIP")
             for m in memberships
         ],
     )

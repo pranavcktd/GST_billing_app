@@ -120,6 +120,12 @@ class Business(Base):
     auto_backup: Mapped[bool] = mapped_column(Boolean, default=True)
     backup_email: Mapped[str | None] = mapped_column(String(200))
     reminder_settings: Mapped[dict | None] = mapped_column(JSON)  # payment reminders (see services/reminders.py)
+    # constitution of the business (drives the compliance calendar): PROPRIETORSHIP, PARTNERSHIP, LLP, PRIVATE_LIMITED, ...
+    entity_type: Mapped[str] = mapped_column(String(20), default="PROPRIETORSHIP", server_default="PROPRIETORSHIP")
+    # which menus the business uses: {"mode": "BOTH" | "GOODS" | "SERVICES", "hidden": [module keys]}
+    modules: Mapped[dict | None] = mapped_column(JSON)
+    # compliance calendar answers: {"gst_filing": "MONTHLY" | "QUARTERLY", "tax_audit": bool, "tds": bool, ...}
+    compliance_settings: Mapped[dict | None] = mapped_column(JSON)
     transfer_prefix: Mapped[str] = mapped_column(String(8), default="ST")
     # exports / SEZ under Letter of Undertaking (zero-rated without paying IGST)
     lut_number: Mapped[str | None] = mapped_column(String(30))
