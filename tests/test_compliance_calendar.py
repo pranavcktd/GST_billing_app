@@ -126,3 +126,33 @@ def test_filed_items_listed_even_before_track_from():
     items = CC.calendar_for(b, CC.DEFAULT_RULES, done, today=TODAY)["items"]
     assert any(i["code"] == "GSTR1_M" and i["period_key"] == "2026-05" and i["status"] == "DONE" for i in items)
     assert not any(i["code"] == "GSTR3B_M" and i["period_key"] == "2026-05" for i in items)  # pending + before tracking: hidden
+
+
+def test_pf_esi_separate_and_company_defaults():
+    assert {"PF", "ESI"} <= codes(biz(payroll=True))  # answers saved before the split
+    only_esi = codes(biz(esi=True))
+    assert "ESI" in only_esi and "PF" not in only_esi
+    assert "TDS_PAY" in codes(biz(entity="PRIVATE_LIMITED"))  # companies deduct TDS unless they say no
+    assert "TDS_PAY" not in codes(biz(entity="PRIVATE_LIMITED", tds=False))
+
+
+def test_super_admin_hides_laws_and_controls_sync(client, monkeypatch):
+    root = superadmin(client, monkeypatch)
+    h = make_business(client, signup(client), entity_type="PRIVATE_LIMITED")
+    client.put("/api/compliance/settings", headers=h, json={"gst_filing": "MONTHLY", "pf": True, "esi": True, "employees": 25, "track_from": "2026-04-01"})
+    cal = client.get("/api/compliance/calendar", headers=h).json()
+    assert cal["settings"]["profile_done"] and "PAYROLL" in cal["laws_applicable"] and any(i["code"] == "PF" for i in cal["items"])
+    reg = client.get("/api/compliance/register", headers=h, params={"law": "PAYROLL", "fy": 2026}).json()
+    assert [c["code"] for c in reg["columns"]] == ["PF", "ESI"]
+
+    assert client.post("/api/admin/config/versions", headers=root, json={"effective_from": "2017-07-01", "values": {"compliance_laws": ["GST", "NOPE"]}}).status_code == 422
+    assert client.post("/api/admin/config/versions", headers=root, json={"effective_from": "2017-07-01", "values": {"compliance_laws": ["GST", "INCOME_TAX"]}}).status_code == 201
+    cal = client.get("/api/compliance/calendar", headers=h).json()
+    assert cal["laws_enabled"] == ["GST", "INCOME_TAX"] and not any(i["authority"] in ("PAYROLL", "MCA", "TDS") for i in cal["items"])
+
+    # fetching from the GST portal is off until the super admin switches it on
+    client.put("/api/admin/gstin-api", headers=root, json={"enabled": True, "api_key": "gak_test_key_123456"})
+    assert client.get("/api/compliance/sync/available", headers=h).json()["available"] is False
+    assert client.post("/api/compliance/sync", headers=h).status_code == 503
+    client.put("/api/admin/gstin-api", headers=root, json={"filing_sync": True})
+    assert client.get("/api/compliance/sync/available", headers=h).json()["available"] is True

@@ -113,6 +113,9 @@ FIELDS: list[Field] = [
     Field("ca_residual_value_pct", "Final accounts", "Companies Act residual value (% of cost)", "number", 5,
           "Used for useful-life depreciation (Schedule II)."),
     # ---- compliance calendar (Compliance page of every business)
+    Field("compliance_laws", "Compliance calendar", "Laws shown to businesses", "list",
+          ["GST", "INCOME_TAX", "TDS", "MCA", "LLP", "PAYROLL"],
+          "Untick a law to hide all its filings from every business's calendar."),
     Field("compliance_rules", "Compliance calendar", "Filings, due dates and penalties", "json", DEFAULT_RULES,
           "Each filing: code, name, authority, who it applies to, frequency, due date rule and the penalty text "
           "shown when it is late. {late_fee_per_day} and {interest_rate} are replaced with the values above. "
@@ -296,6 +299,11 @@ def clean_values(values: dict) -> dict:
             out[key] = rates
         elif f.type == "list":
             items = [str(x).strip() for x in (v or []) if str(x).strip()]
+            if key == "compliance_laws":
+                from .compliance_calendar import LAWS  # local import: that module reads this one
+                bad = [x for x in items if x not in LAWS]
+                if bad:
+                    raise ConfigError(f"{f.label}: unknown law {', '.join(bad)} (use {', '.join(LAWS)})")
             out[key] = items
         elif f.type == "json":
             if isinstance(v, str):

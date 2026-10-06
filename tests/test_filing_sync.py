@@ -41,7 +41,7 @@ def test_sync_marks_filed_and_saves_credit(client, monkeypatch):
     # not available until the super admin switches the GST data service on
     assert client.post("/api/compliance/sync", headers=h).status_code == 503
     root = superadmin(client, monkeypatch)
-    enable(client, root, filing_sync_hours=24)
+    enable(client, root, filing_sync=True, filing_sync_hours=24)
     assert client.get("/api/compliance/sync/available", headers=h).json()["available"]
 
     client.put("/api/compliance/settings", headers=h, json={"gst_filing": "MONTHLY", "track_from": "2026-04-01"})
@@ -71,7 +71,7 @@ def test_sync_marks_filed_and_saves_credit(client, monkeypatch):
 def test_gst_register_shows_portal_data(client, monkeypatch):
     h = make_business(client, signup(client))
     root = superadmin(client, monkeypatch)
-    enable(client, root)
+    enable(client, root, filing_sync=True)
     client.put("/api/compliance/settings", headers=h, json={"gst_filing": "MONTHLY", "track_from": "2026-04-01"})
     provider(monkeypatch, {"2026-27": [
         {"return_type": "GSTR-1", "return_period": "2026-04", "filing_status": "Filed", "filing_date": "2026-05-10", "arn": "AA1"},

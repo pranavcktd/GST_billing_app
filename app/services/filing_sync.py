@@ -118,7 +118,7 @@ def keys_for(ret: dict) -> list[tuple[str, str]]:
 def sync(db: Session, biz: Business, rules: list[dict], user_name: str, today: dt.date | None = None,
          only_fy: int | None = None) -> dict:
     s = G.settings(db)
-    if not (s.get("enabled") and G._key(s)) or not s.get("filing_sync", True):
+    if not (s.get("enabled") and G._key(s)) or not s.get("filing_sync"):
         raise HTTPException(503, "Fetching filing status is not switched on by the platform administrator — mark filings yourself.")
     if not biz.gstin or biz.gst_type.value not in ("REGULAR", "COMPOSITION"):
         raise HTTPException(400, "Only GST-registered businesses (with a GSTIN) can fetch return status.")

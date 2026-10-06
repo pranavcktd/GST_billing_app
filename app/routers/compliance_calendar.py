@@ -72,7 +72,7 @@ def sync_available(ctx: BCtx):
     from ..services import gstin_verify as G
 
     s = G.settings(ctx.db)
-    ok = bool(s.get("enabled") and G._key(s) and s.get("filing_sync", True))
+    ok = bool(s.get("enabled") and G._key(s) and s.get("filing_sync"))
     cs = ctx.business.compliance_settings or {}
     return {"available": ok and bool(ctx.business.gstin) and ctx.business.gst_type.value in ("REGULAR", "COMPOSITION"),
             "last_sync_at": cs.get("last_sync_at"), "min_hours": int(s.get("filing_sync_hours") or 24)}
@@ -92,14 +92,17 @@ class SettingsIn(BaseModel):
     gst_filing: Literal["MONTHLY", "QUARTERLY"] = "MONTHLY"
     tax_audit: bool = False
     tds: bool = False
-    payroll: bool = False
+    pf: bool = False
+    esi: bool = False
+    employees: int | None = Field(None, ge=0, le=1000000)
     track_from: dt.date | None = None
 
 
 @router.put("/settings")
 def put_settings(data: SettingsIn, ctx: BCtx):
     ctx.need("settings", "edit")
-    ctx.business.compliance_settings = {**(ctx.business.compliance_settings or {}), **data.model_dump(mode="json"),
+    old = {k: v for k, v in (ctx.business.compliance_settings or {}).items() if k != "payroll"}
+    ctx.business.compliance_settings = {**old, **data.model_dump(mode="json"), "profile_done": True,
                                         "track_from": (data.track_from or CC.settings(ctx.business)["track_from"]).__str__()}
     ctx.db.commit()
     return CC.settings(ctx.business)
