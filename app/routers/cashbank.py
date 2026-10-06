@@ -134,10 +134,27 @@ def create_transfer(data: TransferIn, ctx: BCtx):
     return t
 
 
+@router.put("/transfers/{transfer_id}", response_model=TransferOut)
+def update_transfer(transfer_id: str, data: TransferIn, ctx: BCtx):
+    ctx.need("cashbank", "edit")
+    t = _owned(ctx, AccountTransfer, transfer_id, "Transfer")
+    if data.from_account_id == data.to_account_id:
+        raise HTTPException(400, "Choose two different accounts")
+    _owned(ctx, Account, data.from_account_id, "Account")
+    _owned(ctx, Account, data.to_account_id, "Account")
+    ctx.need_past_edit(min(t.date, data.date))
+    for k, v in data.model_dump().items():
+        setattr(t, k, v)
+    ctx.db.commit()
+    return t
+
+
 @router.delete("/transfers/{transfer_id}", status_code=204)
 def delete_transfer(transfer_id: str, ctx: BCtx):
     ctx.need("cashbank", "delete")
-    ctx.db.delete(_owned(ctx, AccountTransfer, transfer_id, "Transfer"))
+    t = _owned(ctx, AccountTransfer, transfer_id, "Transfer")
+    ctx.need_past_edit(t.date)
+    ctx.db.delete(t)
     ctx.db.commit()
 
 
@@ -204,10 +221,24 @@ def create_capital(data: CapitalIn, ctx: BCtx):
     return c
 
 
+@router.put("/capital/{entry_id}", response_model=CapitalOut)
+def update_capital(entry_id: str, data: CapitalIn, ctx: BCtx):
+    ctx.need("cashbank", "edit")
+    c = _owned(ctx, CapitalEntry, entry_id, "Entry")
+    ctx.need_past_edit(min(c.date, data.date))
+    acc = resolve_account(ctx.db, ctx.bid, data.account_id)
+    for k, v in {**data.model_dump(), "account_id": acc.id}.items():
+        setattr(c, k, v)
+    ctx.db.commit()
+    return c
+
+
 @router.delete("/capital/{entry_id}", status_code=204)
 def delete_capital(entry_id: str, ctx: BCtx):
     ctx.need("cashbank", "delete")
-    ctx.db.delete(_owned(ctx, CapitalEntry, entry_id, "Entry"))
+    c = _owned(ctx, CapitalEntry, entry_id, "Entry")
+    ctx.need_past_edit(c.date)
+    ctx.db.delete(c)
     ctx.db.commit()
 
 
@@ -229,8 +260,22 @@ def create_tax_payment(data: TaxPaymentIn, ctx: BCtx):
     return t
 
 
+@router.put("/tax-payments/{payment_id}", response_model=TaxPaymentOut)
+def update_tax_payment(payment_id: str, data: TaxPaymentIn, ctx: BCtx):
+    ctx.need("cashbank", "edit")
+    t = _owned(ctx, TaxPayment, payment_id, "Tax payment")
+    ctx.need_past_edit(min(t.date, data.date))
+    acc = resolve_account(ctx.db, ctx.bid, data.account_id)
+    for k, v in {**data.model_dump(), "account_id": acc.id}.items():
+        setattr(t, k, v)
+    ctx.db.commit()
+    return t
+
+
 @router.delete("/tax-payments/{payment_id}", status_code=204)
 def delete_tax_payment(payment_id: str, ctx: BCtx):
     ctx.need("cashbank", "delete")
-    ctx.db.delete(_owned(ctx, TaxPayment, payment_id, "Tax payment"))
+    t = _owned(ctx, TaxPayment, payment_id, "Tax payment")
+    ctx.need_past_edit(t.date)
+    ctx.db.delete(t)
     ctx.db.commit()

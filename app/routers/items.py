@@ -137,6 +137,21 @@ def adjust_stock(item_id: str, data: StockAdjustIn, ctx: BCtx):
     return _out(it, item_stock(ctx.db, ctx.bid, [it.id]).get(it.id, 0))
 
 
+@router.delete("/{item_id}/movements/{movement_id}", status_code=204)
+def delete_adjustment(item_id: str, movement_id: str, ctx: BCtx):
+    """Remove a manual stock adjustment entered by mistake (bills, transfers and production are changed from their own pages)."""
+    ctx.need("items", "edit")
+    it = _get(ctx, item_id)
+    m = ctx.db.get(StockMovement, movement_id)
+    if not m or m.item_id != it.id:
+        raise HTTPException(404, "Entry not found")
+    if m.type != StockMoveType.ADJUSTMENT:
+        raise HTTPException(400, "Only manual stock adjustments can be deleted here — change the bill, transfer or production entry instead")
+    ctx.need_past_edit(m.date)
+    ctx.db.delete(m)
+    ctx.db.commit()
+
+
 @router.get("/{item_id}/movements", response_model=list[StockMoveOut])
 def movements(item_id: str, ctx: BCtx):
     ctx.need("items", "view")

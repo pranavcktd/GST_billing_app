@@ -51,7 +51,7 @@ def statement(loan: Loan, date_from: dt.date | None = None, date_to: dt.date | N
         if date_to and t.date > date_to:
             continue
         running = (running if running is not None else opening) + change
-        rows.append(dict(id=t.id, date=t.date, type=t.type.value, principal=t.principal, interest=t.interest,
+        rows.append(dict(id=t.id, date=t.date, type=t.type.value, principal=t.principal, interest=t.interest, account_id=t.account_id,
                          paid=t.principal + t.interest if t.type != LoanTxnType.DISBURSEMENT else ZERO,
                          received=t.principal if t.type == LoanTxnType.DISBURSEMENT else ZERO,
                          balance=running, note=t.note))
@@ -116,6 +116,24 @@ def add_txn(loan_id: str, data: LoanTxnIn, ctx: BCtx):
     return t
 
 
+@router.put("/{loan_id}/txns/{txn_id}", response_model=LoanTxnOut)
+def update_txn(loan_id: str, txn_id: str, data: LoanTxnIn, ctx: BCtx):
+    ctx.need("cashbank", "edit")
+    loan = _get(ctx, loan_id)
+    t = ctx.db.get(LoanTxn, txn_id)
+    if not t or t.loan_id != loan.id:
+        raise HTTPException(404, "Entry not found")
+    ctx.need_past_edit(min(t.date, data.date))
+    acc = resolve_account(ctx.db, ctx.bid, data.account_id)
+    old_principal = t.principal if t.type == LoanTxnType.EMI else 0
+    if data.type == LoanTxnType.EMI and data.principal > outstanding(loan) + old_principal:
+        raise HTTPException(400, "Principal repaid is more than the loan outstanding")
+    for k, v in {**data.model_dump(), "account_id": acc.id}.items():
+        setattr(t, k, v)
+    ctx.db.commit()
+    return t
+
+
 @router.delete("/{loan_id}/txns/{txn_id}", status_code=204)
 def delete_txn(loan_id: str, txn_id: str, ctx: BCtx):
     ctx.need("cashbank", "delete")
@@ -123,5 +141,6 @@ def delete_txn(loan_id: str, txn_id: str, ctx: BCtx):
     t = ctx.db.get(LoanTxn, txn_id)
     if not t or t.loan_id != loan.id:
         raise HTTPException(404, "Entry not found")
+    ctx.need_past_edit(t.date)
     ctx.db.delete(t)
     ctx.db.commit()

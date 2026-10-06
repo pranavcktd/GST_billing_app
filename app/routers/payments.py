@@ -8,7 +8,7 @@ from ..deps import BCtx
 from ..gst.constants import PaymentType
 from ..models import Party, Payment, PaymentAllocation
 from ..schemas import PaymentIn, PaymentOut
-from ..services.payments import create_payment, open_vouchers, payment_out
+from ..services.payments import create_payment, open_vouchers, payment_out, update_payment
 from ..services.vouchers import to_out
 
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -73,6 +73,19 @@ def get_payment(payment_id: str, ctx: BCtx):
     if not p or p.business_id != ctx.bid:
         raise HTTPException(404, "Payment not found")
     ctx.need(_mod(p.type), "view")
+    return payment_out(p)
+
+
+@router.put("/{payment_id}", response_model=PaymentOut)
+def update(payment_id: str, data: PaymentIn, ctx: BCtx):
+    p = ctx.db.get(Payment, payment_id)
+    if not p or p.business_id != ctx.bid:
+        raise HTTPException(404, "Payment not found")
+    ctx.need(_mod(p.type), "edit")
+    ctx.need_past_edit(min(p.date, data.date))
+    update_payment(ctx, p, data)
+    ctx.db.commit()
+    ctx.db.refresh(p)
     return payment_out(p)
 
 
