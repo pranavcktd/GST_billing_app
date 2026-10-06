@@ -511,7 +511,7 @@ export function VoucherForm({
                 <td><Input value={l.hsn_sac} maxLength={8} onChange={(e) => updateLine(l.key, { hsn_sac: e.target.value })} /></td>
                 <td>
                   <Input className="text-right" inputMode="decimal" value={l.qty} onChange={(e) => updateLine(l.key, { qty: e.target.value })} />
-                  <div className="mt-1 text-right text-xs text-gray-500">{l.unit}</div>
+                  <div className="mt-1 text-right text-xs text-gray-500">{l.unit === "NA" ? "" : l.unit}</div>
                 </td>
                 <td>
                   <Input className="text-right" inputMode="decimal" value={l.rate} onChange={(e) => updateLine(l.key, { rate: e.target.value })} />

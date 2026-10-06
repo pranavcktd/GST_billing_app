@@ -9,6 +9,7 @@ import { api, downloadFile } from "@/lib/api";
 import type { Business, Transport, VoucherDetail } from "@/lib/types";
 import { useConfig } from "@/lib/config";
 import { money } from "@/lib/format";
+import { PortalLink } from "@/components/PortalLink";
 
 const within24h = (iso: string | null) => !!iso && Date.now() - new Date(iso).getTime() < 24 * 3600 * 1000;
 
@@ -119,7 +120,7 @@ export function EInvoicePanel({ v, business, onChange, canEdit }: {
       {dialog === "irn" && (
         <Modal title="Record IRN from the portal" onClose={() => setDialog(null)}>
           <div className="space-y-3">
-            <p className="text-xs text-gray-500">Upload the JSON on the e-invoice portal (or its offline tool), then copy the IRN and acknowledgement here.</p>
+            <p className="text-xs text-gray-500">Upload the JSON on the <PortalLink to="einvoice_portal">e-invoice portal</PortalLink> (or its offline tool), then copy the IRN and acknowledgement here.</p>
             <Field label="IRN (64 characters)"><Input value={manual.irn} onChange={(e) => setManual({ ...manual, irn: e.target.value.trim() })} /></Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Ack no."><Input value={manual.ack_no} onChange={(e) => setManual({ ...manual, ack_no: e.target.value })} /></Field>
@@ -136,6 +137,7 @@ export function EInvoicePanel({ v, business, onChange, canEdit }: {
       {dialog === "ewb" && (
         <Modal title="Record e-way bill" onClose={() => setDialog(null)}>
           <div className="space-y-3">
+            <p className="text-xs text-gray-500">Generate it on the <PortalLink to="ewaybill_portal">e-way bill portal</PortalLink> (or upload the JSON there), then enter the number here.</p>
             <Field label="E-way bill no. (12 digits)"><Input inputMode="numeric" maxLength={12} value={manual.ewb_no} onChange={(e) => setManual({ ...manual, ewb_no: e.target.value.replace(/\D/g, "") })} /></Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Generated on"><Input type="datetime-local" value={manual.ewb_date} onChange={(e) => setManual({ ...manual, ewb_date: e.target.value })} /></Field>

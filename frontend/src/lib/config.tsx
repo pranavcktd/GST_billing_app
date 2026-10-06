@@ -22,7 +22,26 @@ export interface AppConfig {
   company: { name: string; email: string; address: string; phone: string; gstin?: string; website?: string };
   it_depreciation_rates?: Record<string, number>; ca_residual_value_pct?: number;
   brand: { app_name: string; by_line: string; tagline: string };
+  links: Record<string, string>;
 }
+
+/** Built-in portal addresses; the super admin can change any of them (Admin → GST config → Portals & links). */
+export const DEFAULT_LINKS: Record<string, string> = {
+  gst_portal: "https://www.gst.gov.in",
+  gst_returns: "https://return.gst.gov.in/returns/auth/dashboard",
+  gst_payment: "https://payment.gst.gov.in/payment/",
+  gstin_search: "https://services.gst.gov.in/services/searchtp",
+  hsn_search: "https://services.gst.gov.in/services/searchhsnsac",
+  gst_offline_tool: "https://tutorial.gst.gov.in/offlineutilities/returns/",
+  ewaybill_portal: "https://ewaybillgst.gov.in",
+  einvoice_portal: "https://einvoice1.gst.gov.in",
+  income_tax_portal: "https://www.incometax.gov.in/iec/foportal/",
+  tds_traces: "https://www.tdscpc.gov.in",
+  mca_portal: "https://www.mca.gov.in",
+  epfo_portal: "https://unifiedportal-emp.epfindia.gov.in",
+  esic_portal: "https://www.esic.gov.in",
+  whatsapp_send: "https://wa.me/",
+};
 
 export const DEFAULT_CONFIG: AppConfig = {
   gst_rates: [...GST_RATES], b2cl_limit: 100000, invoice_number_max_len: 16, ewb_threshold: 50000,
@@ -33,7 +52,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   credit_note_reasons: ["Sales return", "Post-sale discount", "Deficiency in services", "Correction in invoice",
     "Change in POS", "Finalization of provisional assessment", "Others"],
   blocked_itc_categories: ["Tea & Refreshments"], subscription_gst_rate: 18, trial_days: 14,
-  brand: { app_name: APP_NAME, by_line: BY_LINE, tagline: TAGLINE },
+  brand: { app_name: APP_NAME, by_line: BY_LINE, tagline: TAGLINE }, links: { ...DEFAULT_LINKS },
   company: { name: COMPANY_NAME, email: "corenexgenaipvtltd@gmail.com",
     address: "Registered office address — to be filled in", phone: "Phone — to be filled in" },
 };
@@ -93,6 +112,11 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const useConfig = () => useContext(ConfigContext);
+
+/** Address of an external portal as configured by the super admin. */
+export function useLink(key: string): string {
+  return useConfig().links?.[key] || DEFAULT_LINKS[key] || "#";
+}
 
 /** Company details for legal pages and footers (server pages can embed this client component). */
 export function Company({ field, link }: { field: keyof AppConfig["company"]; link?: boolean }) {

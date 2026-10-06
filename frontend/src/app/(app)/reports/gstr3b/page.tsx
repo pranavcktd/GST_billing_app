@@ -9,6 +9,7 @@ import { downloadFile, qs } from "@/lib/api";
 import { fmtDate, monthRange, money } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 import { ReviewNote } from "@/components/ReviewNote";
+import { PortalLink } from "@/components/PortalLink";
 
 type Tax = { taxable?: number; igst: number; cgst: number; sgst: number; cess: number };
 interface Gstr3b {
@@ -69,6 +70,7 @@ export default function Gstr3bPage() {
     <>
       <PageHeader title="GSTR-3B" sub="Summary return — tax liability and input tax credit" actions={
         <>
+        <PortalLink to="gst_returns" button>GST portal</PortalLink>
         <ExportMenu compact build={() => (data ? gstr3bDoc(data, period.from, period.to) : null)} disabled={!data?.applicable} />
         <Button onClick={() => downloadFile(`/exports/gstr3b-json${qs({ date_from: period.from, date_to: period.to })}`).catch((e) => alert(e.message))}>
           <Download size={16} /> GSTR-3B JSON for portal

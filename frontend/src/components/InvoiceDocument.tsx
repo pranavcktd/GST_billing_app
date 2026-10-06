@@ -148,7 +148,7 @@ export function InvoiceDocument({ v, business, copy }: { v: VoucherDetail; busin
                 {l.serial_nos && <div className="text-[10px] text-gray-600">S/N: {l.serial_nos}</div>}
               </td>
               {showHsn && <td className={cell}>{l.hsn_sac}</td>}
-              <td className={`${cell} text-right whitespace-nowrap`}>{qty(l.qty)} {l.unit}</td>
+              <td className={`${cell} text-right whitespace-nowrap`}>{qty(l.qty)} {l.unit === "NA" ? "" : l.unit}</td>
               <td className={`${cell} text-right`}>{money(l.rate)}{l.tax_inclusive && showTax ? "*" : ""}</td>
               {showDisc && <td className={`${cell} text-right`}>{money(l.discount)}</td>}
               <td className={`${cell} text-right`}>{money(l.taxable)}</td>

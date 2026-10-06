@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button, Card, ErrorBox, Field, Input, LinkButton, Loading, PageHeader } from "@/components/ui";
 import { api, qs } from "@/lib/api";
+import { useLink } from "@/lib/config";
 import { stateLabel } from "@/lib/constants";
 import { fmtDate, fyRange, money } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
@@ -26,6 +27,7 @@ export default function PartyDetailPage() {
   const router = useRouter();
   const [range, setRange] = useState(fyRange());
   const { data: party, error } = useFetch<Party>(`/parties/${id}`);
+  const wa = useLink("whatsapp_send");
   const { data: ledger } = useFetch<Ledger>(`/parties/${id}/ledger${qs({ date_from: range.from, date_to: range.to })}`);
 
   if (error) return <ErrorBox message={error} />;
@@ -34,7 +36,7 @@ export default function PartyDetailPage() {
   const reminder = () => {
     const phone = (party.phone ?? "").replace(/\D/g, "").slice(-10);
     const text = `Dear ${party.name}, a payment of ${money(party.balance)} is pending. Kindly clear it at the earliest. Thank you.`;
-    window.open(`https://wa.me/${phone ? "91" + phone : ""}?text=${encodeURIComponent(text)}`, "_blank");
+    window.open(`${wa}${phone ? "91" + phone : ""}?text=${encodeURIComponent(text)}`, "_blank");
   };
 
   const remove = async () => {

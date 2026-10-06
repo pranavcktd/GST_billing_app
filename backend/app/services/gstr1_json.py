@@ -72,8 +72,9 @@ def build(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) -> d
         for l in v.lines:
             if l.gst_rate == 0:
                 nil[("INTR" if v.inter_state else "INTRA") + ("B2B" if reg else "B2C")] += sign * l.taxable
-            h = hsn["B2B" if reg else "B2C"][(l.hsn_sac or "", (l.unit or "OTH")[:3], l.gst_rate)]
-            h["qty"] += sign * l.qty
+            sac = (l.hsn_sac or "").startswith("99")  # services: UQC "NA", no quantity
+            h = hsn["B2B" if reg else "B2C"][(l.hsn_sac or "", "NA" if sac else (l.unit or "OTH")[:3], l.gst_rate)]
+            h["qty"] += 0 if sac else sign * l.qty
             h["txval"] += sign * l.taxable
             h["iamt"] += sign * l.igst
             h["camt"] += sign * l.cgst

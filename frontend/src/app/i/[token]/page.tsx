@@ -4,6 +4,7 @@ import { Download, Printer } from "lucide-react";
 import { useParams } from "next/navigation";
 import { InvoiceDocument } from "@/components/InvoiceDocument";
 import { Button, Loading } from "@/components/ui";
+import { docFileName, useDocTitle } from "@/lib/docName";
 import { useFetch } from "@/lib/useFetch";
 import type { Business, VoucherDetail } from "@/lib/types";
 
@@ -11,6 +12,7 @@ import type { Business, VoucherDetail } from "@/lib/types";
 export default function PublicInvoice() {
   const { token } = useParams<{ token: string }>();
   const { data, error } = useFetch<{ voucher: VoucherDetail; business: Business }>(`/public/invoice/${token}`);
+  useDocTitle(data?.voucher ? docFileName(data?.voucher) : null);
 
   if (error) {
     return (

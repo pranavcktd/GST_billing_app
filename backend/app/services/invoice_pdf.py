@@ -253,7 +253,7 @@ def render(v: Voucher, biz: Business, *, watermark: bool = False, copies: list[s
             r = [P(i, pr), PH(desc)]
             if show_hsn:
                 r.append(P(l.hsn_sac or ""))
-            r += [P(f"{qty_str(l.qty)} {l.unit or ''}", pr), P(inr(l.rate, False), pr)]
+            r += [P(f"{qty_str(l.qty)} {'' if l.unit == 'NA' else (l.unit or '')}", pr), P(inr(l.rate, False), pr)]
             if show_disc:
                 r.append(P(inr(l.discount, False) if l.discount else "", pr))
             if tax:
@@ -377,6 +377,27 @@ def render(v: Voucher, biz: Business, *, watermark: bool = False, copies: list[s
     return buf.getvalue()
 
 
+def _slug(text: str, limit: int) -> str:
+    out, dash = [], False
+    for ch in text:
+        if ch.isalnum():
+            out.append(ch)
+            dash = False
+        elif not dash and out:
+            out.append("-")
+            dash = True
+    return "".join(out).strip("-")[:limit].strip("-")
+
+
+def short_party(name: str | None) -> str:
+    """First two words of the party name, e.g. 'Karan Stores Pvt Ltd' -> 'Karan-Stores'."""
+    words = [w for w in (name or "").replace("&", " ").split() if any(c.isalnum() for c in w)]
+    while words and words[0].lower().strip(".") in ("m/s", "ms", "messrs", "mr", "mrs", "shri", "smt"):
+        words = words[1:]
+    return _slug(" ".join(words[:2]), 20) or "Party"
+
+
 def filename(v: Voucher) -> str:
-    safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in v.number)
-    return f"{document_title(v.type, v.tax_applicable).replace(' ', '-').replace('/', '')}-{safe}.pdf"
+    """Tax-Invoice_INV-0012_Karan-Stores_06-10-2026.pdf — type, number, party, date: sorts and reads well in a folder."""
+    title = document_title(v.type, v.tax_applicable).split("/")[0].strip()
+    return f"{_slug(title, 30)}_{_slug(v.number, 30) or 'draft'}_{short_party(v.party_name)}_{v.date.strftime('%d-%m-%Y')}.pdf"

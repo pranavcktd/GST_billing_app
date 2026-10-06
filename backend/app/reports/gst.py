@@ -77,7 +77,7 @@ def gstr9(r: RCtx):
         s = _sign(v)
         for l in v.lines:
             target = hsn_out if v.type in OUTWARD else hsn_in
-            h = target[(l.hsn_sac or "", l.unit or "OTH", l.gst_rate)]
+            h = target[(l.hsn_sac or "", "NA" if (l.hsn_sac or "").startswith("99") else (l.unit or "OTH"), l.gst_rate)]
             h["qty"] += s * l.qty
             for k in TAX:
                 h[k] += s * getattr(l, k)
@@ -123,7 +123,7 @@ def _hsn(r: RCtx, services_only: bool, title: str, inward: bool = False):
             code = l.hsn_sac or ""
             if services_only and not code.startswith("99"):
                 continue
-            a = agg[(code, l.unit or "OTH", l.gst_rate)]
+            a = agg[(code, "NA" if (code or "").startswith("99") else (l.unit or "OTH"), l.gst_rate)]
             desc.setdefault(code, l.name)
             a["qty"] += s * l.qty
             a["value"] += s * l.total

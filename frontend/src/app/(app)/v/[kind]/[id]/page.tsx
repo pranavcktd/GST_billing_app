@@ -13,6 +13,7 @@ import { InvoiceDocument } from "@/components/InvoiceDocument";
 import { Button, ErrorBox, LinkButton, Loading, PageHeader, StatusBadge } from "@/components/ui";
 import { api } from "@/lib/api";
 import { usePerms } from "@/lib/auth";
+import { useLink } from "@/lib/config";
 import { CONVERTS_TO, KINDS, kindOf } from "@/lib/constants";
 import { fmtDate, money } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
@@ -23,6 +24,7 @@ export default function VoucherViewPage() {
   const { can } = usePerms();
   const { data: v, error, setData } = useFetch<VoucherDetail>(`/vouchers/${id}`);
   const { data: business } = useFetch<Business>("/businesses/current");
+  const wa = useLink("whatsapp_send");
   const [actionError, setActionError] = useState<string | null>(null);
 
   if (error) return <ErrorBox message={error} />;
@@ -53,7 +55,7 @@ export default function VoucherViewPage() {
       `${v!.title} ${v!.number} dated ${fmtDate(v!.date)} from ${business!.name}\n` +
       `Amount: ${money(v!.grand_total)}` + (v!.balance > 0 ? `\nBalance due: ${money(v!.balance)}` : "") +
       (business!.upi_id ? `\nPay via UPI: ${business!.upi_id}` : "") + (link ? `\nView / download: ${link}` : "");
-    const url = `https://wa.me/${phone ? "91" + phone : ""}?text=${encodeURIComponent(text)}`;
+    const url = `${wa}${phone ? "91" + phone : ""}?text=${encodeURIComponent(text)}`;
     if (win) win.location.href = url;
     else window.open(url, "_blank");
   }

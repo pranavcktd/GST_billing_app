@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from ..deps import BCtx
 from ..models import Party, ReminderLog, Voucher
+from ..services import config_store as C
 from ..services import reminders as R
 from ..services.ledger import party_balances
 from ..services.platform_audit import log
@@ -123,7 +124,7 @@ def whatsapp(party_id: str, ctx: BCtx, request: Request, voucher_id: str | None 
                                sent_to=party.phone, status="SENT", automatic=False, amount=R._balance(v), by_name=ctx.user.name))
     ctx.db.commit()
     phone = R.wa_phone(party.phone)
-    return {"text": text, "phone": phone, "url": f"https://wa.me/{phone or ''}?text={quote(text)}"}
+    return {"text": text, "phone": phone, "url": f"{C.link('whatsapp_send')}{phone or ''}?text={quote(text)}"}
 
 
 @router.get("/log")
