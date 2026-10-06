@@ -10,7 +10,7 @@ import type { VoucherDetail } from "@/lib/types";
 /** E-mail a document to the customer (with a view link), or copy its public link. */
 export function EmailButton({ v, defaultTo }: { v: VoucherDetail; defaultTo?: string | null }) {
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ to: defaultTo ?? "", cc: "", message: "" });
+  const [f, setF] = useState({ to: defaultTo ?? "", cc: "", message: "", attach: true });
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -19,7 +19,7 @@ export function EmailButton({ v, defaultTo }: { v: VoucherDetail; defaultTo?: st
     setBusy(true); setErr(null);
     try {
       const split = (s: string) => s.split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);
-      const r = await api<{ via: string }>(`/vouchers/${v.id}/email`, { body: { to: split(f.to), cc: split(f.cc), message: f.message || null } });
+      const r = await api<{ via: string }>(`/vouchers/${v.id}/email`, { body: { to: split(f.to), cc: split(f.cc), message: f.message || null, attach_pdf: f.attach } });
       setDone(`Sent to ${f.to} (via ${r.via?.toLowerCase()} mail settings).`);
     } catch (e) {
       setErr((e as Error).message);
@@ -44,6 +44,7 @@ export function EmailButton({ v, defaultTo }: { v: VoucherDetail; defaultTo?: st
               <Field label="To" hint="Separate several addresses with commas"><Input value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></Field>
               <Field label="Cc"><Input value={f.cc} onChange={(e) => setF({ ...f, cc: e.target.value })} /></Field>
               <Field label="Message (optional)"><Textarea rows={3} value={f.message} onChange={(e) => setF({ ...f, message: e.target.value })} /></Field>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.attach} onChange={(e) => setF({ ...f, attach: e.target.checked })} /> Attach the PDF</label>
               <p className="text-xs text-gray-500">The e-mail includes a summary and a secure link where the customer can view, print or save the full document as PDF.</p>
               <div className="flex justify-end gap-2">
                 <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
