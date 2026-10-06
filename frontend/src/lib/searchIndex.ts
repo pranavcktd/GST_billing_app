@@ -53,6 +53,7 @@ export const ENTRIES: SearchEntry[] = [
   { group: "Go to", title: "Capital / drawings", href: "/cash-bank/capital", k: "owner investment", perm: ["cashbank", "view"] },
   { group: "Go to", title: "Tax payments", href: "/cash-bank/tax-payments", k: "gst challan pmt tds paid", perm: ["cashbank", "view"] },
   { group: "Go to", title: "All reports", href: "/reports", k: "report list" },
+  { group: "Go to", title: "Documents — ITR, certificates, licences", href: "/documents", k: "document vault upload itr balance sheet audit report certificate fssai udyam msme licence license pan agreement drive file store", perm: ["documents", "view"] },
   { group: "GST", title: "Compliance calendar — due dates", href: "/compliance", k: "due date return filing pending penalty late fee gstr mca roc itr tds aoc mgt llp form 11 advance tax deadline calendar", perm: ["reports_gst", "view"] },
   { group: "Go to", title: "Recurring invoices", href: "/recurring", k: "repeat monthly rent amc subscription retainer auto invoice schedule", perm: ["sales", "view"] },
   { group: "Go to", title: "Collect payments / reminders", href: "/reminders", k: "remind reminder overdue due udhar vasooli collection whatsapp payment follow up", perm: ["sales", "view"] },

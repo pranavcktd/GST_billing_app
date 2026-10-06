@@ -1,7 +1,7 @@
 export type Role = "OWNER" | "ADMIN" | "MANAGER" | "BILLING" | "INVENTORY" | "ACCOUNTANT";
 export type Module =
   | "sales" | "purchases" | "expenses" | "payments_in" | "payments_out" | "parties" | "items" | "cashbank"
-  | "reports_sales" | "reports_stock" | "reports_financial" | "reports_gst" | "settings" | "users" | "backup" | "audit";
+  | "reports_sales" | "reports_stock" | "reports_financial" | "reports_gst" | "settings" | "users" | "backup" | "audit" | "documents";
 export type Action = "view" | "create" | "edit" | "delete" | "export";
 export interface Permissions { modules: Partial<Record<Module, Action[]>>; flags: ("view_cost" | "edit_past")[] }
 export type BusinessGstType = "REGULAR" | "COMPOSITION" | "UNREGISTERED";

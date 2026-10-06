@@ -827,6 +827,51 @@ class PracticeFile(Base):
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
 
+class Document(Base):
+    """A paper the business keeps in its document vault: an uploaded file or a link (see services/documents.py)."""
+
+    __tablename__ = "documents"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    category: Mapped[str] = mapped_column(String(60), default="Other")
+    financial_year: Mapped[str | None] = mapped_column(String(7))  # 2025-26
+    doc_date: Mapped[dt.date | None] = mapped_column(Date)
+    expiry_date: Mapped[dt.date | None] = mapped_column(Date)  # licences: FSSAI, trade licence…
+    kind: Mapped[str] = mapped_column(String(5), default="FILE")  # FILE / LINK
+    url: Mapped[str | None] = mapped_column(String(1000))  # LINK
+    storage: Mapped[str | None] = mapped_column(String(12))  # CLOUDINARY / DATABASE
+    storage_id: Mapped[str | None] = mapped_column(String(300))
+    file_name: Mapped[str | None] = mapped_column(String(200))
+    file_ext: Mapped[str | None] = mapped_column(String(10))
+    content_type: Mapped[str | None] = mapped_column(String(120))
+    size_bytes: Mapped[int | None] = mapped_column(Integer)
+    notes: Mapped[str | None] = mapped_column(Text)
+    uploaded_by: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class DocumentBlob(Base):
+    """File content when the vault stores files in the database."""
+
+    __tablename__ = "document_blobs"
+    document_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class DocumentShare(Base):
+    """A link to a vault file that opens without signing in until it expires."""
+
+    __tablename__ = "document_shares"
+    token: Mapped[str] = mapped_column(String(64), primary_key=True)
+    document_id: Mapped[str] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), index=True)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"))
+    expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str | None] = mapped_column(String(200))
+    opened: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class StaffSession(Base):
     """A staff member's use of a business in one signed-in session (device): when, where, and its approval."""
 

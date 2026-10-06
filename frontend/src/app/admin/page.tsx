@@ -20,6 +20,7 @@ import { Button, Card, ErrorBox, Field, Input, Loading, Select, Textarea } from 
 import { api, qs } from "@/lib/api";
 import { fmtDate, money } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
+import { AdminDocuments } from "@/components/admin/AdminDocuments";
 
 interface Stats { accounts: number; businesses: number; users: number; trials: number; by_plan: Record<string, number>; mrr: number; invoices_30d: number; signups_30d: number; revenue_30d: number }
 interface Account {
@@ -92,7 +93,7 @@ function Admin() {
       {tab === "HSN master" && <AdminHsnMaster />}
       {tab === "Rate notices" && <AdminRateNotices />}
       {tab === "Pricing" && <AdminPlanConfig />}
-      {tab === "Integrations" && <div className="space-y-8"><AdminRazorpay /><AdminIntegrations /></div>}
+      {tab === "Integrations" && <div className="space-y-8"><AdminRazorpay /><AdminIntegrations /><AdminDocuments /></div>}
       {tab === "Backups" && <AdminBackups />}
       {tab === "Audit" && <AdminAudit />}
       {tab === "Email" && (
