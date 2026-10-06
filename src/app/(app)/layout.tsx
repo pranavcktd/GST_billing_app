@@ -2,6 +2,7 @@
 
 import {
   BellRing,
+  Repeat,
   Briefcase,
   Barcode,
   BarChart3,
@@ -61,6 +62,7 @@ const NAV: { section?: string; items: NavItem[] }[] = [
       { href: "/v/delivery-challans", label: "Delivery Challans", icon: Truck, perm: ["sales", "view"] },
       { href: "/payments/in", label: "Payment In", icon: Wallet, perm: ["payments_in", "view"] },
       { href: "/reminders", label: "Collect payments", icon: BellRing, perm: ["sales", "view"] },
+      { href: "/recurring", label: "Recurring invoices", icon: Repeat, perm: ["sales", "view"] },
       { href: "/v/credit-notes", label: "Credit Notes", icon: Undo2, perm: ["sales", "view"] },
     ],
   },
