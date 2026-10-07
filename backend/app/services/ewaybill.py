@@ -9,6 +9,7 @@ import csv
 import datetime as dt
 import io
 import math
+from decimal import Decimal
 import re
 
 from openpyxl import load_workbook
@@ -32,15 +33,25 @@ def valid_till(generated: dt.datetime, distance_km: float | int | None, odc: boo
     return dt.datetime.combine(local.date() + dt.timedelta(days=days), dt.time(23, 59, 59), tzinfo=IST)
 
 
+def _is_goods_line(l) -> bool:
+    """Services (SAC codes start with 99) never need an e-way bill; a line without a code counts as goods."""
+    return not (l.hsn_sac or "").startswith("99")
+
+
 def is_goods(v: Voucher) -> bool:
-    return any(not (l.hsn_sac or "").startswith("99") for l in v.lines)
+    return any(_is_goods_line(l) for l in v.lines)
+
+
+def goods_value(v: Voucher):
+    """Consignment value for the e-way bill limit: taxable value + GST + cess of the goods lines only."""
+    return sum((l.taxable + l.cgst + l.sgst + l.igst + l.cess for l in v.lines if _is_goods_line(l)), Decimal("0"))
 
 
 def needs_ewb(v: Voucher) -> bool:
-    """Goods moving with value above the threshold and no e-way bill recorded yet."""
+    """Goods worth more than the limit are moving and no e-way bill is recorded yet (services never need one)."""
     if v.cancelled or v.type not in TYPES or v.ewb_no or not is_goods(v):
         return False
-    return v.grand_total > config_store.get("ewb_threshold", v.date)
+    return goods_value(v) > config_store.get("ewb_threshold", v.date)
 
 
 def status(v: Voucher, now: dt.datetime) -> str:
@@ -69,7 +80,7 @@ def listing(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) ->
             except PayloadError as e:
                 problems = e.problems
         t = v.transport or {}
-        out.append(dict(id=v.id, type=v.type.value, number=v.number, date=v.date, party=v.party_name, value=float(v.grand_total),
+        out.append(dict(id=v.id, type=v.type.value, number=v.number, date=v.date, party=v.party_name, value=float(goods_value(v)),
                         status=st, ewb_no=v.ewb_no, ewb_date=v.ewb_date, valid_till=v.ewb_valid_till,
                         vehicle=t.get("vehicle_no"), distance=t.get("distance_km"), ready=st == "PENDING" and not problems,
                         problems=problems))
@@ -79,6 +90,9 @@ def listing(db: Session, biz: Business, date_from: dt.date, date_to: dt.date) ->
 def bulk(db: Session, biz: Business, ids: list[str]) -> tuple[dict, list[dict]]:
     bills, skipped = [], []
     for v in db.scalars(select(Voucher).where(Voucher.business_id == biz.id, Voucher.id.in_(ids))):
+        if not is_goods(v):
+            skipped.append(dict(number=v.number, problems=["Only services on this bill — no e-way bill needed"]))
+            continue
         try:
             bills += ewaybill_payload(db, biz, v)["billLists"]
         except PayloadError as e:

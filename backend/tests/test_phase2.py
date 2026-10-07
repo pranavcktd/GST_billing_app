@@ -58,8 +58,15 @@ def test_godowns_and_transfers(client):
     assert client.delete(f"/api/godowns/{main['id']}", headers=h).status_code == 400
 
 
+def einvoicing_on(client, h, on=True):
+    biz = client.get("/api/businesses/current", headers=h).json()
+    body = {k: v for k, v in biz.items() if k not in ("id", "plan", "einvoice_password_set", "ewb_password_set", "gst_portal", "modules")}
+    assert client.put("/api/businesses/current", headers=h, json={**body, "einvoice_applicable": on}).status_code == 200
+
+
 def test_einvoice_and_ewaybill(client):
     h, cust, item = setup(client)
+    einvoicing_on(client, h)
     walkin = post(client, h, "/api/vouchers", {"type": "SALE", "date": "2026-09-10", "fully_paid": True,
                                                "lines": [{"item_id": item["id"], "name": "Bottle", "qty": 1, "rate": 500, "gst_rate": 18}]})
     r = client.get(f"/api/vouchers/{walkin['id']}/einvoice/json", headers=h)

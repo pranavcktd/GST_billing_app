@@ -130,6 +130,7 @@ function gstr1Doc(d: Gstr1, from: string, to: string): TableDoc {
 export default function Gstr1Page() {
   const [period, setPeriod] = useState(monthRange(0));
   const { data, error, loading } = useFetch<Gstr1>(`/reports/gstr1${qs({ date_from: period.from, date_to: period.to })}`);
+  const { data: biz } = useFetch<{ einvoice_applicable?: boolean }>("/businesses/current");
   const tag = `${period.from}_${period.to}`;
 
   return (
@@ -138,9 +139,11 @@ export default function Gstr1Page() {
         <>
           <PortalLink to="gst_returns" button>GST portal</PortalLink>
           <ExportMenu compact build={() => (data ? gstr1Doc(data, period.from, period.to) : null)} disabled={!data?.applicable} />
-          <Button variant="secondary" onClick={() => downloadFile(`/einvoice/bulk-json${qs({ date_from: period.from, date_to: period.to })}`).catch((e) => alert(e.message))}>
-            <Download size={16} /> e-Invoice bulk JSON
-          </Button>
+          {biz?.einvoice_applicable && (
+            <Button variant="secondary" onClick={() => downloadFile(`/einvoice/bulk-json${qs({ date_from: period.from, date_to: period.to })}`).catch((e) => alert(e.message))}>
+              <Download size={16} /> e-Invoice bulk JSON
+            </Button>
+          )}
           <Button onClick={() => downloadFile(`/exports/gstr1-json${qs({ date_from: period.from, date_to: period.to })}`).catch((e) => alert(e.message))}>
             <Download size={16} /> GSTR-1 JSON for portal
           </Button>

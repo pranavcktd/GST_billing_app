@@ -30,9 +30,13 @@ export function EInvoicePanel({ v, business, onChange, canEdit }: {
   const [reason, setReason] = useState({ reason: "2", remark: "" });
 
   const plan = business.plan;
-  const eligibleIrn = (v.type === "SALE" || v.type === "SALE_RETURN") && !!v.party_gstin && business.gst_type === "REGULAR";
+  // IRN only when e-invoicing applies to the business (Settings → e-Invoice); an IRN already on the bill is still shown
+  const eligibleIrn = ((v.type === "SALE" || v.type === "SALE_RETURN") && !!v.party_gstin && business.gst_type === "REGULAR"
+    && !!business.einvoice_applicable) || !!v.irn;
   const config = useConfig();
-  const eligibleEwb = ["SALE", "DELIVERY_CHALLAN", "PURCHASE"].includes(v.type) && !!business.gstin;
+  // e-way bills are for goods only: a bill with only services (SAC codes start with 99) never needs one
+  const hasGoods = v.lines.some((l) => !(l.hsn_sac ?? "").startsWith("99"));
+  const eligibleEwb = (["SALE", "DELIVERY_CHALLAN", "PURCHASE"].includes(v.type) && !!business.gstin && hasGoods) || !!v.ewb_no;
   if (v.cancelled || (!eligibleIrn && !eligibleEwb)) return null;
 
   const run = async (fn: () => Promise<VoucherDetail | void>) => {
@@ -79,9 +83,9 @@ export function EInvoicePanel({ v, business, onChange, canEdit }: {
           {eligibleEwb && (
             <div className="text-gray-600">
               E-way bill: {v.ewb_no ? <span className="font-medium text-emerald-700">{v.ewb_no}{v.ewb_valid_till ? ` · valid till ${new Date(v.ewb_valid_till).toLocaleString("en-IN")}` : ""}</span>
-                : v.grand_total > config.ewb_threshold && v.lines.some((l) => !(l.hsn_sac ?? "").startsWith("99"))
+                : v.ewb_required
                   ? <span className="font-medium text-amber-700">needed — goods value is above {money(config.ewb_threshold)}</span>
-                  : <span className="text-gray-500">not generated</span>}
+                  : <span className="text-gray-500">not needed (goods value up to {money(config.ewb_threshold)}) — you can still generate one</span>}
             </div>
           )}
           <div className="text-gray-600">
@@ -92,7 +96,7 @@ export function EInvoicePanel({ v, business, onChange, canEdit }: {
         </div>
         <div className="flex flex-wrap gap-2">
           {canEdit && <Button variant="secondary" onClick={() => setDialog("transport")}><Truck size={15} /> Transport</Button>}
-          {eligibleIrn && v.einvoice_status !== "GENERATED" && (
+          {eligibleIrn && business.einvoice_applicable && v.einvoice_status !== "GENERATED" && (
             <>
               <Button variant="secondary" disabled={!json_ok} onClick={() => downloadFile(`/vouchers/${v.id}/einvoice/json`).catch((e) => setErr(e.message))}>
                 <Download size={15} /> e-Invoice JSON
