@@ -38,8 +38,11 @@ EXTENSIONS = {
 
 
 def defaults() -> dict:
-    return dict(enabled=True, allow_links=True, storage="CLOUDINARY" if get_settings().cloudinary_url else "DATABASE",
-                max_file_mb=10, quota_mb=200, share_days=7)
+    cloud = bool(get_settings().cloudinary_url)
+    return dict(enabled=True, allow_links=True, storage="CLOUDINARY" if cloud else "DATABASE",
+                max_file_mb=10, quota_mb=200, share_days=7,
+                # logos, signatures, item photos (routers/uploads.py)
+                images_storage="CLOUDINARY" if cloud else "DATABASE", image_max_mb=2)
 
 
 def settings(db: Session) -> dict:
@@ -50,10 +53,10 @@ def settings(db: Session) -> dict:
 def save_settings(db: Session, values: dict) -> dict:
     s = settings(db)
     s.update({k: v for k, v in values.items() if v is not None and k in defaults()})
-    if s["storage"] not in STORAGES:
+    if s["storage"] not in STORAGES or s["images_storage"] not in ("CLOUDINARY", "DATABASE"):
         raise HTTPException(422, "Unknown storage")
-    if s["storage"] == "CLOUDINARY" and not get_settings().cloudinary_url:
-        raise HTTPException(422, "Cloudinary is not configured on the server (CLOUDINARY_URL) — choose Database or Links only")
+    if "CLOUDINARY" in (s["storage"], s["images_storage"]) and not get_settings().cloudinary_url:
+        raise HTTPException(422, "Cloudinary is not configured on the server (CLOUDINARY_URL) — choose 'Our database'")
     row = db.get(PlatformSetting, KEY) or PlatformSetting(key=KEY)
     row.value = s
     db.add(row)

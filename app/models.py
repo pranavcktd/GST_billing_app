@@ -859,6 +859,19 @@ class Document(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class ImageFile(Base):
+    """A logo, signature or item photo kept in our database (when image storage is 'database')."""
+
+    __tablename__ = "image_files"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(12))  # logo / signature / item
+    content_type: Mapped[str] = mapped_column(String(40))
+    ext: Mapped[str] = mapped_column(String(5))
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class DocumentBlob(Base):
     """File content when the vault stores files in the database."""
 
