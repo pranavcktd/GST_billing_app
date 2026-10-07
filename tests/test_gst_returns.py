@@ -16,6 +16,8 @@ def party(client, h, name, gst_type, **extra):
 
 def test_exports_sez_and_imports(client):
     h = make_business(client, signup(client), address="12 MG Road", city="Pune", pincode="411001")
+    from tests.test_phase2 import einvoicing_on
+    einvoicing_on(client, h)
     foreign = party(client, h, "Acme Inc (USA)", "OVERSEAS", billing_address="1 Main St, Austin")
     sez = party(client, h, "SEZ Unit", "SEZ", gstin=gstin("29", "AAACZ1234K"), billing_address="EPIP Zone",
                 city="Bengaluru", pincode="560066")

@@ -224,7 +224,7 @@ class BusinessIn(BaseModel):
     einvoice_password: Opt(100) = None  # write-only; stored encrypted
     ewb_username: Opt(100) = None
     ewb_password: Opt(100) = None  # write-only; stored encrypted
-    einvoice_applicable: bool = False
+    einvoice_applicable: bool | None = None  # left out = keep the current setting
 
     _gstin = field_validator("gstin")(_check_gstin)
     _state = field_validator("state_code")(_check_state)
