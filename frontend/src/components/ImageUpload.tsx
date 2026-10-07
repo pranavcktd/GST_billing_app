@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { api } from "@/lib/api";
 
-/** Uploads an image to Cloudinary via the backend and returns its URL. */
+/** Uploads an image (stored where the super admin chose: Cloudinary or our database) and returns its URL. */
 export function ImageUpload({
   kind,
   value,

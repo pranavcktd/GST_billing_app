@@ -13,6 +13,7 @@ from xml.sax.saxutils import escape
 
 import httpx
 from sqlalchemy.orm import object_session
+from sqlalchemy.orm import object_session
 from reportlab.graphics.barcode.qr import QrCodeWidget
 from reportlab.graphics.shapes import Drawing
 from reportlab.lib import colors
@@ -87,11 +88,17 @@ def _qr(data: str, size: float) -> Drawing:
     return d
 
 
-def _image(url: str | None, max_w: float, max_h: float):
+def _image(url: str | None, max_w: float, max_h: float, db=None):
     if not url:
         return None
     try:
-        if url.startswith("http"):
+        if "/api/files/img/" in url:  # kept in our database
+            from ..routers.uploads import load_local
+
+            data = load_local(url, db)
+            if not data:
+                return None
+        elif url.startswith("http"):
             r = httpx.get(url, timeout=6, follow_redirects=True)
             if r.status_code != 200 or len(r.content) > 3_000_000:
                 return None
@@ -150,7 +157,7 @@ def render(v: Voucher, biz: Business, *, watermark: bool = False, copies: list[s
                                                  biz.phone and f"Ph: {biz.phone}", biz.email) if x)))
         if biz.gstin:
             seller.append(PH(f"<b>GSTIN: {escape(biz.gstin)}</b>"))
-        logo = _image(biz.logo_url, 28 * mm, 18 * mm) if images else None
+        logo = _image(biz.logo_url, 28 * mm, 18 * mm, object_session(biz)) if images else None
         left = Table([[logo, seller]] if logo else [[seller]], colWidths=[30 * mm, W * 0.62 - 30 * mm] if logo else [W * 0.62])
         left.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
         right = [P(title.upper(), title_style)]
@@ -334,7 +341,7 @@ def render(v: Voucher, biz: Business, *, watermark: bool = False, copies: list[s
         sign = []
         if outward and ps.get("show_signature", True):
             sign.append(P(f"For {biz.legal_name or biz.name}", S("sg", alignment=2)))
-            img = _image(biz.signature_url, 35 * mm, 14 * mm) if images else None
+            img = _image(biz.signature_url, 35 * mm, 14 * mm, object_session(biz)) if images else None
             sign += [img] if img else [Spacer(1, 14 * mm)]
             sign.append(P("Authorised signatory", S("sg2", alignment=2, textColor=colors.HexColor("#6b7280"))))
         cells = [[foot_left or "", qr or "", sign or ""]]

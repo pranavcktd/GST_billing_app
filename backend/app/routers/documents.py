@@ -247,6 +247,8 @@ class SettingsIn(BaseModel):
     max_file_mb: int | None = Field(None, ge=1, le=100)
     quota_mb: int | None = Field(None, ge=1, le=100000)
     share_days: int | None = Field(None, ge=1, le=90)
+    images_storage: str | None = None
+    image_max_mb: int | None = Field(None, ge=1, le=20)
 
 
 @router.get("/admin/documents-settings")
