@@ -112,6 +112,14 @@ FIELDS: list[Field] = [
           "use for less than 180 days in the year. Check against the latest rules."),
     Field("ca_residual_value_pct", "Final accounts", "Companies Act residual value (% of cost)", "number", 5,
           "Used for useful-life depreciation (Schedule II)."),
+    # ---- payroll (statutory rates; effective-dated like the GST rules)
+    Field("pf_employee_rate", "Payroll", "EPF — employee share (% of EPF wage)", "number", 12),
+    Field("pf_employer_rate", "Payroll", "EPF — employer share (% of EPF wage, EPF + EPS)", "number", 12),
+    Field("pf_wage_ceiling", "Payroll", "EPF wage ceiling per month (₹)", "money", 15000,
+          "Contributions are worked out on basic pay up to this amount."),
+    Field("esi_employee_rate", "Payroll", "ESI — employee share (% of gross pay)", "number", 0.75),
+    Field("esi_employer_rate", "Payroll", "ESI — employer share (% of gross pay)", "number", 3.25),
+    Field("esi_wage_limit", "Payroll", "ESI applies up to gross pay per month (₹)", "money", 21000),
     # ---- compliance calendar (Compliance page of every business)
     Field("compliance_laws", "Compliance calendar", "Laws shown to businesses", "list",
           ["GST", "INCOME_TAX", "TDS", "MCA", "LLP", "PAYROLL"],

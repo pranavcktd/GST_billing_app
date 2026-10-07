@@ -25,6 +25,8 @@ MODULES: dict[str, str] = {
     "backup": "Backup & restore",
     "audit": "Audit trail",
     "documents": "Document vault (ITR, certificates, licences…)",
+    "attendance": "Staff & attendance",
+    "payroll": "Payroll (salaries, advances, payslips)",
 }
 ACTIONS = ("view", "create", "edit", "delete", "export")
 FLAGS = ("view_cost", "edit_past")
@@ -41,7 +43,7 @@ DEFAULTS: dict[Role, dict] = {
     Role.OWNER: _matrix({m: ALL for m in MODULES}, set(FLAGS)),
     Role.ADMIN: _matrix({m: ALL for m in MODULES}, set(FLAGS)),
     # Store manager: runs the shop — everything except staff, backups and company settings
-    Role.MANAGER: _matrix({**{m: ALL for m in MODULES if m not in ("users", "backup", "settings", "audit", "documents")},
+    Role.MANAGER: _matrix({**{m: ALL for m in MODULES if m not in ("users", "backup", "settings", "audit", "documents", "payroll")},
                            "settings": {"view"}, "audit": {"view"}, "documents": {"view", "create"}}, set(FLAGS)),
     # Billing desk / cashier
     Role.BILLING: _matrix({"sales": {"view", "create"}, "payments_in": {"view", "create"},

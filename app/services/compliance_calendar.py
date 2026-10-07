@@ -77,7 +77,9 @@ def settings(biz) -> dict:
     s["payroll"] = bool(s["pf"] or s["esi"])  # rules written before the split
     reg = registration_date(biz)
     if not s.get("track_from"):
-        s["track_from"] = (reg or (biz.created_at.date() if biz.created_at else dt.date.today())).isoformat()
+        ist = dt.timezone(dt.timedelta(hours=5, minutes=30))
+        joined = biz.created_at.astimezone(ist).date() if biz.created_at else dt.date.today()  # the Indian date it joined
+        s["track_from"] = (reg or joined).isoformat()
     elif reg and dt.date.fromisoformat(s["track_from"]) < reg:
         s["track_from"] = reg.isoformat()  # nothing was due before the business was registered
     s["registration_date"] = reg.isoformat() if reg else None
