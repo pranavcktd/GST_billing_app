@@ -27,6 +27,7 @@ export const MODULES: ModuleDef[] = [
   { key: "cheques", label: "Cheques", hint: "Track cheques received and issued until they clear", hrefs: ["/cash-bank/cheques"], kind: "general" },
   { key: "compliance", label: "Compliance calendar", hint: "GST, income-tax, TDS, MCA / LLP and PF due dates — what is pending and what is filed", hrefs: ["/compliance"], kind: "general" },
   { key: "documents", label: "Document vault", hint: "Store ITRs, financial statements, certificates and licences; share by e-mail or WhatsApp", hrefs: ["/documents"], kind: "general" },
+  { key: "staff", label: "Staff, attendance & payroll", hint: "Employee register, daily attendance, monthly salaries, payslips, EPF / ESI", hrefs: ["/staff"], kind: "general" },
   { key: "loans", label: "Loan accounts", hint: "Business loans and EMIs", hrefs: ["/loans"], kind: "general" },
 ];
 
