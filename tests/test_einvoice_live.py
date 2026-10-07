@@ -104,3 +104,38 @@ def test_helpers():
     assert ei.qr_text(base64.b64encode(b"eyJhbGc.payload.sig").decode()) == "eyJhbGc.payload.sig"
     assert ei.parse_dt("10/09/2026 10:00:00").hour == 10 and ei.parse_dt("15/09/2026", end_of_day=True).hour == 23
     assert ei.parse_dt("") is None and json.dumps(ei.api_ewb_payload({"billLists": [{"userGstin": "x", "transMode": 1, "itemList": [{"itemNo": 1, "cessNonAdvol": 0}]}]}))
+
+
+def test_ewaybill_goods_only_and_irn_only_when_applicable(client):
+    from tests.test_phase2 import einvoicing_on
+
+    h, cust, item = setup(client)  # item is goods (HSN 7323)
+    svc = post(client, h, "/api/items", {"type": "SERVICE", "name": "Consulting", "hsn_sac": "998311", "sale_price": 100000, "gst_rate": 18})
+    t = {"vehicle_no": "MH12AB1234", "distance_km": 100}
+    # services only, ₹1,18,000: no e-way bill, and it cannot be generated
+    s = post(client, h, "/api/vouchers", {"type": "SALE", "date": "2026-09-10", "party_id": cust["id"], "transport": t,
+                                          "lines": [{"item_id": svc["id"], "name": "Consulting", "hsn_sac": "998311", "qty": 1, "rate": 100000, "gst_rate": 18}]})
+    assert not client.get(f"/api/vouchers/{s['id']}", headers=h).json()["ewb_required"]
+    assert client.post(f"/api/vouchers/{s['id']}/ewaybill", headers=h).status_code == 400
+    assert client.get(f"/api/vouchers/{s['id']}/ewaybill/json", headers=h).status_code == 400
+    # mixed: big service + small goods (₹1,180) — the limit looks at the goods only
+    m = post(client, h, "/api/vouchers", {"type": "SALE", "date": "2026-09-10", "party_id": cust["id"], "transport": t, "lines": [
+        {"item_id": svc["id"], "name": "Consulting", "hsn_sac": "998311", "qty": 1, "rate": 100000, "gst_rate": 18},
+        {"item_id": item["id"], "name": "Bottle", "qty": 2, "rate": 500, "gst_rate": 18}]})
+    assert not client.get(f"/api/vouchers/{m['id']}", headers=h).json()["ewb_required"]
+    j = client.get(f"/api/vouchers/{m['id']}/ewaybill/json", headers=h).json()["billLists"][0]
+    assert [i["hsnCode"] for i in j["itemList"]] == [7323] and j["totalValue"] == 1000 and j["totInvValue"] == 119180
+    # goods above the limit: needed
+    g = post(client, h, "/api/vouchers", {"type": "SALE", "date": "2026-09-10", "party_id": cust["id"], "transport": t,
+                                          "lines": [{"item_id": item["id"], "name": "Bottle", "qty": 120, "rate": 500, "gst_rate": 18}]})
+    assert client.get(f"/api/vouchers/{g['id']}", headers=h).json()["ewb_required"]
+
+    # e-invoicing not ticked: no IRN flags and IRN actions refused
+    d = client.get(f"/api/vouchers/{g['id']}", headers=h).json()
+    assert not d["irn_required"]
+    assert client.get(f"/api/vouchers/{g['id']}/einvoice/json", headers=h).status_code == 400
+    assert client.post(f"/api/vouchers/{g['id']}/einvoice", headers=h).status_code == 400
+    assert client.get("/api/einvoice/bulk-json", headers=h, params={"date_from": "2026-09-01", "date_to": "2026-09-30"}).status_code == 400
+    einvoicing_on(client, h)
+    assert client.get(f"/api/vouchers/{g['id']}", headers=h).json()["irn_required"]
+    assert client.get(f"/api/vouchers/{g['id']}/einvoice/json", headers=h).status_code == 200

@@ -168,11 +168,17 @@ def ewaybill_payload(db: Session, biz: Business, v: Voucher) -> dict:
         problems.append("Approximate distance in km (Transport details on the bill)")
     if not (t.get("vehicle_no") or t.get("transporter_id")):
         problems.append("Vehicle number or transporter ID (Transport details on the bill)")
-    missing_hsn = [l.name for l in v.lines if not l.hsn_sac]
+    goods = [l for l in v.lines if not (l.hsn_sac or "").startswith("99")]  # services (SAC) are not part of an e-way bill
+    if not goods:
+        problems.append("Goods on the bill — services do not need an e-way bill")
+    missing_hsn = [l.name for l in goods if not l.hsn_sac]
     if missing_hsn:
         problems.append("HSN for: " + ", ".join(missing_hsn[:5]))
     if problems:
         raise PayloadError(problems)
+
+    def total(f):
+        return _d(sum((getattr(l, f) for l in goods), Decimal("0")))
 
     outward = v.type != VoucherType.PURCHASE
     us = dict(gstin=biz.gstin, name=biz.legal_name or biz.name, addr=_addr(biz.address), place=biz.city or "",
@@ -190,8 +196,8 @@ def ewaybill_payload(db: Session, biz: Business, v: Voucher) -> dict:
         "actFromStateCode": frm["state"],
         "toGstin": to["gstin"], "toTrdName": to["name"], "toAddr1": to["addr"][0], "toAddr2": to["addr"][1],
         "toPlace": to["place"], "toPincode": to["pin"], "toStateCode": to["state"], "actToStateCode": to["state"],
-        "transactionType": 1, "totalValue": _d(v.taxable), "cgstValue": _d(v.cgst), "sgstValue": _d(v.sgst),
-        "igstValue": _d(v.igst), "cessValue": _d(v.cess), "cessNonAdvolValue": 0,
+        "transactionType": 1, "totalValue": total("taxable"), "cgstValue": total("cgst"), "sgstValue": total("sgst"),
+        "igstValue": total("igst"), "cessValue": total("cess"), "cessNonAdvolValue": 0,
         "otherValue": _d(v.round_off + v.tcs_amount), "totInvValue": _d(v.grand_total),
         "transporterId": t.get("transporter_id", ""), "transporterName": t.get("transporter_name", ""),
         "transDocNo": t.get("doc_no", ""), "transMode": int(t.get("mode", "1")),
@@ -204,7 +210,7 @@ def ewaybill_payload(db: Session, biz: Business, v: Voucher) -> dict:
             "taxableAmount": _d(l.taxable),
             "cgstRate": float(l.gst_rate) / 2 if l.cgst else 0, "sgstRate": float(l.gst_rate) / 2 if l.sgst else 0,
             "igstRate": float(l.gst_rate) if l.igst else 0, "cessRate": float(l.cess_rate), "cessNonAdvol": 0,
-        } for i, l in enumerate(v.lines, 1)],
+        } for i, l in enumerate(goods, 1)],
     }
     return {"version": "1.0.0621", "billLists": [bill]}
 
