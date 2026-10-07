@@ -144,6 +144,10 @@ class Business(Base):
     # e-invoice / e-way bill API user created on the IRP / EWB portal (password encrypted)
     einvoice_username: Mapped[str | None] = mapped_column(String(100))
     einvoice_password_enc: Mapped[str | None] = mapped_column(Text)
+    ewb_username: Mapped[str | None] = mapped_column(String(100))  # e-way bill portal API user (separate from e-invoice)
+    ewb_password_enc: Mapped[str | None] = mapped_column(Text)
+    # e-invoicing is mandatory for this business (aggregate turnover above the notified limit)
+    einvoice_applicable: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

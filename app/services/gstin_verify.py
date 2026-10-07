@@ -28,7 +28,9 @@ from ..security import decrypt_secret, encrypt_secret
 KEY = "gstin_api"
 DEFAULTS = dict(enabled=False, base_url="https://gstinapi.in", api_key_enc=None, cache_days=30,
                 daily_limit_business=50, daily_limit_user=100, min_plan="FREE", trial_live_limit=1,
-                filing_sync=False, filing_sync_hours=24)
+                filing_sync=False, filing_sync_hours=24,
+                # e-invoice / e-way bill generation through the same provider (each call costs credits)
+                einv_live=False, einv_test_mode=True, gsp_name="Chartered Information Systems Private Limited")
 
 
 # ================================================================ settings
@@ -47,7 +49,7 @@ def public_settings(db: Session) -> dict:
 def save_settings(db: Session, values: dict) -> dict:
     s = settings(db)
     for k in ("enabled", "base_url", "cache_days", "daily_limit_business", "daily_limit_user", "min_plan", "trial_live_limit",
-              "filing_sync", "filing_sync_hours"):
+              "filing_sync", "filing_sync_hours", "einv_live", "einv_test_mode", "gsp_name"):
         if k in values and values[k] is not None:
             s[k] = values[k]
     if values.get("api_key"):

@@ -222,6 +222,9 @@ class BusinessIn(BaseModel):
     print_settings: PrintSettings = PrintSettings()
     einvoice_username: Opt(100) = None
     einvoice_password: Opt(100) = None  # write-only; stored encrypted
+    ewb_username: Opt(100) = None
+    ewb_password: Opt(100) = None  # write-only; stored encrypted
+    einvoice_applicable: bool = False
 
     _gstin = field_validator("gstin")(_check_gstin)
     _state = field_validator("state_code")(_check_state)
@@ -291,6 +294,9 @@ class BusinessOut(ORM):
     print_settings: PrintSettings | None
     einvoice_username: str | None
     einvoice_password_set: bool = False
+    ewb_username: str | None = None
+    ewb_password_set: bool = False
+    einvoice_applicable: bool = False
     plan: dict | None = None
 
 
@@ -621,6 +627,8 @@ class VoucherDetailOut(VoucherOut):
     tax_breakup: list[TaxBucketOut] = []
     amount_in_words: str = ""
     original_number: str | None = None
+    ewb_required: bool = False  # goods above the e-way bill limit and no e-way bill yet
+    irn_required: bool = False  # e-invoicing applies and this B2B document has no IRN yet
 
 
 # ---------- payments ----------
