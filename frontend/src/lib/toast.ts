@@ -37,7 +37,9 @@ const RECORDS: [RegExp, string][] = [
   [/^\/recurring(\/[^/?]+)?$/, "Recurring invoice"], [/^\/expenses\/categories(\/[^/?]+)?$/, "Expense category"],
   [/^\/expenses\/items(\/[^/?]+)?$/, "Expense item"], [/^\/businesses\/current$/, "Business details"],
   [/^\/reminders\/settings$/, "Reminder settings"], [/^\/compliance\/tasks(\/[^/?]+)?$/, "Compliance entry"],
-  [/^\/businesses\/current\/modules$/, "Modules"], [/^\/documents(\/[^/?]+)?$/, "Document"], [/^\/items\/[^/]+\/movements\/[^/]+$/, "Stock adjustment"],
+  [/^\/businesses\/current\/modules$/, "Modules"], [/^\/documents(\/[^/?]+)?$/, "Document"],
+  [/^\/employees(\/[^/?]+)?$/, "Employee"], [/^\/attendance$/, "Attendance"], [/^\/payroll\/advances(\/[^/?]+)?$/, "Advance"],
+  [/^\/payroll\/settings$/, "Payroll settings"], [/^\/items\/[^/]+\/movements\/[^/]+$/, "Stock adjustment"],
 ];
 
 export function announceSave(method: string, path: string, body: unknown) {

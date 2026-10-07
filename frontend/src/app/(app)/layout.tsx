@@ -3,6 +3,9 @@
 import {
   BellRing,
   CalendarCheck,
+  CalendarDays,
+  UserRound,
+  BadgeIndianRupee,
   FolderLock,
   Factory,
   Route,
@@ -52,6 +55,7 @@ import { PlanBadge } from "@/components/PlanBadge";
 import { UserBar } from "@/components/UserBar";
 import { businessMode, hiddenHrefs, isHiddenHref } from "@/lib/modules";
 import { InvitationsBanner, PendingSignIns } from "@/components/StaffComponents";
+import { CheckInButton } from "@/components/CheckInButton";
 
 type NavItem = { href: string; label: string; icon: React.ElementType; perm?: [Module, Action] | [Module, Action][] };
 
@@ -100,6 +104,14 @@ const NAV: { section?: string; items: NavItem[] }[] = [
       { href: "/loans", label: "Loan Accounts", icon: HandCoins, perm: ["cashbank", "view"] },
       { href: "/cash-bank/capital", label: "Capital", icon: Wallet, perm: ["cashbank", "view"] },
       { href: "/cash-bank/tax-payments", label: "Tax Payments", icon: ReceiptText, perm: ["cashbank", "view"] },
+    ],
+  },
+  {
+    section: "Staff",
+    items: [
+      { href: "/staff", label: "Employees", icon: UserRound, perm: ["attendance", "view"] },
+      { href: "/staff/attendance", label: "Attendance", icon: CalendarDays, perm: ["attendance", "view"] },
+      { href: "/staff/payroll", label: "Payroll", icon: BadgeIndianRupee, perm: ["payroll", "view"] },
     ],
   },
   {
@@ -230,6 +242,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="flex min-w-0 flex-1 justify-center"><GlobalSearch /></div>
           <OfflineSync />
           <PendingSignIns />
+          <CheckInButton />
           {can("purchases", "create") && (
             <span className="hidden xl:inline-flex">
               <LinkButton href="/v/purchases/new" variant="secondary"><Plus size={16} /> Purchase</LinkButton>

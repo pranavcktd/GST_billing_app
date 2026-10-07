@@ -150,6 +150,8 @@ class Business(Base):
     einvoice_applicable: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # selling more than is in stock: WARN (confirm) / BLOCK (manager approval) / ALLOW — see services/stock_control.py
     stock_control: Mapped[str] = mapped_column(String(5), default="WARN", server_default="WARN")
+    # payroll defaults: weekly offs, holidays, salary basis — see services/payroll.py
+    payroll_settings: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -857,6 +859,110 @@ class Document(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     uploaded_by: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Employee(Base):
+    """A person on the business's payroll (need not have an app login; `user_id` links one for self check-in)."""
+
+    __tablename__ = "employees"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str | None] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(120))
+    phone: Mapped[str | None] = mapped_column(String(20))
+    email: Mapped[str | None] = mapped_column(String(200))
+    designation: Mapped[str | None] = mapped_column(String(80))
+    department: Mapped[str | None] = mapped_column(String(80))
+    joined_on: Mapped[dt.date | None] = mapped_column(Date)
+    left_on: Mapped[dt.date | None] = mapped_column(Date)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    salary_type: Mapped[str] = mapped_column(String(8), default="MONTHLY")  # MONTHLY / DAILY
+    salary: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))  # monthly gross, or rate per day
+    basic_pct: Mapped[Decimal] = mapped_column(Rate, default=Decimal("50"))  # share of pay that is basic (EPF wage)
+    ot_rate: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))  # overtime pay per hour
+    pf: Mapped[bool] = mapped_column(Boolean, default=False)
+    esi: Mapped[bool] = mapped_column(Boolean, default=False)
+    pt_monthly: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))  # professional tax deducted each month
+    tds_monthly: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    uan: Mapped[str | None] = mapped_column(String(20))
+    esic_no: Mapped[str | None] = mapped_column(String(20))
+    pan: Mapped[str | None] = mapped_column(String(10))
+    bank_name: Mapped[str | None] = mapped_column(String(120))
+    bank_account: Mapped[str | None] = mapped_column(String(40))
+    bank_ifsc: Mapped[str | None] = mapped_column(String(11))
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Attendance(Base):
+    """One employee on one day: P present, A absent, HD half day, L paid leave, WO weekly off, H holiday."""
+
+    __tablename__ = "attendance"
+    __table_args__ = (UniqueConstraint("employee_id", "date", name="uq_attendance_day"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    employee_id: Mapped[str] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), index=True)
+    date: Mapped[dt.date] = mapped_column(Date, index=True)
+    status: Mapped[str] = mapped_column(String(2))
+    check_in: Mapped[str | None] = mapped_column(String(5))  # HH:MM
+    check_out: Mapped[str | None] = mapped_column(String(5))
+    ot_hours: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("0"))
+    note: Mapped[str | None] = mapped_column(String(200))
+    source: Mapped[str] = mapped_column(String(6), default="MANUAL")  # MANUAL / SELF
+    marked_by: Mapped[str | None] = mapped_column(String(120))
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class SalaryAdvance(Base):
+    """Money given to an employee ahead of salary; recovered through payroll."""
+
+    __tablename__ = "salary_advances"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    employee_id: Mapped[str] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), index=True)
+    date: Mapped[dt.date] = mapped_column(Date)
+    amount: Mapped[Decimal] = mapped_column(Money)
+    note: Mapped[str | None] = mapped_column(String(200))
+    voucher_id: Mapped[str | None] = mapped_column(ForeignKey("vouchers.id", ondelete="SET NULL"))  # the expense entry
+    created_by: Mapped[str | None] = mapped_column(String(120))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class PayrollRun(Base):
+    """Salaries of one month: DRAFT (editable) -> FINAL (locked) -> PAID (salary expense posted)."""
+
+    __tablename__ = "payroll_runs"
+    __table_args__ = (UniqueConstraint("business_id", "month", name="uq_payroll_month"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), index=True)
+    month: Mapped[str] = mapped_column(String(7))  # YYYY-MM
+    status: Mapped[str] = mapped_column(String(6), default="DRAFT")
+    paid_on: Mapped[dt.date | None] = mapped_column(Date)
+    voucher_id: Mapped[str | None] = mapped_column(ForeignKey("vouchers.id", ondelete="SET NULL"))
+    statutory_paid: Mapped[dict | None] = mapped_column(JSON)  # {"PF": {...}, "ESI": {...}, ...}
+    created_by: Mapped[str | None] = mapped_column(String(120))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    lines: Mapped[list["PayrollLine"]] = relationship(cascade="all, delete-orphan", order_by="PayrollLine.name")
+
+
+class PayrollLine(Base):
+    """One employee's salary in a payroll run (a snapshot: later changes to the employee do not alter it)."""
+
+    __tablename__ = "payroll_lines"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    run_id: Mapped[str] = mapped_column(ForeignKey("payroll_runs.id", ondelete="CASCADE"), index=True)
+    employee_id: Mapped[str] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    data: Mapped[dict] = mapped_column(JSON)  # days, rates, earnings, deductions (see services/payroll.py)
+    bonus: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    other_additions: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    advance_recovery: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    other_deductions: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    gross: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    deductions: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    net: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
+    note: Mapped[str | None] = mapped_column(String(200))
 
 
 class ImageFile(Base):
