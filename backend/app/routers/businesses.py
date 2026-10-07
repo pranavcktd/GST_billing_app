@@ -14,11 +14,13 @@ router = APIRouter(prefix="/businesses", tags=["business"])
 
 
 def apply_business(biz: Business, data: BusinessIn) -> None:
-    values = data.model_dump(exclude={"einvoice_password"})
+    values = data.model_dump(exclude={"einvoice_password", "ewb_password"})
     for k, v in values.items():
         setattr(biz, k, v)
     if data.einvoice_password:
         biz.einvoice_password_enc = encrypt_secret(data.einvoice_password)
+    if data.ewb_password:
+        biz.ewb_password_enc = encrypt_secret(data.ewb_password)
 
 
 def _check_theme(db, business_id: str | None, data: BusinessIn) -> None:
@@ -48,6 +50,7 @@ def business_out(db, biz: Business) -> BusinessOut:
     out = BusinessOut.model_validate(biz)
     out.gst_portal = portal
     out.einvoice_password_set = bool(biz.einvoice_password_enc)
+    out.ewb_password_set = bool(biz.ewb_password_enc)
     p = business_plan(db, biz.id)
     out.plan = {"code": p["code"], "name": p["name"], "watermark": p["watermark"],
                 "custom_themes": p["custom_themes"], "barcode": p["barcode"], "einvoice": p["einvoice"],

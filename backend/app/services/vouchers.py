@@ -357,7 +357,13 @@ def to_detail(ctx: Ctx, v: Voucher) -> VoucherDetailOut:
         for f in ("taxable", "cgst", "sgst", "igst", "cess"):
             b[f] += getattr(l, f)
     original = ctx.db.get(Voucher, v.original_voucher_id) if v.original_voucher_id else None
+    from . import einvoice as ei
+    from . import ewaybill as ewbs
+
+    biz = getattr(ctx, "business", None)
     return VoucherDetailOut(
+        ewb_required=bool(biz and biz.gstin and ewbs.needs_ewb(v)),
+        irn_required=bool(biz and ei.irn_required(biz, v)),
         **base.model_dump(),
         lines=[VoucherLineOut.model_validate(l) for l in v.lines],
         tax_breakup=[TaxBucketOut(**b) for _, b in sorted(buckets.items())],

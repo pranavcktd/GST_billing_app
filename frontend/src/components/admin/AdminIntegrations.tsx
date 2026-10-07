@@ -9,6 +9,7 @@ import { useFetch } from "@/lib/useFetch";
 interface Settings {
   enabled: boolean; base_url: string; cache_days: number; daily_limit_business: number; daily_limit_user: number;
   min_plan: string; api_key_set: boolean; api_key_hint: string | null; trial_live_limit: number; filing_sync: boolean; filing_sync_hours: number;
+  einv_live: boolean; einv_test_mode: boolean; gsp_name: string;
 }
 interface Usage {
   days: number; live_ok: number; live_failed: number; cache: number; credits_remaining: number | null; saved_by_cache_pct: number;
@@ -80,7 +81,20 @@ export function AdminIntegrations() {
           <Field label="Fetch the same year again after (hours)" hint="Stops repeated clicks from using credit">
             <Input inputMode="numeric" value={String(s.filing_sync_hours ?? 24)} onChange={(e) => setEdit({ ...edit, filing_sync_hours: Number(e.target.value) || 24 })} />
           </Field>
-          <Field label="Available from plan">
+          <div className="md:col-span-3 mt-2 border-t border-gray-100 pt-4">
+            <div className="font-semibold text-gray-900">e-Invoice & e-Way bill generation</div>
+            <p className="text-xs text-gray-500">Businesses generate IRNs and e-way bills from their invoices through the same provider (3 credits per filing or cancellation; rejections are free). Direct generation is for plans that include it (Professional and above).</p>
+          </div>
+          <Field label="Direct generation for businesses">
+            <label className="flex items-center gap-2 pt-2 text-sm"><input type="checkbox" checked={!!s.einv_live} onChange={(e) => setEdit({ ...edit, einv_live: e.target.checked })} /> {s.einv_live ? "On — Generate IRN / EWB buttons work" : "Off — JSON download only"}</label>
+          </Field>
+          <Field label="Test mode" hint="Free: TEST- numbers, nothing filed with the government. Switch off to go live.">
+            <label className="flex items-center gap-2 pt-2 text-sm"><input type="checkbox" checked={s.einv_test_mode ?? true} onChange={(e) => setEdit({ ...edit, einv_test_mode: e.target.checked })} /> {s.einv_test_mode ?? true ? "Test mode (no real filing)" : <b className="text-red-700">LIVE — real IRNs / e-way bills</b>}</label>
+          </Field>
+          <Field label="GSP name (shown to businesses)" hint="The GSP they choose when creating the API user on the e-invoice / e-way bill portals. Change it if you change provider.">
+            <Input value={s.gsp_name ?? ""} maxLength={200} onChange={(e) => setEdit({ ...edit, gsp_name: e.target.value })} />
+          </Field>
+          <Field label="GSTIN verification available from plan">
             <Select value={s.min_plan} onChange={(e) => setEdit({ ...edit, min_plan: e.target.value })}>
               <option value="FREE">All plans (incl. Free)</option><option value="STARTER">Starter and above</option>
               <option value="PROFESSIONAL">Professional and above</option><option value="ENTERPRISE">Enterprise only</option>

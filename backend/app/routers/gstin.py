@@ -50,6 +50,9 @@ class SettingsIn(BaseModel):
     trial_live_limit: int | None = Field(None, ge=0, le=1000)  # paid lookups per trial / free account (lifetime)
     filing_sync: bool | None = None  # compliance calendar: fetch GST return filing status
     filing_sync_hours: int | None = Field(None, ge=1, le=720)  # minimum gap between fetches of the same year
+    einv_live: bool | None = None  # businesses can generate IRN / e-way bills from the app
+    einv_test_mode: bool | None = None  # provider's free test mode (TEST- numbers, nothing filed)
+    gsp_name: str | None = Field(None, max_length=200)  # shown to businesses: the GSP to pick on the portals
 
 
 @router.get("/admin/gstin-api")

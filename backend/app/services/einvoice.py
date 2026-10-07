@@ -8,8 +8,8 @@ or sent through a provider:
 * SandboxProvider — local test mode: IRN computed the way the IRP computes it (SHA-256 of
   supplier GSTIN + financial year + document type + number), acknowledgement and QR payload
   generated locally and clearly marked "SANDBOX". Nothing is reported to the government.
-* GspProvider — calls your GST Suvidha Provider. Each GSP's API differs slightly, so the
-  request/response mapping lives in this one class; fill it in with your GSP's documentation.
+* GstinApiProvider — live generation through gstinapi.in (the GSP is named by the super admin in Admin > Integrations);
+  its own test mode returns TEST- numbers without filing anything.
 """
 
 import base64
@@ -233,6 +233,9 @@ class SandboxProvider:
     def cancel_irn(self, biz: Business, v: Voucher, reason: str, remark: str) -> None:
         return None
 
+    def cancel_ewb(self, biz: Business, v: Voucher, reason: str, remark: str) -> None:
+        return None
+
     def generate_ewb(self, biz: Business, v: Voucher, payload: dict) -> dict:
         now = dt.datetime.now(IST)
         km = int(payload["billLists"][0]["transDistance"] or 0)
@@ -241,32 +244,144 @@ class SandboxProvider:
                 "valid_till": (now + dt.timedelta(days=days)).replace(hour=23, minute=59, second=0)}
 
 
-class GspProvider:
-    """Adapter for your GSP. Implement with the GSP's API documentation (auth → generate / cancel)."""
+class GstinApiProvider:
+    """Live IRN / e-way bill generation through gstinapi.in (same API key as GSTIN verification).
 
-    sandbox = False
+    The taxpayer's own e-invoice and e-way bill *API users* (created on the government portals "through GSP",
+    choosing the GSP the super admin names) are sent with each call. `test_mode` (super admin) files nothing
+    and returns TEST- numbers. Rejections and time-outs are not charged; a retry with the same document
+    number returns the existing IRN / e-way bill (`already_existed`) instead of filing twice.
+    """
 
-    def __init__(self, biz: Business):
-        s = get_settings()
-        if not (s.gsp_base_url and s.gsp_client_id and s.gsp_client_secret):
-            raise HTTPException(503, "GSP is not configured on the server (GSP_BASE_URL / GSP_CLIENT_ID / GSP_CLIENT_SECRET)")
-        if not (biz.einvoice_username and biz.einvoice_password_enc):
-            raise HTTPException(400, "Add your e-invoice API username and password in Settings → e-Invoice")
-        self.base, self.client_id, self.client_secret = s.gsp_base_url, s.gsp_client_id, s.gsp_client_secret
-        self.username, self.password = biz.einvoice_username, decrypt_secret(biz.einvoice_password_enc)
+    def __init__(self, db: Session, biz: Business):
+        from . import gstin_verify as G
 
-    def _todo(self):
-        raise HTTPException(501, "GSP integration is not implemented yet — use sandbox mode or the JSON download")
+        self.s = G.settings(db)
+        self.key = G._key(self.s)
+        if not (self.s.get("einv_live") and self.key):
+            raise HTTPException(503, "Direct e-invoice / e-way bill generation is not switched on. Download the JSON, "
+                                     "upload it on the portal, then record the number here.")
+        self.test = bool(self.s.get("einv_test_mode", True))
+        self.sandbox = self.test
+        self.biz = biz
+
+    def _creds(self, kind: str) -> tuple[str, str]:
+        if kind == "einv":
+            user, enc = self.biz.einvoice_username, self.biz.einvoice_password_enc
+        else:
+            user, enc = self.biz.ewb_username, self.biz.ewb_password_enc
+        if self.test and not (user and enc):
+            return "test-user", "test-password"  # the provider's test mode needs no real portal user
+        if not (user and enc):
+            what = "e-invoice" if kind == "einv" else "e-way bill"
+            gsp = self.s.get("gsp_name") or "our GSP"
+            raise HTTPException(400, f"Add your {what} API username and password in Settings > e-Invoice "
+                                     f"(create them on the {what} portal through GSP: {gsp})")
+        return user, decrypt_secret(enc)
+
+    def _post(self, path: str, body: dict) -> dict:
+        r = _http_post(f"{self.s['base_url']}/v1/{path}", self.key, {**body, "gstin": self.biz.gstin, "test_mode": self.test})
+        try:
+            data = r.json()
+        except ValueError:
+            data = {}
+        if r.status_code == 200 and data.get("success", True):
+            return data
+        msg = data.get("error") or data.get("message") or f"provider error {r.status_code}"
+        code = data.get("error_code")
+        status = {401: 503, 402: 503, 403: 503, 429: 429}.get(r.status_code, 502 if r.status_code >= 500 else 400)
+        friendly = {401: "The e-invoice service key is not valid. Contact the platform administrator.",
+                    402: "The e-invoice service has run out of credits. Contact the platform administrator.",
+                    403: "The e-invoice service account is not active. Contact the platform administrator.",
+                    429: "Too many requests. Try again in a minute."}.get(r.status_code)
+        raise HTTPException(status, friendly or (f"The portal did not accept it: {msg}" + (f" (code {code})" if code else "")))
 
     def generate_irn(self, biz, v, payload):
-        self._todo()
+        user, pwd = self._creds("einv")
+        d = self._post("einvoice", {"einv_username": user, "password": pwd, "payload": payload})
+        return {"irn": d["irn"], "ack_no": str(d.get("ack_no") or ""), "ack_date": parse_dt(d.get("ack_date")) or dt.datetime.now(IST),
+                "signed_qr": qr_text(d.get("qr_code_image") or d.get("signed_qr") or ""),
+                "ewb_no": d.get("ewaybill_no"), "ewb_date": parse_dt(d.get("ewaybill_date")),
+                "ewb_valid_till": parse_dt(d.get("ewaybill_valid_upto"), end_of_day=True)}
 
     def cancel_irn(self, biz, v, reason, remark):
-        self._todo()
+        user, pwd = self._creds("einv")
+        self._post("einvoice/cancel", {"einv_username": user, "password": pwd, "irn": v.irn, "cancel_reason": reason,
+                                       "cancel_remark": remark or "Cancelled"})
 
     def generate_ewb(self, biz, v, payload):
-        self._todo()
+        user, pwd = self._creds("ewb")
+        d = self._post("ewaybill", {"gstin_username": user, "password": pwd, "payload": api_ewb_payload(payload)})
+        return {"ewb_no": str(d["ewaybill_no"]), "ewb_date": parse_dt(d.get("ewaybill_date")) or dt.datetime.now(IST),
+                "valid_till": parse_dt(d.get("valid_upto"), end_of_day=True)}
+
+    def cancel_ewb(self, biz, v, reason, remark):
+        user, pwd = self._creds("ewb")
+        self._post("ewaybill/cancel", {"gstin_username": user, "password": pwd, "ewaybill_no": v.ewb_no,
+                                       "cancel_reason_code": reason, "cancel_remark": remark or "Cancelled"})
 
 
-def provider(biz: Business):
-    return GspProvider(biz) if get_settings().einvoice_provider.lower() == "gsp" else SandboxProvider()
+def _http_post(url: str, key: str, body: dict):
+    """Single seam for tests."""
+    import httpx
+
+    return httpx.post(url, json=body, headers={"x-api-key": key, "Accept": "application/json"}, timeout=60)
+
+
+_FORMATS = [("%d/%m/%Y %H:%M:%S", False), ("%d/%m/%Y %I:%M:%S %p", False), ("%d/%m/%Y %H:%M", False),
+            ("%Y-%m-%dT%H:%M:%S", False), ("%Y-%m-%d %H:%M:%S", False), ("%d/%m/%Y", True), ("%Y-%m-%d", True)]
+
+
+def parse_dt(v, end_of_day: bool = False) -> dt.datetime | None:
+    """'08/09/2026 10:00:00', '08/09/2026', '2026-09-08T10:00:00' -> aware datetime (IST)."""
+    if not v:
+        return None
+    t = str(v).strip()
+    for fmt, date_only in _FORMATS:
+        try:
+            d = dt.datetime.strptime(t, fmt)
+        except ValueError:
+            continue
+        if end_of_day and date_only:
+            d = d.replace(hour=23, minute=59)
+        return d.replace(tzinfo=IST)
+    return None
+
+
+def qr_text(v: str) -> str:
+    """The provider sends the IRP's signed QR (a JWT); accept it plain or base64-wrapped."""
+    if not v or v.startswith("eyJ"):
+        return v
+    try:
+        decoded = base64.b64decode(v + "=" * (-len(v) % 4)).decode()
+        return decoded if decoded.startswith("eyJ") else v
+    except (ValueError, UnicodeDecodeError):
+        return v
+
+
+def api_ewb_payload(bulk: dict) -> dict:
+    """The NIC bulk-upload JSON (one bill) -> the NIC e-way bill API request."""
+    bill = dict(bulk["billLists"][0])
+    bill.pop("userGstin", None)
+    bill["transMode"] = str(bill.get("transMode") or "1")
+    bill["itemList"] = [{**{k: x for k, x in i.items() if k not in ("itemNo", "cessNonAdvol")}, "cessNonadvol": i.get("cessNonAdvol", 0)}
+                        for i in bill["itemList"]]
+    return bill
+
+
+def irn_required(biz: Business, v: Voucher) -> bool:
+    """e-Invoicing applies to the business and this B2B invoice / credit note has no IRN yet."""
+    return bool(getattr(biz, "einvoice_applicable", False) and biz.gstin and v.type in EINVOICE_TYPES and v.party_gstin
+                and not v.cancelled and v.einvoice_status != "GENERATED")
+
+
+def provider(db: Session, biz: Business):
+    """Live provider when the super admin switched it on; the local sandbox only on a development server."""
+    from . import gstin_verify as G
+
+    s = G.settings(db)
+    if s.get("einv_live") and G._key(s):
+        return GstinApiProvider(db, biz)
+    if get_settings().is_dev:
+        return SandboxProvider()
+    return GstinApiProvider(db, biz)  # raises: not switched on

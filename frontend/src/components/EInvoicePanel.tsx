@@ -1,6 +1,8 @@
 "use client";
 
-import { Download, FileBadge, Pencil, Truck, XCircle, Zap } from "lucide-react";
+import { AlertTriangle, Download, FileBadge, Pencil, Printer, Truck, XCircle, Zap } from "lucide-react";
+import Link from "next/link";
+import { useFetch } from "@/lib/useFetch";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { TransportFields } from "@/components/TransportFields";
@@ -11,6 +13,8 @@ import { useConfig } from "@/lib/config";
 import { money } from "@/lib/format";
 import { PortalLink } from "@/components/PortalLink";
 
+interface EinvSetup { live: boolean; test_mode: boolean | null; sandbox: boolean; gsp_name: string | null; plan: string | null; einvoice_user_set: boolean; ewb_user_set: boolean; einvoice_applicable: boolean }
+
 const within24h = (iso: string | null) => !!iso && Date.now() - new Date(iso).getTime() < 24 * 3600 * 1000;
 
 /** e-Invoice (IRN) and e-Way bill actions for a document. */
@@ -19,7 +23,8 @@ export function EInvoicePanel({ v, business, onChange, canEdit }: {
 }) {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [dialog, setDialog] = useState<null | "transport" | "irn" | "ewb" | "cancel">(null);
+  const [dialog, setDialog] = useState<null | "transport" | "irn" | "ewb" | "cancel" | "cancelEwb">(null);
+  const { data: setup } = useFetch<EinvSetup>("/einvoice/setup");
   const [transport, setTransport] = useState<Transport>(v.transport ?? {});
   const [manual, setManual] = useState({ irn: "", ack_no: "", ack_date: "", ewb_no: "", ewb_date: "", valid_till: "" });
   const [reason, setReason] = useState({ reason: "2", remark: "" });
@@ -42,11 +47,25 @@ export function EInvoicePanel({ v, business, onChange, canEdit }: {
       setBusy(false);
     }
   };
-  const api_ok = plan?.einvoice === "API";
+  // direct generation: plan includes it AND the super admin switched it on (or the local sandbox while developing)
+  const api_ok = plan?.einvoice === "API" && !!(setup?.live || setup?.sandbox);
+  const genTitle = plan?.einvoice !== "API" ? "Direct generation needs the Professional plan"
+    : !setup?.live && !setup?.sandbox ? "Direct generation is not switched on yet — use the JSON and record the number"
+    : setup?.test_mode ? "Test mode: nothing is filed with the government (TEST numbers)" : "";
+  const mode = setup?.live ? (setup.test_mode ? " (test)" : "") : setup?.sandbox ? " (sandbox)" : "";
   const json_ok = plan?.einvoice === "API" || plan?.einvoice === "JSON";
 
   return (
-    <Card className="no-print mb-4 p-4">
+    <Card className={`no-print mb-4 p-4 ${v.ewb_required || v.irn_required ? "border-red-300 ring-1 ring-red-200" : ""}`}>
+      {(v.ewb_required || v.irn_required) && (
+        <div className="mb-3 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
+          <AlertTriangle size={17} className="mt-0.5 shrink-0" />
+          <div>
+            {v.irn_required && <div><b>IRN required.</b> e-Invoicing applies to your business — a B2B invoice without an IRN is not a valid tax invoice. Generate it before sending the bill.</div>}
+            {v.ewb_required && <div><b>E-way bill required.</b> Goods worth more than {money(config.ewb_threshold)} — generate the e-way bill before the goods move (add transport details first).</div>}
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1 text-sm">
           <div className="flex items-center gap-2 font-semibold text-gray-900"><FileBadge size={16} /> e-Invoice & e-Way Bill</div>
@@ -80,15 +99,23 @@ export function EInvoicePanel({ v, business, onChange, canEdit }: {
               </Button>
               {canEdit && <Button variant="secondary" disabled={!json_ok} onClick={() => setDialog("irn")}><Pencil size={15} /> Record IRN</Button>}
               {canEdit && (
-                <Button disabled={busy || !api_ok} title={api_ok ? "" : "Direct generation needs the Professional plan"}
+                <Button disabled={busy || !api_ok} title={genTitle}
                   onClick={() => run(() => api<VoucherDetail>(`/vouchers/${v.id}/einvoice`, { body: {} }))}>
-                  <Zap size={15} /> Generate IRN
+                  <Zap size={15} /> Generate IRN{mode}
                 </Button>
               )}
             </>
           )}
           {eligibleIrn && v.einvoice_status === "GENERATED" && canEdit && within24h(v.ack_date) && (
             <Button variant="danger" onClick={() => setDialog("cancel")}><XCircle size={15} /> Cancel IRN</Button>
+          )}
+          {eligibleEwb && v.ewb_no && (
+            <>
+              <Link href={`/print/ewaybill/${v.id}`} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-sm font-medium hover:bg-gray-50">
+                <Printer size={15} /> Print e-way bill
+              </Link>
+              {canEdit && within24h(v.ewb_date) && <Button variant="danger" onClick={() => setDialog("cancelEwb")}><XCircle size={15} /> Cancel EWB</Button>}
+            </>
           )}
           {eligibleEwb && !v.ewb_no && (
             <>
@@ -97,9 +124,9 @@ export function EInvoicePanel({ v, business, onChange, canEdit }: {
               </Button>
               {canEdit && <Button variant="secondary" disabled={!json_ok} onClick={() => setDialog("ewb")}><Pencil size={15} /> Record EWB</Button>}
               {canEdit && (
-                <Button disabled={busy || !api_ok} title={api_ok ? "" : "Direct generation needs the Professional plan"}
+                <Button disabled={busy || !api_ok} title={genTitle}
                   onClick={() => run(() => api<VoucherDetail>(`/vouchers/${v.id}/ewaybill`, { body: {} }))}>
-                  <Zap size={15} /> Generate EWB
+                  <Zap size={15} /> Generate EWB{mode}
                 </Button>
               )}
             </>
@@ -147,6 +174,24 @@ export function EInvoicePanel({ v, business, onChange, canEdit }: {
               <Button variant="secondary" onClick={() => setDialog(null)}>Cancel</Button>
               <Button disabled={busy} onClick={() => run(() => api<VoucherDetail>(`/vouchers/${v.id}/ewaybill`, { method: "PUT",
                 body: { ewb_no: manual.ewb_no, ewb_date: manual.ewb_date, valid_till: manual.valid_till || null } }))}>Save</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {dialog === "cancelEwb" && (
+        <Modal title="Cancel e-way bill" onClose={() => setDialog(null)}>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">An e-way bill can be cancelled within 24 hours of generating it, if the goods have not moved.</p>
+            <Field label="Reason">
+              <Select value={reason.reason} onChange={(e) => setReason({ ...reason, reason: e.target.value })}>
+                <option value="1">Duplicate</option><option value="2">Data entry mistake</option>
+                <option value="3">Order cancelled</option><option value="4">Other</option>
+              </Select>
+            </Field>
+            <Field label="Remark"><Input maxLength={50} value={reason.remark} onChange={(e) => setReason({ ...reason, remark: e.target.value })} /></Field>
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setDialog(null)}>Back</Button>
+              <Button variant="danger" disabled={busy} onClick={() => run(() => api<VoucherDetail>(`/vouchers/${v.id}/ewaybill/cancel`, { body: reason }))}>Cancel e-way bill</Button>
             </div>
           </div>
         </Modal>

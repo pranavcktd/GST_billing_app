@@ -8,6 +8,7 @@ from fastapi import APIRouter, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from ..config import get_settings
 from ..deps import BCtx
 from ..models import Voucher
 from ..schemas import TransportIn, VoucherDetailOut
@@ -83,10 +84,12 @@ def generate_irn(vid: str, ctx: BCtx):
     if v.einvoice_status == "GENERATED":
         raise HTTPException(400, "IRN already generated")
     payload = ei.einvoice_payload(ctx.db, ctx.business, v)
-    p = ei.provider(ctx.business)
+    p = ei.provider(ctx.db, ctx.business)
     res = p.generate_irn(ctx.business, v, payload)
     v.irn, v.ack_no, v.ack_date, v.signed_qr = res["irn"], res["ack_no"], res["ack_date"], res["signed_qr"]
     v.einvoice_status, v.einvoice_sandbox = "GENERATED", p.sandbox
+    if res.get("ewb_no") and not v.ewb_no:  # the IRP can issue the e-way bill in the same call
+        v.ewb_no, v.ewb_date, v.ewb_valid_till = res["ewb_no"], res.get("ewb_date"), res.get("ewb_valid_till")
     ctx.db.commit()
     return to_detail(ctx, v)
 
@@ -104,7 +107,7 @@ def cancel_irn(vid: str, data: CancelIrn, ctx: BCtx):
     ack = v.ack_date if v.ack_date.tzinfo else v.ack_date.replace(tzinfo=dt.timezone.utc)
     if dt.datetime.now(dt.timezone.utc) - ack > dt.timedelta(hours=24):
         raise HTTPException(400, "An IRN can be cancelled only within 24 hours — issue a credit note instead")
-    ei.provider(ctx.business).cancel_irn(ctx.business, v, data.reason, data.remark)
+    ei.provider(ctx.db, ctx.business).cancel_irn(ctx.business, v, data.reason, data.remark)
     v.einvoice_status = "CANCELLED"
     ctx.db.commit()
     return to_detail(ctx, v)
@@ -144,12 +147,67 @@ def generate_ewb(vid: str, ctx: BCtx):
     check_api_quota(ctx.db, ctx.bid)
     if v.ewb_no:
         raise HTTPException(400, "E-way bill already generated")
-    p = ei.provider(ctx.business)
+    p = ei.provider(ctx.db, ctx.business)
     res = p.generate_ewb(ctx.business, v, ei.ewaybill_payload(ctx.db, ctx.business, v))
     v.ewb_no, v.ewb_date, v.ewb_valid_till = res["ewb_no"], res["ewb_date"], res["valid_till"]
     v.einvoice_sandbox = v.einvoice_sandbox or p.sandbox
     ctx.db.commit()
     return to_detail(ctx, v)
+
+
+class CancelEwb(BaseModel):
+    reason: Literal["1", "2", "3", "4"] = "2"  # 1 duplicate, 2 data entry mistake, 3 order cancelled, 4 other
+    remark: str = Field("", max_length=50)
+
+
+@router.post("/vouchers/{vid}/ewaybill/cancel", response_model=VoucherDetailOut)
+def cancel_ewb(vid: str, data: CancelEwb, ctx: BCtx):
+    """Cancel an e-way bill within 24 hours of generating it (portal rule); generated ones go through the provider."""
+    v = _get(ctx, vid, "delete")
+    if not v.ewb_no:
+        raise HTTPException(400, "No e-way bill on this document")
+    when = v.ewb_date if (v.ewb_date and v.ewb_date.tzinfo) else (v.ewb_date.replace(tzinfo=dt.timezone.utc) if v.ewb_date else None)
+    if when and dt.datetime.now(dt.timezone.utc) - when > dt.timedelta(hours=24):
+        raise HTTPException(400, "An e-way bill can be cancelled only within 24 hours of generating it")
+    ei.provider(ctx.db, ctx.business).cancel_ewb(ctx.business, v, data.reason, data.remark)
+    v.ewb_no, v.ewb_date, v.ewb_valid_till = None, None, None
+    ctx.db.commit()
+    return to_detail(ctx, v)
+
+
+@router.get("/einvoice/setup")
+def einvoice_setup(ctx: BCtx):
+    """What the business needs to know to generate e-invoices / e-way bills from the app."""
+    from ..services import gstin_verify as G
+    from ..services.plans import business_plan
+
+    s = G.settings(ctx.db)
+    live = bool(s.get("einv_live") and G._key(s))
+    b = ctx.business
+    return {"live": live, "test_mode": bool(s.get("einv_test_mode", True)) if live else None,
+            "sandbox": not live and get_settings().is_dev,
+            "gsp_name": s.get("gsp_name") or None, "plan": business_plan(ctx.db, ctx.bid).get("einvoice"),
+            "einvoice_user_set": bool(b.einvoice_username and b.einvoice_password_enc),
+            "ewb_user_set": bool(b.ewb_username and b.ewb_password_enc), "einvoice_applicable": b.einvoice_applicable}
+
+
+@router.get("/einvoice/pending")
+def einvoice_pending(ctx: BCtx, days: int = 60):
+    """Documents of the last `days` that still need an e-way bill or an IRN (dashboard / reminders)."""
+    ctx.need("sales", "view")
+    since = dt.date.today() - dt.timedelta(days=min(max(days, 1), 365))
+    docs = ctx.db.scalars(select(Voucher).where(
+        Voucher.business_id == ctx.bid, Voucher.cancelled.is_(False), Voucher.date >= since,
+        Voucher.type.in_(list(set(ei.EWB_DOC_TYPES) | set(ei.EINVOICE_TYPES)))).order_by(Voucher.date.desc())).all()
+    biz = ctx.business
+    out = []
+    for v in docs:
+        need_ewb = bool(biz.gstin and ewb.needs_ewb(v))
+        need_irn = ei.irn_required(biz, v)
+        if need_ewb or need_irn:
+            out.append(dict(id=v.id, type=v.type.value, number=v.number, date=v.date, party_name=v.party_name,
+                            total=float(v.grand_total), ewb=need_ewb, irn=need_irn))
+    return {"count": len(out), "ewb": sum(1 for x in out if x["ewb"]), "irn": sum(1 for x in out if x["irn"]), "items": out[:20]}
 
 
 class ManualEwb(BaseModel):
