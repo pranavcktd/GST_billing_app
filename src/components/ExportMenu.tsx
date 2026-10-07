@@ -1,6 +1,6 @@
 "use client";
 
-import { FileSpreadsheet, FileText, Loader2, Printer, Sheet } from "lucide-react";
+import { FileDown, FileSpreadsheet, FileText, Loader2, Printer, Sheet } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import { API_URL, ApiError, authHeaders, saveBlob } from "@/lib/api";
@@ -93,11 +93,27 @@ export function ExportMenu({ build, disabled, compact }: { build: () => TableDoc
   const icon = (k: string, I: typeof Printer) => (busy === k ? <Loader2 size={15} className="animate-spin" /> : <I size={15} />);
   const cls = compact ? "!px-2.5 !py-1.5" : "";
   return (
-    <div className="no-print inline-flex flex-wrap gap-1.5">
+    <>
+    {/* phones: one "Export" button with a small menu */}
+    <details className="no-print relative sm:hidden">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800">
+        {busy ? <Loader2 size={15} className="animate-spin" /> : <FileDown size={15} />} Export
+      </summary>
+      <div className="absolute left-0 z-30 mt-1 w-40 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+        {([["print", "Print", Printer], ["pdf", "PDF", FileText], ["xlsx", "Excel", FileSpreadsheet], ["csv", "CSV", Sheet]] as const).map(([k, label, I]) => (
+          <button key={k} type="button" disabled={disabled || !!busy} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-50"
+            onClick={(e) => { (e.currentTarget.closest("details") as HTMLDetailsElement).open = false; run(k); }}>
+            <I size={15} /> {label}
+          </button>
+        ))}
+      </div>
+    </details>
+    <div className="no-print hidden flex-wrap gap-1.5 sm:inline-flex">
       <Button variant="secondary" className={cls} disabled={disabled || !!busy} onClick={() => run("print")} title="Print (opens a PDF)">{icon("print", Printer)} Print</Button>
       <Button variant="secondary" className={cls} disabled={disabled || !!busy} onClick={() => run("pdf")} title="Download PDF">{icon("pdf", FileText)} PDF</Button>
       <Button variant="secondary" className={cls} disabled={disabled || !!busy} onClick={() => run("xlsx")} title="Download Excel">{icon("xlsx", FileSpreadsheet)} Excel</Button>
       <Button variant="ghost" className={cls} disabled={disabled || !!busy} onClick={() => run("csv")} title="Download CSV">{icon("csv", Sheet)} CSV</Button>
     </div>
+    </>
   );
 }

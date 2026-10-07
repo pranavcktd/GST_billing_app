@@ -13,7 +13,7 @@ export function Toaster() {
   }), []);
   if (!items.length) return null;
   return (
-    <div className="no-print pointer-events-none fixed inset-x-0 bottom-5 z-[100] flex flex-col items-center gap-2 px-4" role="status" aria-live="polite">
+    <div className="no-print pointer-events-none fixed inset-x-0 bottom-24 z-[100] md:bottom-5 flex flex-col items-center gap-2 px-4" role="status" aria-live="polite">
       {items.map((t) => (
         <div key={t.id} className={`pointer-events-auto flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white shadow-lg ${t.tone === "ok" ? "bg-emerald-600" : "bg-red-600"}`}>
           {t.tone === "ok" ? <CheckCircle2 size={16} /> : <XCircle size={16} />} {t.text}

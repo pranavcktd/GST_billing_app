@@ -60,7 +60,24 @@ export default function PartiesPage() {
         ) : !data?.length ? (
           <Empty title="No parties yet" action={<LinkButton href="/parties/new">Add your first party</LinkButton>} />
         ) : (
-          <table className="tbl">
+          <>
+          <ul className="divide-y divide-gray-100 md:hidden">
+            {rows.map((p) => (
+              <li key={p.id}>
+                <Link href={`/parties/${p.id}`} className="flex items-start justify-between gap-3 px-4 py-3 active:bg-gray-50">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-gray-900">{p.name}</div>
+                    <div className="truncate text-xs text-gray-500">{[p.phone, p.gstin].filter(Boolean).join(" · ") || (p.type === "BOTH" ? "Customer & Supplier" : p.type.charAt(0) + p.type.slice(1).toLowerCase())}</div>
+                  </div>
+                  <div className={`shrink-0 text-right tabular-nums ${p.balance > 0 ? "text-emerald-700" : p.balance < 0 ? "text-red-700" : "text-gray-500"}`}>
+                    <div className="font-semibold">{money(Math.abs(p.balance))}</div>
+                    <div className="text-xs">{p.balance > 0 ? "to collect" : p.balance < 0 ? "to pay" : "settled"}</div>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <table className="tbl hidden md:table">
             <thead>
               <tr><th>Name</th><th>GSTIN</th><th>Phone</th><th>Type</th><th className="num">Balance</th></tr>
             </thead>
@@ -79,6 +96,7 @@ export default function PartiesPage() {
               ))}
             </tbody>
           </table>
+          </>
         )}
         {pager}
       </Card>

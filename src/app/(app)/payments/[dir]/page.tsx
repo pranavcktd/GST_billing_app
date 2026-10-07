@@ -64,7 +64,23 @@ export default function PaymentsPage() {
         ) : !data?.length ? (
           <Empty title="No payments in this period" />
         ) : (
-          <table className="tbl">
+          <>
+          <ul className="divide-y divide-gray-100 md:hidden">
+            {rows.map((p) => (
+              <li key={p.id}>
+                <Link href={canEdit ? `/payments/${dir}/new?edit=${p.id}` : p.party_id ? `/parties/${p.party_id}` : "#"}
+                  className="flex items-start justify-between gap-3 px-4 py-3 active:bg-gray-50">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-gray-900">{p.party_name ?? "Cash"}</div>
+                    <div className="text-xs text-gray-500">{p.number} · {fmtDate(p.date)} · {PAYMENT_MODES[p.mode]}</div>
+                    {p.cheque_status && <div className={`text-xs ${p.cheque_status === "BOUNCED" ? "text-red-700" : p.cheque_status === "OPEN" ? "text-amber-700" : "text-emerald-700"}`}>Cheque {p.cheque_status.toLowerCase()}</div>}
+                  </div>
+                  <div className="shrink-0 text-right font-semibold tabular-nums">{money(p.amount)}</div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <table className="tbl hidden md:table">
             <thead>
               <tr><th>Date</th><th>Number</th><th>Party</th><th>Mode</th><th>Settled bills</th><th className="num">Amount</th><th /></tr>
             </thead>
@@ -109,6 +125,7 @@ export default function PaymentsPage() {
               ))}
             </tbody>
           </table>
+          </>
         )}
         {pager}
       </Card>
