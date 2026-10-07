@@ -248,6 +248,87 @@ export function VoucherForm({
   const docLabel = meta.label;
   const walkInAllowed = vtype === "SALE" || vtype === "ESTIMATE";
 
+  /** The input elements of one item line — laid out as a table row (desktop) or a card (phone). */
+  const lineFields = (l: FormLine) => ({
+    item: (<>
+      <Combobox
+                    items={items}
+                    value={l.name}
+                    placeholder="Search or type item name"
+                    getKey={(it) => it.id}
+                    getLabel={(it) => `${it.name} ${it.code ?? ""} ${it.hsn_sac ?? ""}`}
+                    renderOption={(it) => (
+                      <div className="flex justify-between gap-3">
+                        <span className="font-medium">{it.name}</span>
+                        <span className="text-xs text-gray-500">
+                          {money(meta.party === "CUSTOMER" ? it.sale_price : it.purchase_price)}
+                          {it.type === "GOODS" && ` · ${it.stock} ${it.unit}`}
+                        </span>
+                      </div>
+                    )}
+                    onSelect={(it) => pickItem(l.key, it)}
+                  />
+                  {!l.item_id && (
+                    <input
+                      className="mt-1 w-full border-0 border-b border-dashed border-gray-200 px-1 py-0.5 text-xs outline-none"
+                      placeholder="…or type a custom item name"
+                      value={l.name}
+                      onChange={(e) => updateLine(l.key, { name: e.target.value })}
+                    />
+                  )}
+                  <input
+                    className="mt-1 w-full border-0 px-1 py-0.5 text-xs text-gray-600 outline-none"
+                    placeholder="Description (optional)"
+                    value={l.description}
+                    onChange={(e) => updateLine(l.key, { description: e.target.value })}
+                  />
+                  {(tracked(l)?.track_batch || l.batch_no) && (
+                    <div className="mt-1 flex gap-1">
+                      <input className="input !py-1 text-xs" placeholder="Batch no." value={l.batch_no}
+                        onChange={(e) => updateLine(l.key, { batch_no: e.target.value })} />
+                      <input className="input !py-1 text-xs" type="date" title="Expiry date" value={l.expiry_date}
+                        onChange={(e) => updateLine(l.key, { expiry_date: e.target.value })} />
+                    </div>
+                  )}
+                  {(tracked(l)?.track_serial || l.serial_nos) && (
+                    <input className="input mt-1 !py-1 text-xs" placeholder="Serial nos. (comma separated)" value={l.serial_nos}
+                      onChange={(e) => updateLine(l.key, { serial_nos: e.target.value })} />
+                  )}
+    </>),
+    hsn: <Input value={l.hsn_sac} maxLength={8} onChange={(e) => updateLine(l.key, { hsn_sac: e.target.value })} />,
+    qty: (<>
+      <Input className="text-right" inputMode="decimal" value={l.qty} onChange={(e) => updateLine(l.key, { qty: e.target.value })} />
+                  <div className="mt-1 text-right text-xs text-gray-500">{l.unit === "NA" ? "" : l.unit}</div>
+    </>),
+    rate: (<>
+      <Input className="text-right" inputMode="decimal" value={l.rate} onChange={(e) => updateLine(l.key, { rate: e.target.value })} />
+                  {lastRates[l.key] && String(lastRates[l.key]!.rate) !== l.rate && (
+                    <button type="button" className="mt-1 block w-full text-right text-[11px] text-gray-500 hover:text-brand-600"
+                      title={`Last billed on ${lastRates[l.key]!.number}`} onClick={() => updateLine(l.key, { rate: String(lastRates[l.key]!.rate), discount_pct: String(lastRates[l.key]!.discount_pct || "") })}>
+                      Last: {money(lastRates[l.key]!.rate)}{lastRates[l.key]!.discount_pct ? ` −${lastRates[l.key]!.discount_pct}%` : ""} · {fmtDate(lastRates[l.key]!.date)}
+                    </button>
+                  )}
+                  {taxApplicable && (
+                    <button type="button" className="mt-1 block w-full text-right text-xs text-brand-600" onClick={() => updateLine(l.key, { tax_inclusive: !l.tax_inclusive })}>
+                      {l.tax_inclusive ? "incl. tax" : "excl. tax"}
+                    </button>
+                  )}
+    </>),
+    disc: <Input className="text-right" inputMode="decimal" value={l.discount_pct} placeholder="0" onChange={(e) => updateLine(l.key, { discount_pct: e.target.value })} />,
+    gst: (
+      <Select value={l.gst_rate} onChange={(e) => updateLine(l.key, { gst_rate: Number(e.target.value) })} disabled={!taxApplicable}>
+                    {GST_RATES.map((r) => <option key={r} value={r}>{r}%</option>)}
+                  </Select>
+    ),
+    remove: (<>
+      {lines.length > 1 && (
+                    <button type="button" className="text-gray-400 hover:text-red-600" aria-label="Remove line" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}>
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+    </>),
+  });
+
   return (
     <div className="space-y-5">
       <ErrorBox message={error} />
@@ -445,7 +526,8 @@ export function VoucherForm({
         )}
       </Card>
 
-      <Card className="overflow-x-auto">
+      {/* Item lines: a table on wider screens, one card per line on phones — the same fields and state */}
+      <Card className="hidden overflow-x-auto md:block">
         <table className="tbl min-w-[900px]">
           <thead>
             <tr>
@@ -461,89 +543,22 @@ export function VoucherForm({
             </tr>
           </thead>
           <tbody>
-            {lines.map((l, i) => (
-              <tr key={l.key}>
-                <td className="pt-4 text-gray-500">{i + 1}</td>
-                <td>
-                  <Combobox
-                    items={items}
-                    value={l.name}
-                    placeholder="Search or type item name"
-                    getKey={(it) => it.id}
-                    getLabel={(it) => `${it.name} ${it.code ?? ""} ${it.hsn_sac ?? ""}`}
-                    renderOption={(it) => (
-                      <div className="flex justify-between gap-3">
-                        <span className="font-medium">{it.name}</span>
-                        <span className="text-xs text-gray-500">
-                          {money(meta.party === "CUSTOMER" ? it.sale_price : it.purchase_price)}
-                          {it.type === "GOODS" && ` · ${it.stock} ${it.unit}`}
-                        </span>
-                      </div>
-                    )}
-                    onSelect={(it) => pickItem(l.key, it)}
-                  />
-                  {!l.item_id && (
-                    <input
-                      className="mt-1 w-full border-0 border-b border-dashed border-gray-200 px-1 py-0.5 text-xs outline-none"
-                      placeholder="…or type a custom item name"
-                      value={l.name}
-                      onChange={(e) => updateLine(l.key, { name: e.target.value })}
-                    />
-                  )}
-                  <input
-                    className="mt-1 w-full border-0 px-1 py-0.5 text-xs text-gray-600 outline-none"
-                    placeholder="Description (optional)"
-                    value={l.description}
-                    onChange={(e) => updateLine(l.key, { description: e.target.value })}
-                  />
-                  {(tracked(l)?.track_batch || l.batch_no) && (
-                    <div className="mt-1 flex gap-1">
-                      <input className="input !py-1 text-xs" placeholder="Batch no." value={l.batch_no}
-                        onChange={(e) => updateLine(l.key, { batch_no: e.target.value })} />
-                      <input className="input !py-1 text-xs" type="date" title="Expiry date" value={l.expiry_date}
-                        onChange={(e) => updateLine(l.key, { expiry_date: e.target.value })} />
-                    </div>
-                  )}
-                  {(tracked(l)?.track_serial || l.serial_nos) && (
-                    <input className="input mt-1 !py-1 text-xs" placeholder="Serial nos. (comma separated)" value={l.serial_nos}
-                      onChange={(e) => updateLine(l.key, { serial_nos: e.target.value })} />
-                  )}
-                </td>
-                <td><Input value={l.hsn_sac} maxLength={8} onChange={(e) => updateLine(l.key, { hsn_sac: e.target.value })} /></td>
-                <td>
-                  <Input className="text-right" inputMode="decimal" value={l.qty} onChange={(e) => updateLine(l.key, { qty: e.target.value })} />
-                  <div className="mt-1 text-right text-xs text-gray-500">{l.unit === "NA" ? "" : l.unit}</div>
-                </td>
-                <td>
-                  <Input className="text-right" inputMode="decimal" value={l.rate} onChange={(e) => updateLine(l.key, { rate: e.target.value })} />
-                  {lastRates[l.key] && String(lastRates[l.key]!.rate) !== l.rate && (
-                    <button type="button" className="mt-1 block w-full text-right text-[11px] text-gray-500 hover:text-brand-600"
-                      title={`Last billed on ${lastRates[l.key]!.number}`} onClick={() => updateLine(l.key, { rate: String(lastRates[l.key]!.rate), discount_pct: String(lastRates[l.key]!.discount_pct || "") })}>
-                      Last: {money(lastRates[l.key]!.rate)}{lastRates[l.key]!.discount_pct ? ` −${lastRates[l.key]!.discount_pct}%` : ""} · {fmtDate(lastRates[l.key]!.date)}
-                    </button>
-                  )}
-                  {taxApplicable && (
-                    <button type="button" className="mt-1 block w-full text-right text-xs text-brand-600" onClick={() => updateLine(l.key, { tax_inclusive: !l.tax_inclusive })}>
-                      {l.tax_inclusive ? "incl. tax" : "excl. tax"}
-                    </button>
-                  )}
-                </td>
-                <td><Input className="text-right" inputMode="decimal" value={l.discount_pct} placeholder="0" onChange={(e) => updateLine(l.key, { discount_pct: e.target.value })} /></td>
-                <td>
-                  <Select value={l.gst_rate} onChange={(e) => updateLine(l.key, { gst_rate: Number(e.target.value) })} disabled={!taxApplicable}>
-                    {GST_RATES.map((r) => <option key={r} value={r}>{r}%</option>)}
-                  </Select>
-                </td>
-                <td className="num pt-4 font-medium">{money(totals.lines[i]?.total)}</td>
-                <td className="pt-3">
-                  {lines.length > 1 && (
-                    <button type="button" className="text-gray-400 hover:text-red-600" aria-label="Remove line" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}>
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {lines.map((l, i) => {
+              const f = lineFields(l);
+              return (
+                <tr key={l.key}>
+                  <td className="pt-4 text-gray-500">{i + 1}</td>
+                  <td>{f.item}</td>
+                  <td>{f.hsn}</td>
+                  <td>{f.qty}</td>
+                  <td>{f.rate}</td>
+                  <td>{f.disc}</td>
+                  <td>{f.gst}</td>
+                  <td className="num pt-4 font-medium">{money(totals.lines[i]?.total)}</td>
+                  <td className="pt-3">{f.remove}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         <div className="p-3">
@@ -552,6 +567,34 @@ export function VoucherForm({
           </Button>
         </div>
       </Card>
+      <div className="space-y-3 md:hidden">
+        {lines.map((l, i) => {
+          const f = lineFields(l);
+          return (
+            <Card key={l.key} className="space-y-2.5 p-3">
+              <div className="flex items-center justify-between text-xs text-gray-500">
+                <span>Item {i + 1}</span>
+                {f.remove}
+              </div>
+              {f.item}
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs text-gray-600">Qty{f.qty}</label>
+                <label className="text-xs text-gray-600">Rate (₹){f.rate}</label>
+                <label className="text-xs text-gray-600">Disc %{f.disc}</label>
+                <label className="text-xs text-gray-600">GST{f.gst}</label>
+                <label className="col-span-2 text-xs text-gray-600">HSN / SAC{f.hsn}</label>
+              </div>
+              <div className="flex justify-between border-t border-gray-100 pt-2 text-sm">
+                <span className="text-gray-600">Amount</span>
+                <span className="font-semibold tabular-nums">{money(totals.lines[i]?.total)}</span>
+              </div>
+            </Card>
+          );
+        })}
+        <Button type="button" variant="secondary" className="w-full" onClick={() => setLines((ls) => [...ls, blankLine()])}>
+          <Plus size={16} /> Add item
+        </Button>
+      </div>
 
       <div className="grid gap-5 lg:grid-cols-5">
         <Card className="space-y-4 p-5 lg:col-span-3">

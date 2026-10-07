@@ -40,13 +40,14 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { LinkButton, Loading } from "@/components/ui";
 import { useAuth, usePerms } from "@/lib/auth";
 import type { Action, Module } from "@/lib/types";
 import { BrandLogo } from "@/components/BrandLogo";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { OfflineSync } from "@/components/OfflineSync";
+import { MobileNav } from "@/components/MobileNav";
 import { PlanBadge } from "@/components/PlanBadge";
 import { UserBar } from "@/components/UserBar";
 import { businessMode, hiddenHrefs, isHiddenHref } from "@/lib/modules";
@@ -202,11 +203,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="no-print sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-gray-200 bg-white/90 px-4 backdrop-blur">
+        <header className="no-print sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-gray-200 bg-white/90 px-4 backdrop-blur">
           <button className="lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
             <Menu size={22} />
           </button>
-          <div className="min-w-0 shrink lg:w-56">
+          <div className="max-w-[38%] min-w-0 shrink sm:max-w-none lg:w-56">
             {me.businesses.length > 1 ? (
               <select
                 className="max-w-full truncate rounded-md border-0 bg-transparent py-1 text-sm font-semibold text-gray-900 focus:ring-0"
@@ -222,7 +223,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             ) : (
               <div className="truncate text-sm font-semibold text-gray-900">{business.name}</div>
             )}
-            <div className="truncate text-xs text-gray-500">
+            <div className="hidden truncate text-xs text-gray-500 sm:block">
               {business.gstin ? `GSTIN ${business.gstin}` : "Not GST registered"}
             </div>
           </div>
@@ -230,18 +231,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <OfflineSync />
           <PendingSignIns />
           {can("purchases", "create") && (
-            <LinkButton href="/v/purchases/new" variant="secondary" className="hidden xl:inline-flex">
-              <Plus size={16} /> Purchase
-            </LinkButton>
+            <span className="hidden xl:inline-flex">
+              <LinkButton href="/v/purchases/new" variant="secondary"><Plus size={16} /> Purchase</LinkButton>
+            </span>
           )}
           {can("sales", "create") && (
-            <LinkButton href="/v/sales/new">
-              <Plus size={16} /> Sale
-            </LinkButton>
+            <span className="hidden md:inline-flex">
+              <LinkButton href="/v/sales/new"><Plus size={16} /> Sale</LinkButton>
+            </span>
           )}
-          <div className="ml-1 flex items-center gap-2 border-l border-gray-200 pl-3"><PlanBadge /><UserBar /></div>
+          <div className="flex items-center gap-2 sm:ml-1 sm:border-l sm:border-gray-200 sm:pl-3"><PlanBadge /><UserBar /></div>
         </header>
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6"><InvitationsBanner />{children}</main>
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 pt-4 pb-24 sm:px-6 md:py-6"><InvitationsBanner />{children}</main>
+        <Suspense fallback={null}><MobileNav onMenu={() => setOpen(true)} /></Suspense>
       </div>
     </div>
   );

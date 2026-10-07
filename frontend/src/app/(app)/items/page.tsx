@@ -45,7 +45,29 @@ export default function ItemsPage() {
         ) : !data?.length ? (
           <Empty title="No items yet" action={<LinkButton href="/items/new">Add your first item</LinkButton>} />
         ) : (
-          <table className="tbl">
+          <>
+          <ul className="divide-y divide-gray-100 md:hidden">
+            {rows.map((i) => {
+              const low = i.type === "GOODS" && i.low_stock_level !== null && i.stock <= i.low_stock_level;
+              return (
+                <li key={i.id}>
+                  <Link href={`/items/${i.id}`} className="flex items-start justify-between gap-3 px-4 py-3 active:bg-gray-50">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-gray-900">{i.name}</div>
+                      <div className="text-xs text-gray-500">{[i.code, i.hsn_sac && `HSN ${i.hsn_sac}`, `GST ${i.gst_rate}%`].filter(Boolean).join(" · ")}</div>
+                    </div>
+                    <div className="shrink-0 text-right tabular-nums">
+                      <div className="font-semibold">{money(i.sale_price)}</div>
+                      <div className={`text-xs ${low ? "font-semibold text-red-700" : "text-gray-500"}`}>
+                        {i.type === "GOODS" ? `${qty(i.stock)} ${i.unit}${low ? " · low" : ""}` : "Service"}
+                      </div>
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+          <table className="tbl hidden md:table">
             <thead>
               <tr><th>Item</th><th>HSN/SAC</th><th className="num">GST</th><th className="num">Sale price</th><th className="num">Purchase price</th><th className="num">Stock</th></tr>
             </thead>
@@ -72,6 +94,7 @@ export default function ItemsPage() {
               })}
             </tbody>
           </table>
+          </>
         )}
         {pager}
       </Card>

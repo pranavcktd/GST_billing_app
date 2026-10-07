@@ -70,7 +70,26 @@ export default function VoucherListPage() {
         ) : !data?.length ? (
           <Empty title={`No ${meta.plural.toLowerCase()} in this period`} action={<LinkButton href={`/v/${kind}/new`}>Create {meta.label.toLowerCase()}</LinkButton>} />
         ) : (
-          <table className="tbl">
+          <>
+          {/* phone: one tappable row per document */}
+          <ul className="divide-y divide-gray-100 md:hidden">
+            {rows.map((v) => (
+              <li key={v.id}>
+                <Link href={`/v/${kind}/${v.id}`} className="flex items-start justify-between gap-3 px-4 py-3 active:bg-gray-50">
+                  <div className={`min-w-0 ${v.cancelled ? "text-gray-400" : ""}`}>
+                    <div className="truncate font-medium text-gray-900">{v.party_name}</div>
+                    <div className="text-xs text-gray-500">{v.number} · {fmtDate(v.date)}</div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="font-semibold tabular-nums">{money(v.grand_total)}</div>
+                    {!isEstimate && v.balance > 0 && <div className="text-xs text-red-700 tabular-nums">due {money(v.balance)}</div>}
+                    <StatusBadge status={v.status} />
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <table className="tbl hidden md:table">
             <thead>
               <tr>
                 <th>Date</th><th>Number</th><th>Party</th>
@@ -93,6 +112,7 @@ export default function VoucherListPage() {
               ))}
             </tbody>
           </table>
+          </>
         )}
         {pager}
       </Card>

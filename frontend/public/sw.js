@@ -50,7 +50,7 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/")) return;
-  if (url.pathname.startsWith("/_next/static/") || url.pathname === "/icon.svg" || url.pathname.startsWith("/fonts/")) {
+  if (url.pathname.startsWith("/_next/static/") || /^\/(icon|apple-touch-icon)[\w-]*\.(svg|png)$/.test(url.pathname) || url.pathname.startsWith("/fonts/")) {
     e.respondWith(cacheFirst(e.request));
     return;
   }
