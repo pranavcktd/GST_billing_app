@@ -35,6 +35,13 @@ function PrintView() {
 
   return (
     <div className="min-h-screen bg-gray-100 py-6 print:bg-white print:py-0">
+      {(v.ewb_required || v.irn_required) && (
+        <div className="no-print mx-auto mb-3 max-w-[210mm] rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+          {v.irn_required && <div><b>IRN not generated.</b> This B2B invoice needs an IRN (e-invoice) before it is printed or sent.</div>}
+          {v.ewb_required && <div><b>E-way bill not generated.</b> The goods are worth more than the e-way bill limit — generate it before they move.</div>}
+          <button className="mt-1 font-medium underline" onClick={() => router.push(`/v/${kindOf(v.type)}/${v.id}`)}>Open the invoice to generate it</button>
+        </div>
+      )}
       <div className="no-print mx-auto mb-4 flex max-w-[210mm] flex-wrap items-center justify-between gap-2 px-2">
         <Button variant="secondary" onClick={() => router.push(sp.get("back") ?? `/v/${kindOf(v.type)}/${v.id}`)}>
           <ArrowLeft size={16} /> Back
@@ -51,6 +58,7 @@ function PrintView() {
               {c.charAt(0) + c.slice(1).toLowerCase()}
             </label>
           ))}
+          {v.ewb_no && <Button variant="secondary" onClick={() => router.push(`/print/ewaybill/${v.id}`)}><Printer size={16} /> E-way bill</Button>}
           <Button onClick={() => window.print()}><Printer size={16} /> Print / Save PDF</Button>
         </div>
       </div>

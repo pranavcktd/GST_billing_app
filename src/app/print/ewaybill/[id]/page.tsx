@@ -1,0 +1,173 @@
+"use client";
+
+import { ArrowLeft, Printer } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { QR } from "@/components/QR";
+import { Button, ErrorBox, Loading } from "@/components/ui";
+import { BrandName } from "@/lib/config";
+import { kindOf, STATES } from "@/lib/constants";
+import { useDocTitle } from "@/lib/docName";
+import { money } from "@/lib/format";
+import { useFetch } from "@/lib/useFetch";
+import type { Business, VoucherDetail } from "@/lib/types";
+
+/**
+ * Printable e-way bill in the layout of the government's EWB-01 print: e-way bill details, address details,
+ * goods details, transport (Part-A / Part-B) and the QR code (e-way bill no. / generator GSTIN / date).
+ */
+const MODES: Record<string, string> = { "1": "Road", "2": "Rail", "3": "Air", "4": "Ship" };
+const DOC: Record<string, string> = { SALE: "Tax Invoice", DELIVERY_CHALLAN: "Delivery Challan", PURCHASE: "Bill" };
+const two = (n: number) => String(n).padStart(2, "0");
+const stamp = (iso: string | null | undefined, time = true) => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const h = d.getHours();
+  return `${two(d.getDate())}/${two(d.getMonth() + 1)}/${d.getFullYear()}` +
+    (time ? ` ${two(h % 12 || 12)}:${two(d.getMinutes())}:${two(d.getSeconds())} ${h < 12 ? "AM" : "PM"}` : "");
+};
+const state = (code?: string | null) => (code && STATES[code] ? STATES[code].toUpperCase() : "");
+
+function Row({ k, val }: { k: string; val: React.ReactNode }) {
+  return <tr><td className="w-56 py-0.5 pr-3 align-top text-gray-600">{k}</td><td className="py-0.5 font-medium">: {val}</td></tr>;
+}
+
+function Section({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+  return (
+    <section className="mt-3 break-inside-avoid">
+      <div className="border-b border-gray-800 pb-0.5 text-[13px] font-bold">{n}. {title}</div>
+      <div className="pt-1.5">{children}</div>
+    </section>
+  );
+}
+
+export default function EwayBillPrint() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const { data: v, error } = useFetch<VoucherDetail>(`/vouchers/${id}`);
+  const { data: biz } = useFetch<Business>("/businesses/current");
+  useDocTitle(v?.ewb_no ? `E-way-bill_${v.ewb_no}_${v.number.replace(/[^A-Za-z0-9]+/g, "-")}` : null);
+
+  if (error) return <div className="p-6"><ErrorBox message={error} /></div>;
+  if (!v || !biz) return <Loading />;
+  if (!v.ewb_no) return <div className="p-6"><ErrorBox message="This document has no e-way bill yet." /></div>;
+
+  const t = v.transport ?? {};
+  const outward = v.type !== "PURCHASE";
+  const us = { gstin: biz.gstin ?? "", name: biz.legal_name || biz.name, state: biz.state_code, addr: [biz.address, biz.city, biz.pincode].filter(Boolean).join(", ") };
+  const them = { gstin: v.party_gstin || "URP", name: v.party_name, state: v.party_state_code || v.place_of_supply, addr: t.ship_to || v.party_address || "" };
+  const [from, to] = outward ? [us, them] : [them, us];
+  const test = v.einvoice_sandbox || v.ewb_no.startsWith("TEST");
+  const qr = `${v.ewb_no}/${biz.gstin}/${stamp(v.ewb_date)}`;
+  const hsn = [...new Set(v.lines.map((l) => l.hsn_sac).filter(Boolean))];
+
+  return (
+    <div className="min-h-screen bg-gray-100 py-6 print:bg-white print:py-0">
+      <div className="no-print mx-auto mb-4 flex max-w-[210mm] flex-wrap items-center justify-between gap-2 px-2">
+        <Button variant="secondary" onClick={() => router.push(`/v/${kindOf(v.type)}/${v.id}`)}><ArrowLeft size={16} /> Back</Button>
+        <Button onClick={() => window.print()}><Printer size={16} /> Print / Save PDF</Button>
+      </div>
+      <div className="print-sheet relative mx-auto max-w-[210mm] bg-white p-8 text-[12px] leading-snug text-gray-900 shadow-sm print:shadow-none">
+        {test && (
+          <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden" style={{ printColorAdjust: "exact" }}>
+            <span className="-rotate-[30deg] text-6xl font-bold whitespace-nowrap" style={{ color: "rgba(220,38,38,0.12)" }}>TEST — NOT A VALID E-WAY BILL</span>
+          </div>
+        )}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold tracking-wide">e-Way Bill</h1>
+            <div className="mt-1 text-[11px] text-gray-600">{test ? "Generated in test mode — not filed with the e-way bill system" : "Generated through the e-way bill system (NIC)"}</div>
+          </div>
+          <div className="text-center"><QR value={qr} size={110} /><div className="mt-1 font-mono text-[10px]">{v.ewb_no}</div></div>
+        </div>
+
+        <Section n={1} title="E-Way Bill Details">
+          <table className="w-full"><tbody>
+            <Row k="E-Way Bill No." val={<span className="font-mono text-[13px]">{v.ewb_no}</span>} />
+            <Row k="E-Way Bill Date" val={stamp(v.ewb_date)} />
+            <Row k="Generated By" val={`${biz.gstin} - ${us.name}`} />
+            <Row k="Valid Upto" val={stamp(v.ewb_valid_till)} />
+            <Row k="Mode" val={MODES[t.mode ?? "1"]} />
+            <Row k="Approx Distance" val={`${t.distance_km ?? 0} km`} />
+            <Row k="Type" val={outward ? "Outward - Supply" : "Inward - Supply"} />
+            <Row k="Document Details" val={`${DOC[v.type] ?? v.title} - ${v.number} - ${stamp(v.date + "T00:00:00", false)}`} />
+            <Row k="Transaction Type" val="Regular" />
+            {v.irn && <Row k="IRN" val={<span className="font-mono text-[10px] break-all">{v.irn}</span>} />}
+          </tbody></table>
+        </Section>
+
+        <Section n={2} title="Address Details">
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <div className="font-semibold">From</div>
+              <div>GSTIN : {from.gstin}</div><div>{from.name}</div><div>{state(from.state)}</div>
+              <div className="mt-1.5 font-semibold">:: Dispatch From ::</div><div>{from.addr || "—"}</div>
+            </div>
+            <div>
+              <div className="font-semibold">To</div>
+              <div>GSTIN : {to.gstin}</div><div>{to.name}</div><div>{state(to.state)}</div>
+              <div className="mt-1.5 font-semibold">:: Ship To ::</div><div>{to.addr || "—"}</div>
+            </div>
+          </div>
+        </Section>
+
+        <Section n={3} title="Goods Details">
+          <table className="w-full border-collapse text-[11px]">
+            <thead>
+              <tr className="border-y border-gray-400 text-left">
+                <th className="py-1">HSN Code</th><th>Product Name &amp; Desc.</th><th className="text-right">Quantity</th>
+                <th className="text-right">Taxable Amount Rs.</th><th className="text-right">Tax Rate (C+S+I+Cess)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {v.lines.map((l, i) => (
+                <tr key={i} className="border-b border-gray-200 align-top">
+                  <td className="py-1 font-mono">{l.hsn_sac}</td>
+                  <td>{l.name}{l.description ? ` - ${l.description}` : ""}</td>
+                  <td className="text-right">{l.qty} {l.unit === "NA" ? "" : l.unit}</td>
+                  <td className="text-right">{(l.taxable ?? 0).toFixed(2)}</td>
+                  <td className="text-right">
+                    {l.igst ? `0+0+${l.gst_rate}` : `${l.gst_rate / 2}+${l.gst_rate / 2}+0`}+{l.cess_rate || 0}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="mt-2 grid grid-cols-3 gap-x-4 gap-y-0.5 sm:grid-cols-6">
+            {([["Tot. Taxable Amt", v.taxable], ["CGST Amt", v.cgst], ["SGST Amt", v.sgst], ["IGST Amt", v.igst], ["CESS Amt", v.cess],
+              ["Other Amt", v.round_off + v.tcs_amount]] as [string, number][]).map(([k, x]) => (
+              <div key={k}><div className="text-[10px] text-gray-600">{k}</div><div className="font-medium">{x.toFixed(2)}</div></div>
+            ))}
+          </div>
+          <div className="mt-1 font-semibold">Total Inv Amt : {money(v.grand_total)}{hsn.length ? `  ·  HSN: ${hsn.join(", ")}` : ""}</div>
+        </Section>
+
+        <Section n={4} title="Transportation Details">
+          <table className="w-full"><tbody>
+            <Row k="Transporter ID & Name" val={[t.transporter_id, t.transporter_name].filter(Boolean).join(" & ") || "—"} />
+            <Row k="Transporter Doc. No & Date" val={[t.doc_no, t.doc_date ? stamp(t.doc_date + "T00:00:00", false) : ""].filter(Boolean).join(" & ") || "—"} />
+          </tbody></table>
+        </Section>
+
+        <Section n={5} title="Vehicle Details">
+          <table className="w-full border-collapse text-[11px]">
+            <thead><tr className="border-y border-gray-400 text-left"><th className="py-1">Mode</th><th>Vehicle / Trans Doc No & Dt.</th><th>From</th><th>Entered Date</th><th>Entered By</th><th>CEWB No.</th></tr></thead>
+            <tbody>
+              <tr>
+                <td className="py-1">{MODES[t.mode ?? "1"]}</td>
+                <td>{t.vehicle_no || t.doc_no || "—"}</td>
+                <td>{(outward ? biz.city : "") || state(from.state)}</td>
+                <td>{stamp(v.ewb_date)}</td>
+                <td>{biz.gstin}</td>
+                <td>—</td>
+              </tr>
+            </tbody>
+          </table>
+        </Section>
+
+        <div className="mt-6 border-t border-gray-200 pt-2 text-center text-[10px] text-gray-500">
+          Printed from <BrandName />. Verify on the e-way bill portal using the e-way bill number or the QR code.
+        </div>
+      </div>
+    </div>
+  );
+}

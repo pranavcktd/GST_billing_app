@@ -67,6 +67,7 @@ export interface Business {
   lut_number: string | null; lut_valid_till: string | null;
   composition_type: "TRADER" | "MANUFACTURER" | "RESTAURANT" | "SERVICE"; entity_type: EntityType;
   gst_registration_date: string | null; gst_portal?: GstPortalDetails | null;
+  ewb_username?: string | null; ewb_password_set?: boolean; einvoice_applicable?: boolean;
   plan: PlanInfo | null;
 }
 
@@ -106,6 +107,7 @@ export interface Voucher {
   extra_fields: Record<string, string> | null; irn: string | null; ack_no: string | null; ack_date: string | null;
   signed_qr: string | null; einvoice_status: "GENERATED" | "CANCELLED" | null; einvoice_sandbox: boolean;
   ewb_no: string | null; ewb_date: string | null; ewb_valid_till: string | null; paid: number; balance: number; status: string; title: string;
+  ewb_required?: boolean; irn_required?: boolean;
   export_type: "EXPWP" | "EXPWOP" | "SEZWP" | "SEZWOP" | "IMPORT" | null; shipping_bill_no: string | null;
   shipping_bill_date: string | null; port_code: string | null; currency_code: string | null; exchange_rate: number | null;
 }

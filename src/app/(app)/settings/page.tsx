@@ -8,6 +8,7 @@ import { SmtpForm } from "@/components/SmtpForm";
 import { Button, Card, ErrorBox, Field, Input, LinkButton, Loading, PageHeader } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth, usePerms } from "@/lib/auth";
+import { BrandName } from "@/lib/config";
 import { useFetch } from "@/lib/useFetch";
 import type { Business, PrintSettings } from "@/lib/types";
 import { ReminderSettings } from "@/components/ReminderSettings";
@@ -77,25 +78,52 @@ export default function SettingsPage() {
 }
 
 function EInvoiceSettings({ business, onSave }: { business: Business; onSave: (p: Record<string, unknown>) => Promise<void> }) {
-  const [user, setUser] = useState(business.einvoice_username ?? "");
-  const [pass, setPass] = useState("");
+  const { data: setup } = useFetch<{ live: boolean; test_mode: boolean | null; sandbox: boolean; gsp_name: string | null; plan: string | null }>("/einvoice/setup");
+  const [f, setF] = useState({ einvoice_applicable: !!business.einvoice_applicable, einvoice_username: business.einvoice_username ?? "", einvoice_password: "",
+    ewb_username: business.ewb_username ?? "", ewb_password: "" });
   const [err, setErr] = useState<string | null>(null);
+  const gsp = setup?.gsp_name || "the GSP named by SmartHisab";
+  const plan = business.plan?.einvoice;
   return (
-    <Card className="max-w-2xl space-y-4 p-5">
-      <h2 className="font-semibold text-gray-900">e-Invoice / e-Way bill API user</h2>
-      <p className="text-sm text-gray-600">
-        Create an API user on the <PortalLink to="einvoice_portal">e-invoice portal</PortalLink> (API Registration → “Through GSP”, select our GSP) and enter it here.
-        Without it you can still download the JSON and upload it on the portal yourself.
-      </p>
-      <p className="text-xs text-gray-500">Plan: {business.plan?.einvoice === "API" ? "direct generation included" : business.plan?.einvoice === "JSON" ? "JSON download (upgrade to Professional for direct generation)" : "not included — upgrade to Starter"}</p>
-      <ErrorBox message={err} />
-      <Field label="API username"><Input value={user} onChange={(e) => setUser(e.target.value)} /></Field>
-      <Field label="API password" hint={business.einvoice_password_set ? "A password is saved — leave blank to keep it" : "Stored encrypted"}>
-        <Input type="password" value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="new-password" />
-      </Field>
-      <div className="flex justify-end">
-        <Button onClick={() => onSave({ einvoice_username: user || null, einvoice_password: pass || null }).catch((e) => setErr(e.message))}>Save</Button>
-      </div>
-    </Card>
+    <div className="max-w-3xl space-y-4">
+      <Card className="space-y-2 p-5">
+        <h2 className="font-semibold text-gray-900">e-Invoice & e-Way bill</h2>
+        <p className="text-sm text-gray-600">
+          {setup?.live
+            ? <>Direct generation from <BrandName /> is <b className="text-emerald-700">on</b>{setup.test_mode ? <> — <b className="text-amber-700">test mode</b>: numbers start with TEST and nothing is filed yet</> : ""}.</>
+            : <>Direct generation is not switched on yet. You can still download the JSON, upload it on the portal and record the IRN / e-way bill number on the bill.</>}
+        </p>
+        <p className="text-xs text-gray-500">Your plan: {plan === "API" ? "JSON + direct generation" : plan === "JSON" ? "JSON download (direct generation from the Professional plan)" : "not included — upgrade to Starter"}</p>
+        <label className="flex items-start gap-2.5 pt-2 text-sm">
+          <input type="checkbox" className="mt-0.5" checked={f.einvoice_applicable} onChange={(e) => setF({ ...f, einvoice_applicable: e.target.checked })} />
+          <span><b>e-Invoicing applies to us</b><span className="block text-xs text-gray-500">Aggregate turnover above the notified limit (₹5 crore today). B2B invoices without an IRN are then flagged so they are not missed.</span></span>
+        </label>
+      </Card>
+
+      <Card className="space-y-3 p-5">
+        <h3 className="font-semibold text-gray-900">One-time setup on the government portals</h3>
+        <ol className="list-decimal space-y-1.5 pl-5 text-sm text-gray-700">
+          <li>e-Invoice: sign in on the <PortalLink to="einvoice_portal">e-invoice portal</PortalLink> → <b>API Registration</b> → <b>Create API User</b> → <b>Through GSP</b> → choose <b>{gsp}</b>. Set a username and password.</li>
+          <li>e-Way bill: sign in on the <PortalLink to="ewaybill_portal">e-way bill portal</PortalLink> → <b>Registration</b> → <b>For GSP</b> → choose <b>{gsp}</b> → add an API username and password.</li>
+          <li>Enter both below. They are stored encrypted and used only to file your own invoices and e-way bills.</li>
+        </ol>
+        <ErrorBox message={err} />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="e-Invoice API username" info={false}><Input value={f.einvoice_username} onChange={(e) => setF({ ...f, einvoice_username: e.target.value })} /></Field>
+          <Field label="e-Invoice API password" info={false} hint={business.einvoice_password_set ? "Saved — leave blank to keep it" : "Stored encrypted"}>
+            <Input type="password" autoComplete="new-password" value={f.einvoice_password} onChange={(e) => setF({ ...f, einvoice_password: e.target.value })} />
+          </Field>
+          <Field label="e-Way bill API username" info={false}><Input value={f.ewb_username} onChange={(e) => setF({ ...f, ewb_username: e.target.value })} /></Field>
+          <Field label="e-Way bill API password" info={false} hint={business.ewb_password_set ? "Saved — leave blank to keep it" : "Stored encrypted"}>
+            <Input type="password" autoComplete="new-password" value={f.ewb_password} onChange={(e) => setF({ ...f, ewb_password: e.target.value })} />
+          </Field>
+        </div>
+        <div className="flex justify-end">
+          <Button onClick={() => onSave({ einvoice_applicable: f.einvoice_applicable, einvoice_username: f.einvoice_username || null,
+            einvoice_password: f.einvoice_password || null, ewb_username: f.ewb_username || null, ewb_password: f.ewb_password || null })
+            .catch((e) => setErr(e.message))}>Save</Button>
+        </div>
+      </Card>
+    </div>
   );
 }
