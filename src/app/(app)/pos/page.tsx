@@ -4,7 +4,7 @@ import { Minus, Plus, ScanLine, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button, Card, Combobox, ErrorBox, Field, Input, Loading } from "@/components/ui";
-import { api, qs } from "@/lib/api";
+import { api, ApiError, qs } from "@/lib/api";
 import { money, today } from "@/lib/format";
 import { calcInvoice } from "@/lib/gst";
 import { useFetch } from "@/lib/useFetch";
@@ -18,6 +18,8 @@ export default function PosPage() {
   const router = useRouter();
   const { data: business } = useFetch<Business>("/businesses/current");
   const { data: items } = useFetch<Item[]>("/items");
+  // stock in the godown POS bills from (the default one) — refreshed after each sale
+  const { data: stock, reload: reloadStock } = useFetch<Record<string, number>>("/items/stock");
   const { data: parties } = useFetch<Party[]>(`/parties${qs({ type: "CUSTOMER" })}`);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [scan, setScan] = useState("");
@@ -57,8 +59,8 @@ export default function PosPage() {
   })), taxApplicable, interState);
   const change = Math.max(0, (Number(tendered) || 0) - totals.grand_total);
 
-  async function save() {
-    if (!cart.length || busy) return;
+  async function save(allowNegative = false) {
+    if (!cart.length || (busy && !allowNegative)) return;
     setBusy(true);
     setErr(null);
     try {
@@ -68,14 +70,20 @@ export default function PosPage() {
         lines: cart.map((l) => ({ item_id: l.item.id, name: l.item.name, hsn_sac: l.item.hsn_sac, unit: l.item.unit,
           qty: l.qty, rate: l.rate, gst_rate: l.item.gst_rate, cess_rate: l.item.cess_rate,
           tax_inclusive: l.item.sale_price_tax_inclusive })),
+        allow_negative: allowNegative,
       } });
       setCart([]); setTendered(""); setPartyId(null); setWalkIn({ name: "", phone: "" });
+      reloadStock();
       router.push(`/print/${v.id}?format=${business?.print_settings?.paper?.startsWith("THERMAL") ? business.print_settings.paper : "THERMAL_80"}&back=/pos`);
     } catch (e) {
       if (e instanceof OfflineQueuedError) {
         setCart([]); setTendered(""); setPartyId(null); setWalkIn({ name: "", phone: "" });
         setErr(null);
         alert(`${e.message}\nThe receipt can be printed after it uploads.`);
+        return;
+      }
+      if (e instanceof ApiError && e.code === "STOCK_SHORT" && !allowNegative) {
+        if (confirm(`${e.message}.\n\nStock will go below zero. Bill anyway?`)) return save(true);
         return;
       }
       setErr((e as Error).message);
@@ -108,7 +116,15 @@ export default function PosPage() {
             </div>
             <div className="w-72">
               <Combobox items={items} value="" placeholder="…or search item" getKey={(i) => i.id} getLabel={(i) => `${i.name} ${i.code ?? ""}`}
-                renderOption={(i) => <div className="flex justify-between"><span>{i.name}</span><span className="text-xs text-gray-500">{money(i.sale_price)}</span></div>}
+                renderOption={(i) => (
+                  <div className="flex justify-between gap-3">
+                    <span>{i.name}</span>
+                    <span className="text-xs text-gray-500">
+                      {money(i.sale_price)}
+                      {i.type === "GOODS" && <span className={(stock?.[i.id] ?? i.stock) <= 0 ? " text-red-600" : ""}> · {stock?.[i.id] ?? i.stock} in stock</span>}
+                    </span>
+                  </div>
+                )}
                 onSelect={add} />
             </div>
           </div>
@@ -123,7 +139,16 @@ export default function PosPage() {
               <tbody>
                 {cart.map((l, i) => (
                   <tr key={l.item.id}>
-                    <td><div className="font-medium">{l.item.name}</div><div className="text-xs text-gray-500">{l.item.code} · GST {l.item.gst_rate}%</div></td>
+                    <td>
+                      <div className="font-medium">{l.item.name}</div>
+                      <div className="text-xs text-gray-500">{l.item.code} · GST {l.item.gst_rate}%</div>
+                      {l.item.type === "GOODS" && (() => {
+                        const have = stock?.[l.item.id] ?? l.item.stock;
+                        return have - l.qty < 0
+                          ? <div className="text-[11px] font-medium text-amber-700">Only {have} in stock → {have - l.qty} after this bill</div>
+                          : <div className="text-[11px] text-gray-500">In stock: {have} {l.item.unit === "NA" ? "" : l.item.unit}</div>;
+                      })()}
+                    </td>
                     <td>
                       <div className="flex items-center justify-center gap-1">
                         <button className="rounded border border-gray-300 p-1" aria-label="Less" onClick={() => setCart((c) => c.map((x, j) => j === i ? { ...x, qty: Math.max(1, x.qty - 1) } : x))}><Minus size={14} /></button>
@@ -170,7 +195,7 @@ export default function PosPage() {
             <div className="pb-2 text-right text-sm">Return <b className="tabular-nums">{money(change)}</b></div>
           </div>
         )}
-        <Button className="w-full !py-3 text-base" disabled={!cart.length || busy} onClick={save}>{busy ? "Saving…" : "Save & print (F9)"}</Button>
+        <Button className="w-full !py-3 text-base" disabled={!cart.length || busy} onClick={() => save()}>{busy ? "Saving…" : "Save & print (F9)"}</Button>
       </Card>
     </div>
   );

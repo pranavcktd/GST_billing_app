@@ -68,6 +68,7 @@ export interface Business {
   composition_type: "TRADER" | "MANUFACTURER" | "RESTAURANT" | "SERVICE"; entity_type: EntityType;
   gst_registration_date: string | null; gst_portal?: GstPortalDetails | null;
   ewb_username?: string | null; ewb_password_set?: boolean; einvoice_applicable?: boolean;
+  stock_control?: "WARN" | "BLOCK" | "ALLOW";
   plan: PlanInfo | null;
 }
 

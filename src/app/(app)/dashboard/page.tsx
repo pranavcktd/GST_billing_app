@@ -13,7 +13,7 @@ import { RateNotices } from "@/components/RateNotices";
 import type { Voucher } from "@/lib/types";
 
 interface Dashboard {
-  inventory: { items: number; value: number | null; sale_value: number; low: number; out: number };
+  inventory: { items: number; value: number | null; sale_value: number; low: number; out: number; negative?: number };
   cash_bank: { total: number; cheques_in: number; cheques_out: number; accounts: { id: string; name: string; type: string; balance: number }[] } | null;
   expenses: { month: number; top: { category: string; amount: number }[] } | null;
   sales_today: number | null; sales_month: number | null; purchases_month: number | null; received_month: number | null;
@@ -91,7 +91,7 @@ export default function DashboardPage() {
               <dt className="text-xs text-gray-500">Low / out of stock</dt>
               <dd className="font-semibold">
                 <Link href="/reports/r/low-stock" className={data.inventory.low + data.inventory.out ? "text-red-700 hover:underline" : ""}>
-                  {data.inventory.low} low · {data.inventory.out} out
+                  {data.inventory.low} low · {data.inventory.out} out{data.inventory.negative ? ` (${data.inventory.negative} below zero)` : ""}
                 </Link>
               </dd>
             </div>

@@ -58,7 +58,7 @@ export default function ItemsPage() {
                     </div>
                     <div className="shrink-0 text-right tabular-nums">
                       <div className="font-semibold">{money(i.sale_price)}</div>
-                      <div className={`text-xs ${low ? "font-semibold text-red-700" : "text-gray-500"}`}>
+                      <div className={`text-xs ${low || (i.type === "GOODS" && i.stock < 0) ? "font-semibold text-red-700" : "text-gray-500"}`}>
                         {i.type === "GOODS" ? `${qty(i.stock)} ${i.unit}${low ? " · low" : ""}` : "Service"}
                       </div>
                     </div>
@@ -85,7 +85,7 @@ export default function ItemsPage() {
                     <td className="num">{i.gst_rate}%</td>
                     <td className="num">{money(i.sale_price)}</td>
                     <td className="num">{money(i.purchase_price)}</td>
-                    <td className={`num ${low ? "font-semibold text-red-700" : ""}`}>
+                    <td className={`num ${low || (i.type === "GOODS" && i.stock < 0) ? "font-semibold text-red-700" : ""}`}>
                       {i.type === "GOODS" ? `${qty(i.stock)} ${i.unit}` : "—"}
                       {low && <span className="ml-1 text-xs">(low)</span>}
                     </td>

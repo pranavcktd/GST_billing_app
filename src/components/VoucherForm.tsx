@@ -9,7 +9,7 @@ import { TransportFields } from "@/components/TransportFields";
 import { TERMS } from "@/lib/help";
 import { useConfig } from "@/lib/config";
 import { Button, Card, Combobox, ErrorBox, Field, Info, Input, Loading, Select, Textarea } from "@/components/ui";
-import { api, qs } from "@/lib/api";
+import { api, ApiError, qs } from "@/lib/api";
 import { GST_RATES, KINDS, type Kind, NON_LEDGER, PAYMENT_MODES, STATES, isOutward, stateLabel } from "@/lib/constants";
 import { fmtDate, money, today } from "@/lib/format";
 import { calcInvoice } from "@/lib/gst";
@@ -101,6 +101,11 @@ export function VoucherForm({
   const [mode, setMode] = useState<PaymentMode>("CASH");
   const [accountId, setAccountId] = useState("");
   const [godownId, setGodownId] = useState(existing?.godown_id ?? "");
+  // stock in the bill's godown — fetched only when the business has more than one godown (else the item's total)
+  const liveGodowns = (godowns ?? []).filter((g) => g.is_active);
+  const godownForStock = godownId || liveGodowns.find((g) => g.is_default)?.id || "";
+  const { data: godownStock } = useFetch<Record<string, number>>(
+    vtype !== "EXPENSE" && liveGodowns.length > 1 && godownForStock ? `/items/stock?godown_id=${godownForStock}` : null);
   const [extra, setExtra] = useState<Record<string, string>>(existing?.extra_fields ?? {});
   const [transport, setTransport] = useState<Transport>(existing?.transport ?? {});
   const [showTransport, setShowTransport] = useState(!!existing?.transport);
@@ -150,6 +155,22 @@ export function VoucherForm({
   if (!business || !partiesData || !items) return <Loading />;
   const customFields = business.print_settings?.custom_fields ?? [];
   const activeGodowns = (godowns ?? []).filter((g) => g.is_active);
+  // ---- stock while billing: "In stock: 37 PCS", amber when this bill takes it below zero
+  const TAKES_STOCK = ["SALE", "DELIVERY_CHALLAN", "PURCHASE_RETURN"].includes(vtype);
+  const SHOWS_STOCK = vtype !== "EXPENSE";
+  // an edited bill's own earlier quantities are back in stock while it is being changed
+  const ownQty: Record<string, number> = {};
+  if (existing && TAKES_STOCK && (existing.godown_id ?? "") === (godownId ?? "")) {
+    for (const l of existing.lines) if (l.item_id) ownQty[l.item_id] = (ownQty[l.item_id] ?? 0) + Number(l.qty);
+  }
+  const billedQty: Record<string, number> = {};
+  for (const l of lines) if (l.item_id) billedQty[l.item_id] = (billedQty[l.item_id] ?? 0) + toNum(l.qty);
+  function stockInfo(l: FormLine): { now: number; after: number; unit: string } | null {
+    const it = l.item_id ? items?.find((x) => x.id === l.item_id) : undefined;
+    if (!SHOWS_STOCK || !it || it.type !== "GOODS") return null;
+    const now = (godownStock ? godownStock[it.id] ?? 0 : it.stock) + (ownQty[it.id] ?? 0);
+    return { now, after: TAKES_STOCK ? now - (billedQty[it.id] ?? 0) : now, unit: it.unit === "NA" ? "" : it.unit };
+  }
 
   // ---- GST context (mirrors the backend) ----
   const taxApplicable = outward
@@ -191,7 +212,7 @@ export function VoucherForm({
     }
   };
 
-  async function save(andPrint: boolean) {
+  async function save(andPrint: boolean, allowNegative = false) {
     setError(null);
     const valid = lines.filter((l) => l.name.trim());
     if (!valid.length) return setError("Add at least one item");
@@ -227,6 +248,7 @@ export function VoucherForm({
         port_code: (exportKind || isImport) && portCode ? portCode.toUpperCase() : null,
         currency_code: exportKind === "EXP" && currency ? currency.toUpperCase() : null,
         exchange_rate: exportKind === "EXP" && toNum(fxRate) > 0 ? toNum(fxRate) : null,
+        allow_negative: allowNegative,
       };
       const saved = existing
         ? await api<VoucherDetail>(`/vouchers/${existing.id}`, { method: "PUT", body })
@@ -236,6 +258,13 @@ export function VoucherForm({
       if (e instanceof OfflineQueuedError) {
         alert(`${e.message}\n\n${e.doc.label}`);
         router.push(`/v/${kind}`);
+        return;
+      }
+      if (e instanceof ApiError && e.code === "STOCK_SHORT" && !allowNegative) {
+        setBusy(false);
+        if (confirm(`${e.message}.\n\nStock will go below zero. Save the bill anyway?\n(Enter the purchase or correct the stock later so reports stay right.)`)) {
+          return save(andPrint, true);
+        }
         return;
       }
       setError((e as Error).message);
@@ -297,8 +326,16 @@ export function VoucherForm({
     </>),
     hsn: <Input value={l.hsn_sac} maxLength={8} onChange={(e) => updateLine(l.key, { hsn_sac: e.target.value })} />,
     qty: (<>
-      <Input className="text-right" inputMode="decimal" value={l.qty} onChange={(e) => updateLine(l.key, { qty: e.target.value })} />
-                  <div className="mt-1 text-right text-xs text-gray-500">{l.unit === "NA" ? "" : l.unit}</div>
+      <Input className={`text-right ${(() => { const s = stockInfo(l); return s && TAKES_STOCK && s.after < 0 ? "!border-amber-400" : ""; })()}`}
+        inputMode="decimal" value={l.qty} onChange={(e) => updateLine(l.key, { qty: e.target.value })} />
+      {(() => {
+        const s = stockInfo(l);
+        if (!s) return <div className="mt-1 text-right text-xs text-gray-500">{l.unit === "NA" ? "" : l.unit}</div>;
+        const fmt = (n: number) => Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+        return TAKES_STOCK && s.after < 0
+          ? <div className="mt-1 text-right text-[11px] leading-tight font-medium text-amber-700">Only {fmt(s.now)} in stock<br />→ {fmt(s.after)} {s.unit} after this bill</div>
+          : <div className="mt-1 text-right text-[11px] text-gray-500">In stock: {fmt(s.now)} {s.unit}</div>;
+      })()}
     </>),
     rate: (<>
       <Input className="text-right" inputMode="decimal" value={l.rate} onChange={(e) => updateLine(l.key, { rate: e.target.value })} />
