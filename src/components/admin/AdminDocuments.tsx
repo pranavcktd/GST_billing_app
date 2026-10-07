@@ -6,7 +6,10 @@ import { Button, Card, ErrorBox, Field, Input, Loading, Select } from "@/compone
 import { api } from "@/lib/api";
 import { useFetch } from "@/lib/useFetch";
 
-interface S { enabled: boolean; allow_links: boolean; storage: "LINKS" | "CLOUDINARY" | "DATABASE"; max_file_mb: number; quota_mb: number; share_days: number; cloudinary_configured: boolean }
+interface S {
+  enabled: boolean; allow_links: boolean; storage: "LINKS" | "CLOUDINARY" | "DATABASE"; max_file_mb: number; quota_mb: number; share_days: number;
+  cloudinary_configured: boolean; images_storage: "CLOUDINARY" | "DATABASE"; image_max_mb: number;
+}
 
 /** Super admin: how businesses may keep documents in their vault. */
 export function AdminDocuments() {
@@ -21,13 +24,24 @@ export function AdminDocuments() {
     setErr(null); setMsg(null);
     try { await api("/admin/documents-settings", { method: "PUT", body: edit }); setEdit({}); setMsg("Saved — applies to every business."); reload(); } catch (e) { setErr((e as Error).message); }
   }
-  const num = (k: "max_file_mb" | "quota_mb" | "share_days") => ({ inputMode: "numeric" as const, value: String(s[k]), onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEdit({ ...edit, [k]: Number(e.target.value) || 1 }) });
+  const num = (k: "max_file_mb" | "quota_mb" | "share_days" | "image_max_mb") => ({ inputMode: "numeric" as const, value: String(s[k]), onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEdit({ ...edit, [k]: Number(e.target.value) || 1 }) });
   return (
     <Card className="p-5">
-      <h2 className="mb-1 flex items-center gap-2 font-semibold text-gray-900"><FolderLock size={18} /> Document vault</h2>
-      <p className="mb-4 text-sm text-gray-600">Where businesses keep ITRs, financial statements, certificates and licences. Files are private: they open only for signed-in staff or through a share link that expires.</p>
+      <h2 className="mb-1 flex items-center gap-2 font-semibold text-gray-900"><FolderLock size={18} /> File storage</h2>
+      <p className="mb-4 text-sm text-gray-600">Where the app keeps files that businesses upload. {s.cloudinary_configured ? "Cloudinary is configured on the server." : "Cloudinary is not configured on the server (CLOUDINARY_URL), so only 'Our database' is available."}</p>
       <ErrorBox message={err} />
       {msg && <div className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{msg}</div>}
+      <h3 className="mb-2 text-sm font-semibold text-gray-900">Images — logos, signatures, item photos</h3>
+      <div className="mb-5 grid gap-4 md:grid-cols-3">
+        <Field label="Image storage" hint="Shown on invoices customers open, so image links are public (but unguessable). Changing it affects new uploads only.">
+          <Select value={s.images_storage} onChange={(e) => setEdit({ ...edit, images_storage: e.target.value as S["images_storage"] })}>
+            <option value="CLOUDINARY" disabled={!s.cloudinary_configured}>Cloud storage (Cloudinary)</option>
+            <option value="DATABASE">Our database (resized to 1200 px)</option>
+          </Select>
+        </Field>
+        <Field label="Largest image (MB)"><Input {...num("image_max_mb")} /></Field>
+      </div>
+      <h3 className="mb-2 text-sm font-semibold text-gray-900">Document vault — ITRs, certificates, licences (private)</h3>
       <div className="grid gap-4 md:grid-cols-3">
         <Field label="Status"><label className="flex items-center gap-2 pt-2 text-sm"><input type="checkbox" checked={s.enabled} onChange={(e) => setEdit({ ...edit, enabled: e.target.checked })} /> {s.enabled ? "On for all businesses" : "Off"}</label></Field>
         <Field label="File storage" hint={s.cloudinary_configured ? "Cloudinary is configured on the server" : "Cloudinary is not configured on the server (CLOUDINARY_URL)"}>
