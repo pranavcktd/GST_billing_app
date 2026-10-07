@@ -225,6 +225,7 @@ class BusinessIn(BaseModel):
     ewb_username: Opt(100) = None
     ewb_password: Opt(100) = None  # write-only; stored encrypted
     einvoice_applicable: bool | None = None  # left out = keep the current setting
+    stock_control: Literal["WARN", "BLOCK", "ALLOW"] | None = None  # left out = keep the current setting
 
     _gstin = field_validator("gstin")(_check_gstin)
     _state = field_validator("state_code")(_check_state)
@@ -297,6 +298,7 @@ class BusinessOut(ORM):
     ewb_username: str | None = None
     ewb_password_set: bool = False
     einvoice_applicable: bool = False
+    stock_control: str = "WARN"
     plan: dict | None = None
 
 
@@ -514,7 +516,8 @@ class VoucherIn(BaseModel):
     exchange_rate: Annotated[Decimal, Field(gt=0, max_digits=12, decimal_places=4)] | None = None
     transport: "TransportIn | None" = None
     extra_fields: dict[str, Annotated[str, StringConstraints(max_length=200)]] | None = None
-    client_ref: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{8,40}$")] | None = None  # offline bills
+    client_ref: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{8,40}$")] | None = None
+    allow_negative: bool = False  # the user confirmed billing more than is in stock  # offline bills
 
     _pos = field_validator("place_of_supply")(_check_state)
 

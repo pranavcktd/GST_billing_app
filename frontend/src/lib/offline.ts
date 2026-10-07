@@ -22,7 +22,7 @@ const QUEUE_KEY = "offline-queue";
 const CACHE_PREFIX = "offline-cache:";
 const CACHEABLE: RegExp[] = [
   /^\/auth\/me$/, /^\/businesses\/current$/, /^\/items(\?|$)/, /^\/parties(\?|$)/, /^\/parties\/[^/]+\/rates$/,
-  /^\/godowns$/, /^\/accounts$/, /^\/expenses\/categories$/, /^\/expenses\/items(\?|$)/, /^\/price-lists$/,
+  /^\/godowns$/, /^\/items\/stock(\?|$)/, /^\/accounts$/, /^\/expenses\/categories$/, /^\/expenses\/items(\?|$)/, /^\/price-lists$/,
 ];
 const QUEUEABLE = /^\/vouchers$/;
 
@@ -85,6 +85,7 @@ export function enqueue(bid: string, path: string, body: Record<string, unknown>
     created_at: new Date().toISOString(),
   };
   doc.body.client_ref = doc.id;
+  doc.body.allow_negative = true; // billed offline: the goods are already gone; the server still applies "Block"
   saveQueue([...queue().filter((d) => d.id !== doc.id), doc]);
   return doc;
 }

@@ -322,6 +322,23 @@ export function BusinessForm({
         </OptionalCard>
       )}
 
+      <OptionalCard open={!wizard} title="Stock control" sub="What happens when a bill sells more than is in stock">
+        <div className="grid gap-2 sm:grid-cols-3">
+          {([
+            ["WARN", "Warn (recommended)", "Shows the shortage while billing and asks “Sell anyway?” before saving."],
+            ["BLOCK", "Block", "Bills can't take stock below zero. Owner, admin or store manager can approve; other staff need a manager's approval PIN."],
+            ["ALLOW", "Allow", "No check — stock may go below zero without a warning (not recommended)."],
+          ] as const).map(([k, label, hint]) => (
+            <label key={k} className={`cursor-pointer rounded-lg border p-3 text-sm ${(b.stock_control ?? "WARN") === k ? "border-brand-500 bg-brand-50" : "border-gray-200"}`}>
+              <input type="radio" className="sr-only" checked={(b.stock_control ?? "WARN") === k} onChange={() => set("stock_control", k)} />
+              <span className="block font-medium text-gray-900">{label}</span>
+              <span className="mt-0.5 block text-xs text-gray-500">{hint}</span>
+            </label>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-gray-500">Applies to sale invoices, POS, delivery challans and purchase returns. Current stock is shown on every bill line either way.</p>
+      </OptionalCard>
+
       <OptionalCard open={!wizard} title="Document numbering & terms" sub="Ready-made defaults — change only if you need to">
         <p className="mb-4 text-xs text-gray-500">
           Numbers are generated as PREFIX/YY-YY/0001 and restart every financial year (max 16 characters as per GST rules).

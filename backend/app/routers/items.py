@@ -93,6 +93,16 @@ def assign_codes(ctx: BCtx):
     return {"assigned": count}
 
 
+@router.get("/stock")
+def stock_in_godown(ctx: BCtx, godown_id: str | None = None):
+    """{item_id: quantity} in one godown (default godown when not given) — shown while billing."""
+    from ..services.godowns import resolve_godown, stock_by_godown
+
+    ctx.need("items", "view")
+    gid = resolve_godown(ctx.db, ctx.bid, godown_id).id
+    return {iid: float(q) for (iid, g), q in stock_by_godown(ctx.db, ctx.bid).items() if g == gid}
+
+
 @router.get("/{item_id}", response_model=ItemOut)
 def get_item(item_id: str, ctx: BCtx):
     ctx.need("items", "view")

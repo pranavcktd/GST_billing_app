@@ -15,8 +15,9 @@ router = APIRouter(prefix="/businesses", tags=["business"])
 
 def apply_business(biz: Business, data: BusinessIn) -> None:
     values = data.model_dump(exclude={"einvoice_password", "ewb_password"})
-    if values.get("einvoice_applicable") is None:
-        values.pop("einvoice_applicable", None)  # not sent: keep what the business chose
+    for k in ("einvoice_applicable", "stock_control"):
+        if values.get(k) is None:
+            values.pop(k, None)  # not sent: keep what the business chose
     for k, v in values.items():
         setattr(biz, k, v)
     if data.einvoice_password:
