@@ -275,6 +275,7 @@ def dashboard(db: Session, biz: Business, today: dt.date) -> dict:
                         for i in goods), ZERO),
         low=sum(1 for i in goods if i.low_stock_level is not None and 0 < qty_now.get(i.id, ZERO) <= i.low_stock_level),
         out=sum(1 for i in goods if qty_now.get(i.id, ZERO) <= 0),
+        negative=sum(1 for i in goods if qty_now.get(i.id, ZERO) < 0),
     )
 
     # cash & bank

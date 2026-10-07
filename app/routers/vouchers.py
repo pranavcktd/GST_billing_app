@@ -1,6 +1,6 @@
 import datetime as dt
 
-from fastapi import APIRouter, HTTPException
+from fastapi import Request, APIRouter, HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
@@ -10,6 +10,7 @@ from ..models import Voucher
 from ..schemas import VoucherDetailOut, VoucherIn, VoucherOut
 from ..services.numbering import preview_number
 from ..permissions import voucher_module
+from ..services import stock_control
 from ..services.vouchers import cancel_voucher, save_voucher, to_detail, to_out
 
 router = APIRouter(prefix="/vouchers", tags=["vouchers"])
@@ -72,7 +73,7 @@ def next_number(ctx: BCtx, type: VoucherType, date: dt.date | None = None):
 
 
 @router.post("", response_model=VoucherDetailOut, status_code=201)
-def create_voucher(data: VoucherIn, ctx: BCtx):
+def create_voucher(data: VoucherIn, ctx: BCtx, request: Request):
     ctx.need(voucher_module(data.type), "create")
     if data.client_ref:
         # a bill made offline that was already uploaded (e.g. the reply was lost): return it, never duplicate
@@ -80,6 +81,7 @@ def create_voucher(data: VoucherIn, ctx: BCtx):
         if done is not None:
             return to_detail(ctx, done)
     v = save_voucher(ctx, data)
+    stock_control.enforce(ctx, v, data.allow_negative, request)
     v.client_ref = data.client_ref
     ctx.db.commit()
     ctx.db.refresh(v)
@@ -92,10 +94,11 @@ def get_voucher(voucher_id: str, ctx: BCtx):
 
 
 @router.put("/{voucher_id}", response_model=VoucherDetailOut)
-def update_voucher(voucher_id: str, data: VoucherIn, ctx: BCtx):
+def update_voucher(voucher_id: str, data: VoucherIn, ctx: BCtx, request: Request):
     current = _get(ctx, voucher_id, "edit")
     ctx.need_past_edit(min(current.date, data.date))
     v = save_voucher(ctx, data, current)
+    stock_control.enforce(ctx, v, data.allow_negative, request)
     ctx.db.commit()
     ctx.db.refresh(v)
     return to_detail(ctx, v)

@@ -148,6 +148,8 @@ class Business(Base):
     ewb_password_enc: Mapped[str | None] = mapped_column(Text)
     # e-invoicing is mandatory for this business (aggregate turnover above the notified limit)
     einvoice_applicable: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # selling more than is in stock: WARN (confirm) / BLOCK (manager approval) / ALLOW — see services/stock_control.py
+    stock_control: Mapped[str] = mapped_column(String(5), default="WARN", server_default="WARN")
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

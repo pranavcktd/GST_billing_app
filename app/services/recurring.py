@@ -93,6 +93,8 @@ def generate_due(db: Session, r: RecurringInvoice, today: dt.date, base_url: str
             ctx = owner_ctx(db, biz)
             from .vouchers import save_voucher
             v = save_voucher(ctx, VoucherIn.model_validate(body))
+            from .stock_control import enforce
+            enforce(ctx, v, allow=True)
             v.recurring_id = r.id
             db.flush()
             r.generated_count += 1

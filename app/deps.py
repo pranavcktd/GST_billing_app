@@ -84,19 +84,22 @@ class Ctx:
     def flag(self, name: str) -> bool:
         return name in self.perms["flags"]
 
+    def approval_pin_valid(self) -> bool:
+        """The request carries the approval PIN of an owner / admin / store manager of this business."""
+        pin = (self.approval_pin or "").strip()
+        if not pin:
+            return False
+        approvers = self.db.scalars(select(Membership).where(
+            Membership.business_id == self.bid, Membership.approval_pin_hash.is_not(None),
+            Membership.role.in_([Role.OWNER, Role.ADMIN, Role.MANAGER]))).all()
+        if any(bcrypt.checkpw(pin.encode(), m.approval_pin_hash.encode()) for m in approvers):
+            return True
+        raise HTTPException(status.HTTP_403_FORBIDDEN, {"message": "Approval PIN is not correct", "code": "APPROVAL_REQUIRED"})
+
     def need_past_edit(self, doc_date: dt.date) -> None:
         """Editing/cancelling an entry dated before today needs the edit_past right or a manager's approval PIN."""
-        if doc_date >= dt.date.today() or self.flag("edit_past"):
+        if doc_date >= dt.date.today() or self.flag("edit_past") or self.approval_pin_valid():
             return
-        pin = (self.approval_pin or "").strip()
-        if pin:
-            approvers = self.db.scalars(select(Membership).where(
-                Membership.business_id == self.bid, Membership.approval_pin_hash.is_not(None),
-                Membership.role.in_([Role.OWNER, Role.ADMIN, Role.MANAGER]))).all()
-            if any(bcrypt.checkpw(pin.encode(), m.approval_pin_hash.encode()) for m in approvers):
-                return
-            raise HTTPException(status.HTTP_403_FORBIDDEN, {"message": "Approval PIN is not correct",
-                                                            "code": "APPROVAL_REQUIRED"})
         raise HTTPException(status.HTTP_403_FORBIDDEN, {
             "message": "Changing an older entry needs a manager's approval PIN", "code": "APPROVAL_REQUIRED"})
 

@@ -15,7 +15,9 @@ def signup(client, email="owner@shop.in"):
 
 
 def make_business(client, auth, **over):
-    body = {"name": "Sharma Traders", "gst_type": "REGULAR", "gstin": gstin("27", "AABCS1429B"), "state_code": "27"}
+    # older tests sell without entering stock first; stock control has its own tests (test_stock_control.py)
+    body = {"name": "Sharma Traders", "gst_type": "REGULAR", "gstin": gstin("27", "AABCS1429B"), "state_code": "27",
+            "stock_control": "ALLOW"}
     body.update(over)
     r = client.post("/api/businesses", json=body, headers=auth)
     assert r.status_code == 201, r.text
