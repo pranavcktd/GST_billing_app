@@ -1,6 +1,6 @@
 "use client";
 
-import { Crown, PlusCircle } from "lucide-react";
+import { Coins, Crown, PlusCircle } from "lucide-react";
 import { useState } from "react";
 import { type PlanOut, PlanCards } from "@/components/PlanCards";
 import { Button, Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
@@ -18,6 +18,12 @@ interface Status {
   payments: { id: string; plan: string; cycle: string; amount: number; status: string; payment_id: string | null; mode: string | null; method: string | null; created_at: string }[];
 }
 interface Plans { plans: PlanOut[]; trial_days: number; addon: { code: string; name: string; yearly: number; yearly_with_gst: number } }
+interface Credits {
+  allowance: number; used_this_month: number; free_left: number; balance: number; api_enabled: boolean;
+  costs: Record<string, number>; actions: Record<string, string>;
+  packs: { credits: number; price: number; price_with_gst: number }[];
+  history: { at: string; kind: string; action: string | null; units: number; delta: number; from_pack: number; ref: string | null; note: string | null }[];
+}
 interface Order { order_id: string; amount: number; amount_paise: number; key_id: string | null; live: boolean; test_mode: boolean; business_name: string; email: string; phone: string | null }
 
 declare global {
@@ -51,6 +57,7 @@ export default function BillingPage() {
   const { refresh } = useAuth();
   const { data: st, error, reload } = useFetch<Status>("/billing/status");
   const { data: plans } = useFetch<Plans>("/billing/plans");
+  const { data: credits, reload: reloadCredits } = useFetch<Credits>("/billing/credits");
   const [cycle, setCycle] = useState<"MONTHLY" | "YEARLY">("YEARLY");
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -66,13 +73,13 @@ export default function BillingPage() {
       if (!order.live) {
         if (!confirm(`Local development: payments aren't configured.\nSimulate a successful payment of ${money(order.amount)}?`)) return;
         await api("/billing/verify", { body: { order_id: order.order_id, simulate: true } });
-        setMsg("Plan activated (simulated payment).");
+        setMsg(plan.startsWith("CREDITS_") ? "Credits added (simulated payment)." : "Plan activated (simulated payment).");
       } else {
         await loadRazorpay();
         await new Promise<void>((resolve, reject) => {
           const rzp = new window.Razorpay!({
             key: order.key_id, order_id: order.order_id, amount: order.amount_paise, currency: "INR",
-            name: APP_NAME, description: `${plan} plan — ${c.toLowerCase()}`,
+            name: APP_NAME, description: plan.startsWith("CREDITS_") ? `${plan.slice(8)} API credits` : `${plan} plan — ${c.toLowerCase()}`,
             prefill: { email: order.email, contact: order.phone ?? "" }, theme: { color: "#1f65bb" },
             handler: async (r: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
               try {
@@ -87,10 +94,11 @@ export default function BillingPage() {
             "payment.failed", (r) => setErr(`Payment failed: ${r.error?.description ?? "please try again"}`));
           rzp.open();
         });
-        setMsg("Payment successful — your plan is active.");
+        setMsg(plan.startsWith("CREDITS_") ? "Payment successful — credits added." : "Payment successful — your plan is active.");
       }
       await refresh();
       reload();
+      reloadCredits();
     } catch (e) {
       setErr((e as Error).message);
     }
@@ -128,7 +136,7 @@ export default function BillingPage() {
           <div className="grid gap-3 sm:grid-cols-2">
             <Meter label="Businesses" used={st.usage.businesses} cap={p.businesses} />
             <Meter label="Users" used={st.usage.users} cap={p.users} />
-            <Meter label="e-Invoice / e-way API calls (month)" used={st.usage.api_calls_this_month} cap={p.api_quota || null} />
+            <Meter label="API credits included (month)" used={Math.min(st.usage.api_calls_this_month, p.api_quota)} cap={p.api_quota} />
             <Meter label="Cloud backup" used={st.usage.backup_mb} cap={p.backup_mb} unit=" MB" />
           </div>
         </Card>
@@ -139,7 +147,7 @@ export default function BillingPage() {
         <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 text-sm">
           {(["MONTHLY", "YEARLY"] as const).map((c) => (
             <button key={c} onClick={() => setCycle(c)} className={`rounded-md px-4 py-1.5 ${cycle === c ? "bg-brand-600 text-white" : "text-gray-700"}`}>
-              {c === "MONTHLY" ? "Monthly" : "Yearly (save ~16%)"}
+              {c === "MONTHLY" ? "Monthly" : "Yearly (save ~25%)"}
             </button>
           ))}
         </div>
@@ -155,6 +163,57 @@ export default function BillingPage() {
           </div>
           <Button onClick={() => buy(plans.addon.code, "YEARLY")}><PlusCircle size={16} /> Buy add-on</Button>
         </Card>
+      )}
+
+      {credits?.api_enabled && (
+        <div id="credits" className="scroll-mt-20"><Card className="mt-5 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="flex items-center gap-2 font-semibold text-gray-900"><Coins size={18} className="text-amber-500" /> API credits</h2>
+              <p className="mt-1 max-w-xl text-sm text-gray-500">
+                Used when the app talks to the government portals for you: {Object.entries(credits.actions).map(([k, v]) => `${v} — ${credits.costs[k]} credit${credits.costs[k] === 1 ? "" : "s"}`).join(" · ")}.
+                Your plan&apos;s monthly credits are used first, then prepaid credits. Failed or test-mode calls are free.
+              </p>
+            </div>
+            <div className="flex gap-6 text-center">
+              <div><div className="text-2xl font-semibold tabular-nums text-gray-900">{credits.free_left}</div><div className="text-xs text-gray-500">of {credits.allowance} left this month</div></div>
+              <div><div className="text-2xl font-semibold tabular-nums text-brand-700">{credits.balance}</div><div className="text-xs text-gray-500">prepaid (never expire)</div></div>
+            </div>
+          </div>
+          {st.is_owner && credits.packs.length > 0 && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {credits.packs.map((pk) => (
+                <button key={pk.credits} onClick={() => buy(`CREDITS_${pk.credits}`, "YEARLY")}
+                  className="rounded-xl border border-gray-200 p-4 text-left transition hover:border-brand-400 hover:shadow-sm">
+                  <div className="text-lg font-semibold text-gray-900">{pk.credits.toLocaleString("en-IN")} credits</div>
+                  <div className="text-sm text-gray-600">{money(pk.price)} + GST <span className="text-xs text-gray-400">· ₹{(pk.price / pk.credits).toFixed(2)} each</span></div>
+                  <div className="mt-2 text-xs font-medium text-brand-700">Buy now →</div>
+                </button>
+              ))}
+            </div>
+          )}
+          {credits.history.length > 0 && (
+            <details className="mt-4">
+              <summary className="cursor-pointer text-sm text-gray-600">Recent use</summary>
+              <div className="mt-2 overflow-x-auto">
+                <table className="tbl">
+                  <thead><tr><th>When</th><th>What</th><th>Reference</th><th className="num">Credits</th><th>From</th></tr></thead>
+                  <tbody>
+                    {credits.history.map((h, i) => (
+                      <tr key={i}>
+                        <td>{new Date(h.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</td>
+                        <td>{h.kind === "USE" ? credits.actions[h.action ?? ""] ?? h.action : h.note ?? "Credits added"}</td>
+                        <td className="font-mono text-xs">{h.ref}</td>
+                        <td className={`num ${h.delta > 0 ? "text-emerald-700" : ""}`}>{h.delta > 0 ? `+${h.delta}` : h.delta}</td>
+                        <td className="text-xs text-gray-500">{h.kind !== "USE" ? "" : h.from_pack === 0 ? "monthly" : h.from_pack === h.units ? "prepaid" : "monthly + prepaid"}{h.kind === "USE" && h.note ? ` · ${h.note}` : ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          )}
+        </Card></div>
       )}
 
       {st.payments.length > 0 && (

@@ -53,7 +53,7 @@ export function EInvoicePanel({ v, business, onChange, canEdit }: {
   };
   // direct generation: plan includes it AND the super admin switched it on (or the local sandbox while developing)
   const api_ok = plan?.einvoice === "API" && !!(setup?.live || setup?.sandbox);
-  const genTitle = plan?.einvoice !== "API" ? "Direct generation needs the Professional plan"
+  const genTitle = plan?.einvoice !== "API" ? "Direct generation needs a paid plan"
     : !setup?.live && !setup?.sandbox ? "Direct generation is not switched on yet — use the JSON and record the number"
     : setup?.test_mode ? "Test mode: nothing is filed with the government (TEST numbers)" : "";
   const mode = setup?.live ? (setup.test_mode ? " (test)" : "") : setup?.sandbox ? " (sandbox)" : "";

@@ -96,3 +96,21 @@ body {
     padding: 0 !important;
   }
 }
+
+/* ---- landing page motion (switched off for people who prefer reduced motion) */
+@keyframes lp-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes lp-blob { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(30px, -40px) scale(1.1); } 66% { transform: translate(-20px, 20px) scale(0.95); } }
+@keyframes lp-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes lp-pop { from { opacity: 0; transform: translateY(12px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes lp-shine { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.lp-float { animation: lp-float 6s ease-in-out infinite; }
+.lp-blob { animation: lp-blob 18s ease-in-out infinite; }
+.lp-marquee { animation: lp-marquee 40s linear infinite; }
+.lp-pop { animation: lp-pop 0.5s ease-out both; }
+.lp-shine { background-size: 200% 100%; animation: lp-shine 6s linear infinite; }
+.lp-reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.7s ease, transform 0.7s ease; }
+.lp-reveal.lp-in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .lp-float, .lp-blob, .lp-marquee, .lp-pop, .lp-shine { animation: none; }
+  .lp-reveal { opacity: 1; transform: none; transition: none; }
+}

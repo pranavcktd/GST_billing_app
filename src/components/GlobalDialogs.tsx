@@ -8,7 +8,7 @@ import { Button, Input } from "@/components/ui";
 import { api, type ApiError, session, uiHooks } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
-const PLAN_NAMES: Record<string, string> = { STARTER: "Starter", PROFESSIONAL: "Professional", ENTERPRISE: "Enterprise" };
+const PLAN_NAMES: Record<string, string> = { STARTER: "Starter", PROFESSIONAL: "Growth", ENTERPRISE: "Business" };
 
 /** App-wide prompts triggered by API responses: manager approval PIN and plan upgrade. */
 export function GlobalDialogs() {
@@ -56,15 +56,17 @@ export function GlobalDialogs() {
         </Modal>
       )}
       {upgrade && (
-        <Modal title="Upgrade your plan" onClose={() => setUpgrade(null)}>
+        <Modal title={upgrade.plan === "CREDITS" ? "API credits needed" : "Upgrade your plan"} onClose={() => setUpgrade(null)}>
           <div className="space-y-4 text-sm">
             <p className="flex items-start gap-2 text-gray-700"><Crown size={18} className="mt-0.5 shrink-0 text-amber-500" /> {upgrade.message}</p>
-            <p className="text-gray-500">Upgrading takes a minute — pay by UPI, card or net banking and continue right where you left off.</p>
+            <p className="text-gray-500">{upgrade.plan === "CREDITS"
+              ? "Credit packs are prepaid and never expire. Pay by UPI, card or net banking and continue right where you left off."
+              : "Upgrading takes a minute — pay by UPI, card or net banking and continue right where you left off."}</p>
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setUpgrade(null)}>Later</Button>
-              <Link href={`/billing${upgrade.plan ? `?plan=${upgrade.plan}` : ""}`} onClick={() => setUpgrade(null)}
+              <Link href={upgrade.plan === "CREDITS" ? "/billing#credits" : `/billing${upgrade.plan ? `?plan=${upgrade.plan}` : ""}`} onClick={() => setUpgrade(null)}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-brand-700">
-                <Crown size={15} /> See {upgrade.plan ? PLAN_NAMES[upgrade.plan] ?? "" : ""} plan
+                <Crown size={15} /> {upgrade.plan === "CREDITS" ? "Buy credits" : `See ${upgrade.plan ? PLAN_NAMES[upgrade.plan] ?? "" : ""} plan`}
               </Link>
             </div>
           </div>

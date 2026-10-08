@@ -14,7 +14,7 @@ interface PlansData {
 
 const LIMITS: [string, string][] = [
   ["invoices_per_month", "Invoices / month"], ["invoices_per_year", "Invoices / year"], ["businesses", "Businesses"],
-  ["users", "Users"], ["godowns", "Godowns"], ["api_quota", "API calls / month"], ["backup_mb", "Backup storage (MB)"],
+  ["users", "Users"], ["godowns", "Godowns"], ["api_quota", "API credits included / month"], ["backup_mb", "Backup storage (MB)"],
 ];
 const FLAGS: [string, string][] = [
   ["gst_json", "GST JSON exports"], ["gstr2b", "GSTR-2B matching"], ["audit_view", "Audit trail"],

@@ -60,7 +60,7 @@ export default function LabelsPage() {
           } />
         {!allowed && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            Barcode label printing is part of the Enterprise plan. <Link href="/billing?plan=ENTERPRISE" className="font-medium underline">Upgrade</Link>
+            Barcode label printing comes with the Starter plan and above. <Link href="/billing?plan=STARTER" className="font-medium underline">Upgrade</Link>
           </div>
         )}
         <ErrorBox message={err} />

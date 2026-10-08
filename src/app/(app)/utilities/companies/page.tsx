@@ -176,7 +176,7 @@ export default function CompaniesPage() {
         <Modal title={`Permissions — ${editing.member.name}`} onClose={() => setEditing(null)} wide>
           {!customRoles && (
             <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Custom permissions are part of the Enterprise plan — this shows what the <b>{meta.roles[editing.member.role].label}</b> role allows.{" "}
+              Custom permissions are part of the Business plan — this shows what the <b>{meta.roles[editing.member.role].label}</b> role allows.{" "}
               <Link href="/billing?plan=ENTERPRISE" className="font-medium underline">Upgrade</Link>
             </p>
           )}

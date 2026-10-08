@@ -55,7 +55,7 @@ export function PrintSettingsForm({ business, onSave }: { business: Business; on
         <Card className="space-y-4 p-5">
           <h2 className="font-semibold text-gray-900">Look</h2>
           {!themesAllowed && (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">Custom themes and colours come with the Professional plan. <Link href="/billing?plan=PROFESSIONAL" className="font-medium underline">Upgrade</Link></p>
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">Custom themes and colours come with the Growth plan. <Link href="/billing?plan=PROFESSIONAL" className="font-medium underline">Upgrade</Link></p>
           )}
           <div className="grid grid-cols-3 gap-2">
             {(["classic", "modern", "minimal"] as const).map((t) => (
