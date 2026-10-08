@@ -200,7 +200,7 @@ def test_subscription_trial_limits_and_payments(client, monkeypatch):
 
     # local development: simulated payment upgrades the whole account
     order = post(client, h, "/api/billing/order", {"plan": "STARTER", "cycle": "YEARLY"}, 200)
-    assert order["amount"] == float(P.with_gst(Decimal("1999"))) and not order["live"]
+    assert order["amount"] == float(P.with_gst(Decimal("1799"))) and not order["live"]
     res = post(client, h, "/api/billing/verify", {"order_id": order["order_id"], "simulate": True}, 200)
     assert res["plan"] == "STARTER" and res["status"] == "ACTIVE"
     assert client.post("/api/vouchers", headers=h, json={"type": "SALE", "date": "2026-09-10", "party_id": cust["id"],

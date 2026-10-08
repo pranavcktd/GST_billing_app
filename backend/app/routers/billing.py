@@ -1,15 +1,17 @@
+from decimal import Decimal
 """Subscription plans and payments (Razorpay). The subscription belongs to the account owner."""
 
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from ..config import get_settings
 from ..deps import DB, BCtx
 from ..gst.constants import Role
 from ..models import SubscriptionPayment
+from ..services import api_credits as AC
 from ..services import config_store
 from ..services import plans as P
 from ..services import razorpay_cfg as rz
@@ -33,7 +35,9 @@ def plans():
     return {"plans": [_plan_out(c) for c in P.ORDER], "trial_days": int(config_store.get("trial_days")), "trial_plan": P.TRIAL_PLAN,
             "gst_rate": float(config_store.get("subscription_gst_rate")),
             "addon": {"code": P.ADDON["code"], "name": P.ADDON["name"], "yearly": float(P.ADDON["yearly"]),
-                      "yearly_with_gst": float(P.with_gst(P.ADDON["yearly"]))}}
+                      "yearly_with_gst": float(P.with_gst(P.ADDON["yearly"]))},
+            "credit_packs": [{"credits": n, "price": p} for n, p in AC.packs().items()],
+            "credit_costs": {k: AC.cost(k) for k in AC.ACTIONS}}
 
 
 @router.get("/status")
@@ -58,7 +62,7 @@ def status(ctx: BCtx):
 
 
 class OrderIn(BaseModel):
-    plan: Literal["STARTER", "PROFESSIONAL", "ENTERPRISE", "ADDON_BUSINESSES"]
+    plan: str = Field(pattern=r"^(STARTER|PROFESSIONAL|ENTERPRISE|ADDON_BUSINESSES|CREDITS_\d{1,6})$")
     cycle: Literal["MONTHLY", "YEARLY"] = "YEARLY"
 
 
@@ -123,3 +127,19 @@ async def webhook(request: Request, db: DB):
             P.activate(db, pay, payment_id)
             db.commit()
     return {"ok": True}
+
+
+@router.get("/credits")
+def credits(ctx: BCtx):
+    """API credits: this month's allowance and use, prepaid balance, packs on sale, recent use."""
+    from ..models import ApiCredit
+    from ..services import api_credits as AC
+
+    account = P.account_of(ctx.db, ctx.bid)
+    plan = P.business_plan(ctx.db, ctx.bid)
+    rows = ctx.db.scalars(select(ApiCredit).where(ApiCredit.account_id == account).order_by(ApiCredit.created_at.desc()).limit(50)).all()
+    return {**AC.status(ctx.db, account, plan["api_quota"]), "api_enabled": plan.get("einvoice") == "API",
+            "costs": {k: AC.cost(k) for k in AC.ACTIONS}, "actions": AC.ACTIONS,
+            "packs": [{"credits": n, "price": p, "price_with_gst": float(P.with_gst(Decimal(str(p))))} for n, p in AC.packs().items()],
+            "history": [dict(at=r.created_at, kind=r.kind, action=r.action, units=r.units, delta=r.delta, from_pack=r.from_pack,
+                             ref=r.ref, note=r.note) for r in rows]}

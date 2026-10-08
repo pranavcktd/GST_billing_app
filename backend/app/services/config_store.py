@@ -112,6 +112,13 @@ FIELDS: list[Field] = [
           "use for less than 180 days in the year. Check against the latest rules."),
     Field("ca_residual_value_pct", "Final accounts", "Companies Act residual value (% of cost)", "number", 5,
           "Used for useful-life depreciation (Schedule II)."),
+    # ---- API credits (paid government-connected actions)
+    Field("api_credit_costs", "API credits", "Credits per action", "map_number",
+          {"EINVOICE": 1, "EWAYBILL": 1, "CANCEL": 1, "FILING_SYNC": 1},
+          "EINVOICE = generate IRN, EWAYBILL = generate e-way bill, CANCEL = cancel either, FILING_SYNC = fetch one "
+          "financial year of GST filing status. Plans include a monthly allowance; beyond it businesses buy packs."),
+    Field("api_credit_packs", "API credits", "Credit packs (credits = price ₹, excl. GST)", "map_number",
+          {"100": 299, "500": 1199, "2000": 3999}, "Prepaid credits businesses can buy; they do not expire."),
     # ---- payroll (statutory rates; effective-dated like the GST rules)
     Field("pf_employee_rate", "Payroll", "EPF — employee share (% of EPF wage)", "number", 12),
     Field("pf_employer_rate", "Payroll", "EPF — employer share (% of EPF wage, EPF + EPS)", "number", 12),
@@ -334,10 +341,12 @@ def clean_values(values: dict) -> dict:
                 k = str(k).strip()
                 if not k:
                     raise ConfigError(f"{f.label}: code cannot be empty")
-                m[k.upper() if key in ("uqc", "composition_rates") else k] = (
+                m[k.upper() if key in ("uqc", "composition_rates", "api_credit_costs") else k] = (
                     _num(x, f"{f.label} {k}") if f.type == "map_number" else str(x).strip())
             if key == "links" and any(not x.startswith(("https://", "http://")) or " " in x for x in m.values()):
                 raise ConfigError("Links must be full web addresses starting with https://")
+            if key == "api_credit_packs" and any(not k.isdigit() or int(k) <= 0 for k in m):
+                raise ConfigError("Credit packs: each line is CREDITS = PRICE, e.g. 100 = 299")
             if key == "states" and any(not (c.isdigit() and len(c) == 2) for c in m):
                 raise ConfigError("State codes must be 2 digits")
             out[key] = m

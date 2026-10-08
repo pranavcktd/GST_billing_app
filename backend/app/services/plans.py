@@ -29,34 +29,35 @@ ADDON_CODE = "ADDON_BUSINESSES"
 ORDER = ["FREE", "STARTER", "PROFESSIONAL", "ENTERPRISE"]
 
 PLANS: dict[str, dict] = {
+    # api_quota = API credits included per month (e-invoice / e-way bill / filing sync); more via credit packs
     "FREE": dict(
-        name="Free", audience="Micro-traders, self-employed", monthly=Decimal("0"), yearly=Decimal("0"),
-        invoices_per_month=30, invoices_per_year=300, businesses=1, users=1, godowns=1,
+        name="Free", audience="Just starting out", monthly=Decimal("0"), yearly=Decimal("0"),
+        invoices_per_month=50, invoices_per_year=600, businesses=1, users=1, godowns=1,
         einvoice=None, gst_json=False, gstr2b=False, api_quota=0, audit_view=False, custom_themes=False,
         watermark=True, barcode=False, custom_roles=False, tally=False, backup_mb=100,
-        highlights=["30 invoices / month", "1 business, owner only", "B2B & B2C GST invoices",
-                    "Day book & sales report", "App watermark on bills"]),
+        highlights=["50 invoices a month", "1 business, owner only", "GST invoices, stock & payments",
+                    "Compliance calendar & reminders", "App watermark on bills"]),
     "STARTER": dict(
-        name="Starter", audience="Small retail & service shops", monthly=Decimal("199"), yearly=Decimal("1999"),
-        invoices_per_month=250, invoices_per_year=None, businesses=1, users=2, godowns=1,
-        einvoice="JSON", gst_json=True, gstr2b=False, api_quota=0, audit_view=False, custom_themes=False,
-        watermark=False, barcode=False, custom_roles=False, tally=False, backup_mb=1024,
-        highlights=["250 invoices / month", "2 users (owner + billing)", "GSTR-1 JSON, e-invoice & e-way bill JSON",
-                    "P&L, balance sheet, inventory reports", "No watermark", "1 GB cloud backup"]),
+        name="Starter", audience="Shops & service providers", monthly=Decimal("199"), yearly=Decimal("1799"),
+        invoices_per_month=None, invoices_per_year=None, businesses=1, users=2, godowns=1,
+        einvoice="API", gst_json=True, gstr2b=False, api_quota=0, audit_view=False, custom_themes=False,
+        watermark=False, barcode=True, custom_roles=False, tally=False, backup_mb=1024,
+        highlights=["Unlimited invoices", "2 users", "GSTR-1 / 3B JSON, e-invoice & e-way bill",
+                    "Direct IRN / e-way bill: pay as you go", "POS, barcode, payroll, document vault", "No watermark"]),
     "PROFESSIONAL": dict(
-        name="Professional", audience="Growing MSMEs, multi-branch", monthly=Decimal("499"), yearly=Decimal("4999"),
-        invoices_per_month=None, invoices_per_year=None, businesses=3, users=5, godowns=3,
-        einvoice="API", gst_json=True, gstr2b=True, api_quota=500, audit_view=True, custom_themes=True,
-        watermark=False, barcode=False, custom_roles=False, tally=True, backup_mb=5120,
-        highlights=["Unlimited invoices", "Up to 3 businesses, 5 users", "Direct e-invoice & e-way bill (500/month)",
-                    "GSTR-2B matching", "Audit trail & ledgers", "Custom invoice themes & logo", "Tally export"]),
+        name="Growth", audience="Growing businesses & traders", monthly=Decimal("449"), yearly=Decimal("3999"),
+        invoices_per_month=None, invoices_per_year=None, businesses=2, users=5, godowns=3,
+        einvoice="API", gst_json=True, gstr2b=True, api_quota=50, audit_view=True, custom_themes=True,
+        watermark=False, barcode=True, custom_roles=False, tally=True, backup_mb=5120,
+        highlights=["Everything in Starter", "2 businesses, 5 users", "50 e-invoice / e-way bill credits every month",
+                    "GSTR-2B matching & audit trail", "Custom invoice themes", "Tally export"]),
     "ENTERPRISE": dict(
-        name="Enterprise", audience="Wholesalers, manufacturers, CAs", monthly=Decimal("999"), yearly=Decimal("9999"),
-        invoices_per_month=None, invoices_per_year=None, businesses=10, users=None, godowns=None,
-        einvoice="API", gst_json=True, gstr2b=True, api_quota=5000, audit_view=True, custom_themes=True,
+        name="Business", audience="Wholesalers, manufacturers, multi-branch", monthly=Decimal("899"), yearly=Decimal("7999"),
+        invoices_per_month=None, invoices_per_year=None, businesses=5, users=None, godowns=None,
+        einvoice="API", gst_json=True, gstr2b=True, api_quota=300, audit_view=True, custom_themes=True,
         watermark=False, barcode=True, custom_roles=True, tally=True, backup_mb=20480,
-        highlights=["Unlimited invoices & users", "10 businesses (+ add-on packs)", "High-volume e-invoice API",
-                    "Custom roles & permissions", "Barcode labels, custom thermal", "Batch & serial reconciliation"]),
+        highlights=["Everything in Growth", "5 businesses, unlimited users", "300 e-invoice / e-way bill credits every month",
+                    "Custom roles & staff sign-in control", "Unlimited godowns, batches & serials", "Priority support"]),
 }
 ADDON = dict(code=ADDON_CODE, name="5 extra businesses", businesses=5, yearly=Decimal("2999"))
 
@@ -156,15 +157,18 @@ def require_einvoice(db: Session, business_id: str, level: str) -> None:
         raise UpgradeRequired(f"{what} is available from the {PLANS[need]['name']} plan", need)
 
 
-def check_api_quota(db: Session, business_id: str) -> None:
-    acc = account_of(db, business_id)
-    cap = business_plan(db, business_id)["api_quota"]
-    start = dt.datetime.now(dt.timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    ids = _account_business_ids(db, acc)
-    used = (db.scalar(select(func.count(Voucher.id)).where(Voucher.business_id.in_(ids), Voucher.ack_date >= start)) or 0) \
-        + (db.scalar(select(func.count(Voucher.id)).where(Voucher.business_id.in_(ids), Voucher.ewb_date >= start)) or 0)
-    if used >= cap:
-        raise UpgradeRequired(f"Monthly e-invoice / e-way bill API quota of {cap} is used up", "ENTERPRISE")
+def credits_ensure(db: Session, business_id: str, action: str, units: int = 1) -> None:
+    """Enough API credits (monthly allowance + prepaid packs) for a paid action — checked before calling the provider."""
+    from . import api_credits
+
+    api_credits.ensure(db, account_of(db, business_id), business_plan(db, business_id)["api_quota"], action, units)
+
+
+def credits_charge(db: Session, business_id: str, action: str, ref: str | None, user: str | None, units: int = 1) -> None:
+    from . import api_credits
+
+    api_credits.charge(db, account_of(db, business_id), business_plan(db, business_id)["api_quota"], action,
+                       business_id, ref, user, units)
 
 
 def _account_business_ids(db: Session, account_id: str | None) -> list[str]:
@@ -253,6 +257,12 @@ def check_backup_quota(db: Session, business_id: str, extra_bytes: int) -> None:
                               _lowest(lambda p: p["backup_mb"] > plan["backup_mb"]))
 
 
+def _credits_used(db: Session, account_id: str) -> int:
+    from . import api_credits
+
+    return api_credits.status(db, account_id, 0)["used_this_month"]
+
+
 def usage(db: Session, business_id: str) -> dict:
     acc = account_of(db, business_id)
     ids = _account_business_ids(db, acc) or [business_id]
@@ -264,17 +274,30 @@ def usage(db: Session, business_id: str) -> dict:
         businesses=len(ids), users=len(account_user_ids(db, acc)),
         godowns=db.scalar(select(func.count(Godown.id)).where(Godown.business_id == business_id,
                                                               Godown.is_active.is_(True))) or 0,
-        api_calls_this_month=(db.scalar(select(func.count(Voucher.id)).where(Voucher.business_id.in_(ids),
-                                                                              Voucher.ack_date >= month)) or 0)
-        + (db.scalar(select(func.count(Voucher.id)).where(Voucher.business_id.in_(ids), Voucher.ewb_date >= month)) or 0),
+        api_calls_this_month=_credits_used(db, acc),
         backup_mb=round(backup_bytes(db, acc) / 1024 / 1024, 1),
     )
 
 
 # ---------------------------------------------------------------- payments
+def credit_pack(plan: str) -> int | None:
+    """Order code CREDITS_<n> = a pack of n API credits."""
+    if plan.startswith("CREDITS_") and plan[8:].isdigit():
+        return int(plan[8:])
+    return None
+
+
 def price(plan: str, cycle: str) -> Decimal:
     if plan == ADDON["code"]:
         return with_gst(ADDON["yearly"])
+    n = credit_pack(plan)
+    if n is not None:
+        from . import api_credits
+
+        packs = api_credits.packs()
+        if n not in packs:
+            raise HTTPException(400, "Unknown credit pack")
+        return with_gst(Decimal(str(packs[n])))
     if plan not in PLANS or plan == "FREE":
         raise HTTPException(400, "Choose a paid plan")
     if cycle not in ("MONTHLY", "YEARLY"):
@@ -289,7 +312,9 @@ def payments_live(db: Session) -> bool:
 
 def create_order(db: Session, account_id: str, plan: str, cycle: str) -> SubscriptionPayment:
     if plan == ADDON["code"] and current(db, account_id).plan != "ENTERPRISE":
-        raise HTTPException(400, "Business add-on packs are for the Enterprise plan")
+        raise HTTPException(400, "Business add-on packs are for the Business plan")
+    if credit_pack(plan) is not None and PLANS[current(db, account_id).plan].get("einvoice") != "API":
+        raise HTTPException(400, "API credits are for plans with direct e-invoice / e-way bill (Starter and above)")
     amount = price(plan, cycle)
     c = rz.creds(db)
     if c:
@@ -370,6 +395,10 @@ def activate(db: Session, pay: SubscriptionPayment, payment_id: str) -> Subscrip
     pay.status, pay.payment_id = "PAID", payment_id
     if pay.plan == ADDON["code"]:
         sub.extra_businesses = (sub.extra_businesses or 0) + ADDON["businesses"]
+    elif credit_pack(pay.plan) is not None:
+        from . import api_credits
+
+        api_credits.add(db, pay.account_id, credit_pack(pay.plan), "PACK", f"Bought {credit_pack(pay.plan)} credits")
     else:
         extend(sub, pay.plan, 365 if pay.cycle == "YEARLY" else 30)
     db.flush()

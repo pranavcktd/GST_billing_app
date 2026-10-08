@@ -965,6 +965,23 @@ class PayrollLine(Base):
     note: Mapped[str | None] = mapped_column(String(200))
 
 
+class ApiCredit(Base):
+    """API credit ledger of a subscriber account: packs bought (+), paid actions used (see services/api_credits.py)."""
+
+    __tablename__ = "api_credits"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    account_id: Mapped[str] = mapped_column(String(32), index=True)  # owner user id (the subscription)
+    business_id: Mapped[str | None] = mapped_column(String(32))
+    kind: Mapped[str] = mapped_column(String(6))  # PACK / ADMIN / USE
+    action: Mapped[str | None] = mapped_column(String(15))  # EINVOICE / EWAYBILL / CANCEL / FILING_SYNC
+    units: Mapped[int] = mapped_column(Integer, default=0)  # credits an action used
+    delta: Mapped[int] = mapped_column(Integer, default=0)  # + added / - used
+    from_pack: Mapped[int] = mapped_column(Integer, default=0)  # part of `units` taken from prepaid packs
+    ref: Mapped[str | None] = mapped_column(String(64))
+    note: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
 class ImageFile(Base):
     """A logo, signature or item photo kept in our database (when image storage is 'database')."""
 

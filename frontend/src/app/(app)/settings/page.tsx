@@ -93,7 +93,7 @@ function EInvoiceSettings({ business, onSave }: { business: Business; onSave: (p
             ? <>Direct generation from <BrandName /> is <b className="text-emerald-700">on</b>{setup.test_mode ? <> — <b className="text-amber-700">test mode</b>: numbers start with TEST and nothing is filed yet</> : ""}.</>
             : <>Direct generation is not switched on yet. You can still download the JSON, upload it on the portal and record the IRN / e-way bill number on the bill.</>}
         </p>
-        <p className="text-xs text-gray-500">Your plan: {plan === "API" ? "JSON + direct generation" : plan === "JSON" ? "JSON download (direct generation from the Professional plan)" : "not included — upgrade to Starter"}</p>
+        <p className="text-xs text-gray-500">Your plan: {plan === "API" ? "JSON + direct generation" : plan === "JSON" ? "JSON download (direct generation on paid plans)" : "not included — upgrade to Starter"}</p>
         <label className="flex items-start gap-2.5 pt-2 text-sm">
           <input type="checkbox" className="mt-0.5" checked={f.einvoice_applicable} onChange={(e) => setF({ ...f, einvoice_applicable: e.target.checked })} />
           <span><b>e-Invoicing applies to us</b><span className="block text-xs text-gray-500">Aggregate turnover above the notified limit (₹5 crore today). B2B invoices without an IRN are then flagged so they are not missed.</span></span>

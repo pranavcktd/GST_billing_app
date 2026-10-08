@@ -117,7 +117,7 @@ export async function api<T = unknown>(
       if (pin) return api<T>(path, { ...opts, approvalPin: pin });
     }
     if (res.status === 403 && structured?.code && ACCESS_CODES.includes(structured.code)) uiHooks.accessBlocked?.(structured.code, structured.message);
-    if (res.status === 402 && structured?.code === "UPGRADE") uiHooks.showUpgrade?.(structured.message, structured.plan);
+    if (res.status === 402 && (structured?.code === "UPGRADE" || structured?.code === "CREDITS")) uiHooks.showUpgrade?.(structured.message, structured.plan);
     throw new ApiError(res.status, errorMessage(body, res.status), structured?.code, structured?.plan);
   }
   return body as T;
