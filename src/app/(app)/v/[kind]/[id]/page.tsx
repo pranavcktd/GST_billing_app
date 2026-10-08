@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRightLeft, Ban, MessageCircle, Pencil, Printer, Receipt, Undo2, Wallet } from "lucide-react";
+import { ArrowRightLeft, Ban, Pencil, Printer, Receipt, Undo2, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
@@ -8,6 +8,7 @@ import { EInvoicePanel } from "@/components/EInvoicePanel";
 import { PdfButton } from "@/components/PdfButton";
 import { MakeRecurringButton } from "@/components/RecurringForm";
 import { RemindButton } from "@/components/RemindButton";
+import { WhatsAppSend } from "@/components/WhatsAppSend";
 import { CopyLinkButton, EmailButton, getShareLink } from "@/components/ShareDialog";
 import { InvoiceDocument } from "@/components/InvoiceDocument";
 import { Button, ErrorBox, LinkButton, Loading, PageHeader, StatusBadge } from "@/components/ui";
@@ -70,7 +71,7 @@ export default function VoucherViewPage() {
             <PdfButton id={v.id} />
             <LinkButton href={`/print/${v.id}`} variant="secondary"><Printer size={16} /> Print</LinkButton>
             {v.type === "SALE" && <LinkButton href={`/print/${v.id}?format=THERMAL_80`} variant="secondary"><Receipt size={16} /> Thermal</LinkButton>}
-            <Button variant="secondary" onClick={share}><MessageCircle size={16} /> WhatsApp</Button>
+            {v.cancelled ? null : <WhatsAppSend title={`Send ${v.number} on WhatsApp`} phone={v.party_phone} sendPath={`/vouchers/${v.id}/whatsapp`} openOwn={share} />}
             {!v.cancelled && <EmailButton v={v} />}
             {!v.cancelled && v.type === "SALE" && v.balance > 0 && v.party_id && <RemindButton partyId={v.party_id} voucherId={v.id} />}
             {!v.cancelled && v.type === "SALE" && v.party_id && can("sales", "create") && <MakeRecurringButton voucherId={v.id} date={v.date} partyName={v.party_name} />}
