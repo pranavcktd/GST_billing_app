@@ -8,8 +8,17 @@ import { ConfigProvider } from "@/lib/config";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
+    if (!("serviceWorker" in navigator)) return;
+    if (process.env.NODE_ENV === "production") {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
+    } else {
+      // development: a worker left over from a production run would keep serving old pages and scripts
+      navigator.serviceWorker.getRegistrations().then(async (regs) => {
+        if (!regs.length) return;
+        await Promise.all(regs.map((r) => r.unregister()));
+        if ("caches" in window) await Promise.all((await caches.keys()).map((k) => caches.delete(k)));
+        location.reload();
+      }).catch(() => {});
     }
   }, []);
   return (
