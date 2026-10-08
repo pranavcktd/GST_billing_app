@@ -33,30 +33,30 @@ PLANS: dict[str, dict] = {
     "FREE": dict(
         name="Free", audience="Just starting out", monthly=Decimal("0"), yearly=Decimal("0"),
         invoices_per_month=50, invoices_per_year=600, businesses=1, users=1, godowns=1,
-        einvoice=None, gst_json=False, gstr2b=False, api_quota=0, audit_view=False, custom_themes=False,
+        einvoice=None, gst_json=False, gstr2b=False, whatsapp_quota=0, api_quota=0, audit_view=False, custom_themes=False,
         watermark=True, barcode=False, custom_roles=False, tally=False, backup_mb=100,
         highlights=["50 invoices a month", "1 business, owner only", "GST invoices, stock & payments",
                     "Compliance calendar & reminders", "App watermark on bills"]),
     "STARTER": dict(
         name="Starter", audience="Shops & service providers", monthly=Decimal("199"), yearly=Decimal("1799"),
         invoices_per_month=None, invoices_per_year=None, businesses=1, users=2, godowns=1,
-        einvoice="API", gst_json=True, gstr2b=False, api_quota=0, audit_view=False, custom_themes=False,
+        einvoice="API", gst_json=True, gstr2b=False, whatsapp_quota=100, api_quota=0, audit_view=False, custom_themes=False,
         watermark=False, barcode=True, custom_roles=False, tally=False, backup_mb=1024,
         highlights=["Unlimited invoices", "2 users", "GSTR-1 / 3B JSON, e-invoice & e-way bill",
-                    "Direct IRN / e-way bill: pay as you go", "POS, barcode, payroll, document vault", "No watermark"]),
+                    "Direct IRN / e-way bill: pay as you go", "100 WhatsApp invoices / month", "POS, barcode, payroll, document vault", "No watermark"]),
     "PROFESSIONAL": dict(
         name="Growth", audience="Growing businesses & traders", monthly=Decimal("449"), yearly=Decimal("3999"),
         invoices_per_month=None, invoices_per_year=None, businesses=2, users=5, godowns=3,
-        einvoice="API", gst_json=True, gstr2b=True, api_quota=50, audit_view=True, custom_themes=True,
+        einvoice="API", gst_json=True, gstr2b=True, whatsapp_quota=500, api_quota=50, audit_view=True, custom_themes=True,
         watermark=False, barcode=True, custom_roles=False, tally=True, backup_mb=5120,
-        highlights=["Everything in Starter", "2 businesses, 5 users", "50 e-invoice / e-way bill credits every month",
+        highlights=["Everything in Starter", "2 businesses, 5 users", "50 e-invoice / e-way bill credits every month", "500 WhatsApp invoices / month",
                     "GSTR-2B matching & audit trail", "Custom invoice themes", "Tally export"]),
     "ENTERPRISE": dict(
         name="Business", audience="Wholesalers, manufacturers, multi-branch", monthly=Decimal("899"), yearly=Decimal("7999"),
         invoices_per_month=None, invoices_per_year=None, businesses=5, users=None, godowns=None,
-        einvoice="API", gst_json=True, gstr2b=True, api_quota=300, audit_view=True, custom_themes=True,
+        einvoice="API", gst_json=True, gstr2b=True, whatsapp_quota=2000, api_quota=300, audit_view=True, custom_themes=True,
         watermark=False, barcode=True, custom_roles=True, tally=True, backup_mb=20480,
-        highlights=["Everything in Growth", "5 businesses, unlimited users", "300 e-invoice / e-way bill credits every month",
+        highlights=["Everything in Growth", "5 businesses, unlimited users", "300 e-invoice / e-way bill credits every month", "2,000 WhatsApp invoices / month",
                     "Custom roles & staff sign-in control", "Unlimited godowns, batches & serials", "Priority support"]),
 }
 ADDON = dict(code=ADDON_CODE, name="5 extra businesses", businesses=5, yearly=Decimal("2999"))

@@ -1,11 +1,12 @@
 "use client";
 
-import { LogOut, ShieldCheck } from "lucide-react";
+import { LogOut, MessageCircle, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { QR } from "@/components/QR";
 import { Button, Card, ErrorBox, Field, Input } from "@/components/ui";
 import { api, session } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useConfig } from "@/lib/config";
 
 /** Password, two-factor sign-in, sign out everywhere, and (for managers) the approval PIN. */
 export function SecuritySettings({ canApprove }: { canApprove: boolean }) {
@@ -17,6 +18,10 @@ export function SecuritySettings({ canApprove }: { canApprove: boolean }) {
   const [disablePw, setDisablePw] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const wa = useConfig().whatsapp;
+  const [mob, setMob] = useState("");
+  const [mobCode, setMobCode] = useState("");
+  const [mobSent, setMobSent] = useState(false);
 
   const run = async (fn: () => Promise<unknown>, ok: string) => {
     setErr(null); setMsg(null);
@@ -60,6 +65,28 @@ export function SecuritySettings({ canApprove }: { canApprove: boolean }) {
           </>
         )}
       </Card>
+
+      {wa?.send && (
+        <Card className="space-y-3 p-5">
+          <h2 className="flex items-center gap-2 font-semibold text-gray-900"><MessageCircle size={17} className="text-emerald-600" /> Sign in with WhatsApp</h2>
+          {me?.user.mobile ? (
+            <>
+              <p className="text-sm text-gray-600">Linked number: <b>+91 {me.user.mobile.slice(2)}</b>. You can sign in with a code sent to it on WhatsApp.</p>
+              <Button variant="secondary" onClick={() => run(() => api("/auth/mobile", { method: "DELETE" }), "WhatsApp sign-in removed")}>Remove number</Button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-gray-600">Link your mobile number to sign in with a one-time code on WhatsApp — no password to remember.</p>
+              <Field label="Mobile number"><Input type="tel" inputMode="numeric" maxLength={10} value={mob} onChange={(e) => { setMob(e.target.value.replace(/\D/g, "")); setMobSent(false); }} /></Field>
+              {mobSent && <Field label="Code from WhatsApp"><Input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mobCode} onChange={(e) => setMobCode(e.target.value.replace(/\D/g, ""))} /></Field>}
+              <div className="flex justify-end gap-2">
+                <Button variant={mobSent ? "secondary" : "primary"} disabled={mob.length !== 10} onClick={() => run(async () => { await api("/auth/mobile", { body: { phone: mob } }); setMobSent(true); }, "Code sent on WhatsApp")}>{mobSent ? "Send again" : "Send code"}</Button>
+                {mobSent && <Button disabled={mobCode.length !== 6} onClick={() => run(async () => { await api("/auth/mobile", { body: { phone: mob, code: mobCode } }); setMobSent(false); setMobCode(""); }, "Number linked — you can now sign in with WhatsApp")}>Verify</Button>}
+              </div>
+            </>
+          )}
+        </Card>
+      )}
 
       <Card className="space-y-3 p-5">
         <h2 className="font-semibold text-gray-900">Change password</h2>

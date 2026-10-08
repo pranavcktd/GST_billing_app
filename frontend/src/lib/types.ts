@@ -14,7 +14,7 @@ export type VoucherType =
 export type PaymentType = "IN" | "OUT";
 export type PaymentMode = "CASH" | "BANK" | "UPI" | "CHEQUE" | "CARD" | "OTHER";
 
-export interface User { id: string; name: string; email: string; phone: string | null }
+export interface User { id: string; name: string; email: string; phone: string | null; mobile?: string | null }
 export type EntityType = "PROPRIETORSHIP" | "PARTNERSHIP" | "LLP" | "PRIVATE_LIMITED" | "OPC" | "PUBLIC_LIMITED" | "HUF" | "TRUST_SOCIETY" | "OTHER";
 /** What the GST portal returned for the business's GSTIN (last lookup on the platform). */
 export interface GstPortalDetails {

@@ -9,7 +9,9 @@ from sqlalchemy.exc import IntegrityError
 
 from .config import get_settings
 from . import audit
+from .deps import DB
 from .services import config_store
+from .services import whatsapp as wa_service
 from .routers import (
     auth,
     billing,
@@ -43,6 +45,7 @@ from .routers import (
     reports,
     uploads,
     utilities,
+    whatsapp,
     vouchers,
 )
 
@@ -114,18 +117,19 @@ async def integrity_error(_: Request, exc: IntegrityError):
 
 
 for r in (auth, payroll, businesses, compliance, compliance_calendar, documents, gstin, integrations, manufacturing, practice, price_lists, recurring, reminders, search, staff, parties, items, vouchers, payments, reports, uploads, cashbank, loans, expenses,
-          utilities, godowns, einvoice, billing, exports, platform, admin, smtp, sharing):
+          utilities, godowns, einvoice, billing, exports, platform, admin, smtp, sharing, whatsapp):
     app.include_router(r.router, prefix="/api")
 
 
 @app.get("/api/meta")
-def meta():
+def meta(db: DB):
     cfg = config_store.public()
     return {
         "states": [{"code": c, "name": n} for c, n in cfg["states"].items()],
         "gst_rates": cfg["gst_rates"],
         "units": [{"code": c, "name": n} for c, n in cfg["uqc"].items()],
         "config": cfg,
+        "whatsapp": wa_service.flags(db),
     }
 
 

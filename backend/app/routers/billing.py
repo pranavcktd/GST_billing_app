@@ -25,7 +25,7 @@ def _plan_out(code: str) -> dict:
                 monthly=float(p["monthly"]), yearly=float(p["yearly"]),
                 monthly_with_gst=float(P.with_gst(p["monthly"])), yearly_with_gst=float(P.with_gst(p["yearly"])),
                 **{k: p[k] for k in ("invoices_per_month", "invoices_per_year", "businesses", "users", "godowns",
-                                     "einvoice", "gst_json", "gstr2b", "api_quota", "audit_view", "custom_themes",
+                                     "einvoice", "gst_json", "gstr2b", "api_quota", "whatsapp_quota", "audit_view", "custom_themes",
                                      "watermark", "barcode", "custom_roles", "tally", "backup_mb")})
 
 

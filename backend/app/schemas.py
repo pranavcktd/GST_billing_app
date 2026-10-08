@@ -94,6 +94,7 @@ class RegisterIn(BaseModel):
     email: EmailStr
     password: Annotated[str, StringConstraints(min_length=8, max_length=128)]
     phone: Opt(20) = None
+    phone_code: Opt(6) = None  # WhatsApp code that verifies `phone`
 
 
 class LoginIn(BaseModel):
@@ -106,6 +107,7 @@ class UserOut(ORM):
     name: str
     email: str
     phone: str | None
+    mobile: str | None = None  # WhatsApp-verified (sign in with WhatsApp)
 
 
 class MyBusinessOut(BaseModel):
