@@ -27,6 +27,7 @@ IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 # ================================================================ super admin
 class SettingsIn(BaseModel):
     enabled: bool | None = None
+    sandbox: bool | None = None
     provider: str | None = Field(None, pattern="^(SPRINGEDGE|META|OTHER)$")
     base_url: str | None = Field(None, max_length=200, pattern=r"^(https://\S+)?$")
     api_version: str | None = Field(None, max_length=20)
@@ -50,13 +51,13 @@ def _admin_view(db, request: Request) -> dict:
     s = W.public_settings(db)
     month = dt.datetime.now(dt.UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     counts = dict(db.execute(select(WhatsAppMessage.kind, func.count(WhatsAppMessage.id))
-                             .where(WhatsAppMessage.created_at >= month, WhatsAppMessage.status != "FAILED")
+                             .where(WhatsAppMessage.created_at >= month, WhatsAppMessage.status.not_in(["FAILED", "SANDBOX"]))
                              .group_by(WhatsAppMessage.kind)).all())
     recent = db.scalars(select(WhatsAppMessage).order_by(WhatsAppMessage.created_at.desc()).limit(30)).all()
     hook = f"{frontend_url(request)}/api/whatsapp/webhook?key={s['webhook_key']}" if s.get("webhook_key") else None
     return {"settings": s, "webhook_url": hook, "this_month": counts,
             "recent": [dict(at=m.created_at, kind=m.kind, to=W.masked(m.to), template=m.template, status=m.status, error=m.error,
-                            ref=m.ref) for m in recent]}
+                            ref=m.ref, preview=m.preview) for m in recent]}
 
 
 @router.get("/admin/whatsapp")
@@ -88,7 +89,7 @@ def test_message(data: TestIn, db: DB, admin: SuperAdmin):
     except W.ProviderError as e:
         raise HTTPException(502, e.message) from e
     db.commit()
-    return {"sent": True, "to": W.masked(to), "message_id": m.wamid}
+    return {"sent": True, "to": W.masked(to), "message_id": m.wamid, "sandbox": m.status == "SANDBOX"}
 
 
 # ================================================================ provider webhook (delivery status)
@@ -122,18 +123,20 @@ def usage(db, business_id: str) -> dict:
     quota = int(P.business_plan(db, business_id).get("whatsapp_quota") or 0)
     used = db.scalar(select(func.count(WhatsAppMessage.id)).where(
         WhatsAppMessage.account_id == account, WhatsAppMessage.kind.in_(["INVOICE", "REMINDER"]),
-        WhatsAppMessage.status != "FAILED", WhatsAppMessage.created_at >= _month_start())) or 0
+        WhatsAppMessage.status.not_in(["FAILED", "SANDBOX"]), WhatsAppMessage.created_at >= _month_start())) or 0
     return {"account": account, "quota": quota, "used": int(used), "left": max(quota - int(used), 0)}
 
 
 def _before_send(ctx: BCtx) -> bool:
     """Plan and credits check; True when this message is beyond the monthly messages (charged in credits)."""
     s = W.settings(ctx.db)
-    if not W.ready(s):
+    if not W.active(s):
         raise HTTPException(503, "Sending from WhatsApp is not set up yet — use 'Open in my WhatsApp' instead.")
     plan = P.business_plan(ctx.db, ctx.bid)
     if not plan.get("whatsapp_quota") and plan.get("einvoice") != "API":
         raise P.UpgradeRequired("Sending invoices from WhatsApp comes with the Starter plan", "STARTER")
+    if W.sandbox(s):
+        return False  # simulated: free
     u = usage(ctx.db, ctx.bid)
     if u["left"] > 0:
         return False
@@ -144,7 +147,8 @@ def _before_send(ctx: BCtx) -> bool:
 @router.get("/whatsapp/status")
 def status(ctx: BCtx):
     u = usage(ctx.db, ctx.bid)
-    return {"send": W.ready(W.settings(ctx.db)), "quota": u["quota"], "used": u["used"], "left": u["left"]}
+    s = W.settings(ctx.db)
+    return {"send": W.active(s), "sandbox": W.sandbox(s), "quota": u["quota"], "used": u["used"], "left": u["left"]}
 
 
 class SendIn(BaseModel):
@@ -179,7 +183,8 @@ def send_voucher(vid: str, data: SendIn, ctx: BCtx, request: Request):
     log(ctx.db, ctx.user, "ACTION", "whatsapp", f"Sent {v.number} on WhatsApp to {W.masked(to)}", entity_id=v.id,
         business_id=ctx.bid, request=request)
     ctx.db.commit()
-    return {"sent": True, "to": W.masked(to), "message_id": m.wamid, "charged_credits": charged}
+    return {"sent": True, "to": W.masked(to), "message_id": m.wamid, "charged_credits": charged, "sandbox": m.status == "SANDBOX",
+            "preview": m.preview}
 
 
 @router.post("/reminders/whatsapp-send/{party_id}")
@@ -203,7 +208,7 @@ def send_reminder(party_id: str, ctx: BCtx, request: Request, data: SendIn | Non
     link = f"{frontend_url(request)}/i/{R._ensure_token(rows[0]['v'])}"
     ref = rows[0]["number"] if len(rows) == 1 else f"{len(rows)} invoices"
     try:
-        W.send_reminder(ctx.db, to, [party.name, f"₹{float(total):,.2f}", ctx.business.name, link], business_id=ctx.bid,
+        m = W.send_reminder(ctx.db, to, [party.name, f"₹{float(total):,.2f}", ctx.business.name, link], business_id=ctx.bid,
                         account_id=P.account_of(ctx.db, ctx.bid), ref=ref, by=ctx.user.name)
     except W.ProviderError as e:
         raise HTTPException(502, e.message) from e
@@ -214,4 +219,4 @@ def send_reminder(party_id: str, ctx: BCtx, request: Request, data: SendIn | Non
                                sent_to=W.masked(to), status="SENT", automatic=False, amount=R._balance(v), by_name=ctx.user.name))
     log(ctx.db, ctx.user, "ACTION", "reminder", f"WhatsApp reminder to {party.name} ({W.masked(to)})", business_id=ctx.bid, request=request)
     ctx.db.commit()
-    return {"sent": True, "to": W.masked(to), "charged_credits": charged}
+    return {"sent": True, "to": W.masked(to), "charged_credits": charged, "sandbox": m.status == "SANDBOX", "preview": m.preview}

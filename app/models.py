@@ -995,6 +995,7 @@ class WhatsAppMessage(Base):
     wamid: Mapped[str | None] = mapped_column(String(128), index=True)
     status: Mapped[str] = mapped_column(String(10), default="SENT")  # SENT / DELIVERED / READ / FAILED
     error: Mapped[str | None] = mapped_column(String(300))
+    preview: Mapped[str | None] = mapped_column(String(1000))  # sandbox: what would have been sent
     ref: Mapped[str | None] = mapped_column(String(64))
     by: Mapped[str | None] = mapped_column(String(120))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
