@@ -15,7 +15,7 @@ from ..schemas import TransportIn, VoucherDetailOut
 from ..services import einvoice as ei
 from ..services import ewaybill as ewb
 from ..permissions import voucher_module
-from ..services.plans import check_api_quota, require_einvoice
+from ..services.plans import credits_charge, credits_ensure, require_einvoice
 from ..services.vouchers import to_detail
 
 router = APIRouter(tags=["e-invoice"])
@@ -83,12 +83,15 @@ def generate_irn(vid: str, ctx: BCtx):
     require_einvoice(ctx.db, ctx.bid, "API")
     _need_einvoicing(ctx)
     v = _get(ctx, vid, "edit")
-    check_api_quota(ctx.db, ctx.bid)
     if v.einvoice_status == "GENERATED":
         raise HTTPException(400, "IRN already generated")
     payload = ei.einvoice_payload(ctx.db, ctx.business, v)
     p = ei.provider(ctx.db, ctx.business)
+    if not p.sandbox:
+        credits_ensure(ctx.db, ctx.bid, "EINVOICE")
     res = p.generate_irn(ctx.business, v, payload)
+    if not p.sandbox:
+        credits_charge(ctx.db, ctx.bid, "EINVOICE", v.number, ctx.user.name)
     v.irn, v.ack_no, v.ack_date, v.signed_qr = res["irn"], res["ack_no"], res["ack_date"], res["signed_qr"]
     v.einvoice_status, v.einvoice_sandbox = "GENERATED", p.sandbox
     if res.get("ewb_no") and not v.ewb_no:  # the IRP can issue the e-way bill in the same call
@@ -110,7 +113,12 @@ def cancel_irn(vid: str, data: CancelIrn, ctx: BCtx):
     ack = v.ack_date if v.ack_date.tzinfo else v.ack_date.replace(tzinfo=dt.timezone.utc)
     if dt.datetime.now(dt.timezone.utc) - ack > dt.timedelta(hours=24):
         raise HTTPException(400, "An IRN can be cancelled only within 24 hours — issue a credit note instead")
-    ei.provider(ctx.db, ctx.business).cancel_irn(ctx.business, v, data.reason, data.remark)
+    p = ei.provider(ctx.db, ctx.business)
+    if not p.sandbox:
+        credits_ensure(ctx.db, ctx.bid, "CANCEL")
+    p.cancel_irn(ctx.business, v, data.reason, data.remark)
+    if not p.sandbox:
+        credits_charge(ctx.db, ctx.bid, "CANCEL", v.number, ctx.user.name)
     v.einvoice_status = "CANCELLED"
     ctx.db.commit()
     return to_detail(ctx, v)
@@ -161,11 +169,15 @@ def generate_ewb(vid: str, ctx: BCtx):
     require_einvoice(ctx.db, ctx.bid, "API")
     v = _get(ctx, vid, "edit")
     _need_goods(v)
-    check_api_quota(ctx.db, ctx.bid)
     if v.ewb_no:
         raise HTTPException(400, "E-way bill already generated")
     p = ei.provider(ctx.db, ctx.business)
-    res = p.generate_ewb(ctx.business, v, ei.ewaybill_payload(ctx.db, ctx.business, v))
+    payload = ei.ewaybill_payload(ctx.db, ctx.business, v)
+    if not p.sandbox:
+        credits_ensure(ctx.db, ctx.bid, "EWAYBILL")
+    res = p.generate_ewb(ctx.business, v, payload)
+    if not p.sandbox:
+        credits_charge(ctx.db, ctx.bid, "EWAYBILL", v.number, ctx.user.name)
     v.ewb_no, v.ewb_date, v.ewb_valid_till = res["ewb_no"], res["ewb_date"], res["valid_till"]
     v.einvoice_sandbox = v.einvoice_sandbox or p.sandbox
     ctx.db.commit()
@@ -186,7 +198,12 @@ def cancel_ewb(vid: str, data: CancelEwb, ctx: BCtx):
     when = v.ewb_date if (v.ewb_date and v.ewb_date.tzinfo) else (v.ewb_date.replace(tzinfo=dt.timezone.utc) if v.ewb_date else None)
     if when and dt.datetime.now(dt.timezone.utc) - when > dt.timedelta(hours=24):
         raise HTTPException(400, "An e-way bill can be cancelled only within 24 hours of generating it")
-    ei.provider(ctx.db, ctx.business).cancel_ewb(ctx.business, v, data.reason, data.remark)
+    p = ei.provider(ctx.db, ctx.business)
+    if not p.sandbox:
+        credits_ensure(ctx.db, ctx.bid, "CANCEL")
+    p.cancel_ewb(ctx.business, v, data.reason, data.remark)
+    if not p.sandbox:
+        credits_charge(ctx.db, ctx.bid, "CANCEL", v.number, ctx.user.name)
     v.ewb_no, v.ewb_date, v.ewb_valid_till = None, None, None
     ctx.db.commit()
     return to_detail(ctx, v)

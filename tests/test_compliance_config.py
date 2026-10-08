@@ -72,7 +72,7 @@ def test_plan_overrides(client, monkeypatch):
     assert plans["STARTER"]["monthly"] == 249
     assert client.put("/api/admin/plans-config/STARTER", headers=root, json={"hack": 1}).status_code == 422
     # back to defaults
-    back = client.put("/api/admin/plans-config/STARTER", headers=root, json={"monthly": 199, "invoices_per_month": 250,
+    back = client.put("/api/admin/plans-config/STARTER", headers=root, json={"monthly": 199, "invoices_per_month": None,
                       "highlights": r.json()["defaults"]["STARTER"]["highlights"]}).json()
     assert "STARTER" not in back["overrides"]
 

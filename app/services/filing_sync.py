@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from ..models import Business, ComplianceFiling, GstReturnStatus
 from . import compliance_calendar as CC
 from . import gstin_verify as G
+from . import plans as P
 
 SYNCABLE = {"GSTR1_M", "GSTR1_Q", "GSTR3B_M", "GSTR3B_Q", "CMP08", "GSTR4", "GSTR9"}
 
@@ -145,10 +146,18 @@ def sync(db: Session, biz: Business, rules: list[dict], user_name: str, today: d
             skipped.append(label)
             continue
         try:
+            P.credits_ensure(db, biz.id, "FILING_SYNC")
+        except HTTPException as e:
+            if not fetched and not errors:
+                raise
+            errors.append(f"{label}: not enough API credits")
+            break
+        try:
             body, _ = G._call(s, f"gstin/{biz.gstin}/returns?fy={label}")
         except G.ProviderError as e:
             errors.append(f"{label}: {G.FRIENDLY.get(e.status, 'the GST data service did not answer')}")
             continue
+        P.credits_charge(db, biz.id, "FILING_SYNC", label, user_name)
         fetched.append(label)
         log[label] = now.isoformat()
         all_returns = parse_all(body)

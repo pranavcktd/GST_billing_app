@@ -117,7 +117,7 @@ def test_superadmin_and_reseller(client, monkeypatch):
     acc = post(client, partner, "/api/reseller/accounts", {"name": "New Trader", "email": "trader@x.in"})
     assert len(acc["temporary_password"]) >= 8
     sale = post(client, partner, "/api/reseller/licenses", {"account_id": acc["account_id"], "plan": "PROFESSIONAL", "months": 12})
-    assert sale["amount"] == 5898.82 and sale["commission"] == 1249.75  # 4999 + 18% GST ; 25% of 4999
+    assert sale["amount"] == 4718.82 and sale["commission"] == 999.75  # 3999 + 18% GST ; 25% of 3999
     mine = client.get("/api/reseller/accounts", headers=partner).json()
     assert mine[0]["plan"] == "PROFESSIONAL" and "feature_flags" not in mine[0]
     # the reseller cannot license accounts outside their portfolio, nor see business data
