@@ -7,7 +7,7 @@ import { Button, ErrorBox, Field, Input } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useConfig } from "@/lib/config";
 
-interface WaStatus { send: boolean; quota: number; used: number; left: number }
+interface WaStatus { send: boolean; sandbox?: boolean; quota: number; used: number; left: number }
 
 /**
  * WhatsApp for a bill or a reminder: send it from the platform's WhatsApp number (Business API, PDF attached) when the
@@ -33,8 +33,9 @@ export function WhatsAppSend({ label = "WhatsApp", title, phone, sendPath, openO
   async function send() {
     setBusy(true); setErr(null);
     try {
-      const r = await api<{ to: string; charged_credits: boolean }>(sendPath, { body: { phone: to } });
-      setDone(`Sent to ${r.to}${r.charged_credits ? " (1 API credit used)" : ""}.`);
+      const r = await api<{ to: string; charged_credits: boolean; sandbox?: boolean; preview?: string }>(sendPath, { body: { phone: to } });
+      setDone(r.sandbox ? `Sandbox — nothing was sent to ${r.to}. Would send: ${r.preview ?? ""}`
+        : `Sent to ${r.to}${r.charged_credits ? " (1 API credit used)" : ""}.`);
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   }
 
@@ -48,7 +49,8 @@ export function WhatsAppSend({ label = "WhatsApp", title, phone, sendPath, openO
               <Input type="tel" inputMode="numeric" maxLength={10} placeholder="10-digit mobile" value={to} onChange={(e) => setTo(e.target.value.replace(/\D/g, ""))} />
             </Field>
             <p className="text-gray-600">The {what} goes from our WhatsApp business number with your business name{what === "bill" ? " and the PDF attached" : " and a link to the bill"}.</p>
-            {status && (
+            {status?.sandbox && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900"><b>Sandbox mode</b> — the message is only recorded (Admin → WhatsApp), not sent, and nothing is charged.</p>}
+            {status && !status.sandbox && (
               <p className="text-xs text-gray-500">
                 {status.left > 0 ? `${status.left} of ${status.quota} WhatsApp messages left this month.` : "This month's WhatsApp messages are used up — each message now uses 1 API credit."}
               </p>

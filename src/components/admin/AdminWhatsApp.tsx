@@ -8,7 +8,7 @@ import { useFetch } from "@/lib/useFetch";
 
 interface Preset { label: string; base_url: string; api_version: string; auth_header: string }
 interface Settings {
-  enabled: boolean; provider: string; base_url: string; api_version: string; auth_header: string; phone_number_id: string;
+  enabled: boolean; sandbox: boolean; sandbox_active: boolean; dev_server: boolean; provider: string; base_url: string; api_version: string; auth_header: string; phone_number_id: string;
   api_key_set: boolean; api_key_hint: string | null; ready: boolean; webhook_key: string | null;
   login_enabled: boolean; signup_verify: boolean;
   otp_template: string; otp_lang: string; otp_button: boolean;
@@ -17,7 +17,7 @@ interface Settings {
 }
 interface Data {
   settings: Settings; webhook_url: string | null; this_month: Record<string, number>;
-  recent: { at: string; kind: string; to: string; template: string | null; status: string; error: string | null; ref: string | null }[];
+  recent: { at: string; kind: string; to: string; template: string | null; status: string; error: string | null; ref: string | null; preview: string | null }[];
 }
 
 /** Super admin: WhatsApp Business API vendor (any Meta-compatible API), templates, sign-in options, delivery log. */
@@ -84,8 +84,14 @@ export function AdminWhatsApp() {
           <Field label="API key" hint={s.api_key_set ? `Saved (${s.api_key_hint ?? "hidden"}) — type a new one to replace it` : "Stored encrypted; never shown again"}>
             <Input type="password" autoComplete="off" value={edit.api_key ?? ""} onChange={(e) => setEdit({ ...edit, api_key: e.target.value })} />
           </Field>
-          <label className="flex items-center gap-2 pt-1 text-sm"><input type="checkbox" checked={s.enabled} onChange={(e) => set("enabled", e.target.checked)} /> {s.enabled ? "On" : "Off"}</label>
-          <p className={`text-xs ${data.settings.ready ? "text-emerald-700" : "text-amber-700"}`}>{data.settings.ready ? "Ready — messages can be sent." : "Not ready: switch on and fill in URL, phone number ID and API key."}</p>
+          <label className="flex items-center gap-2 pt-1 text-sm"><input type="checkbox" checked={s.enabled} onChange={(e) => set("enabled", e.target.checked)} /> Live sending {s.enabled ? "on" : "off"}</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.sandbox} onChange={(e) => set("sandbox", e.target.checked)} /> Sandbox while live is off (development server only)</label>
+          <p className={`text-xs ${data.settings.ready ? "text-emerald-700" : data.settings.sandbox_active ? "text-amber-700" : "text-gray-500"}`}>
+            {data.settings.ready ? "Live — real WhatsApp messages are sent through the vendor."
+              : data.settings.sandbox_active ? "Sandbox — every feature works, but messages are only recorded below (not sent, not charged) and sign-in codes are shown on screen."
+              : !data.settings.dev_server && s.sandbox ? "Off — the sandbox never runs on a production server. Fill in the vendor details and switch live on."
+              : "Off — fill in URL, phone number ID and API key, then switch live on."}
+          </p>
         </Card>
 
         <Card className="space-y-3 p-5">
@@ -103,7 +109,7 @@ export function AdminWhatsApp() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex items-end gap-2">
           <Field label="Send a test code to"><Input type="tel" placeholder="10-digit mobile" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
-          <Button variant="secondary" disabled={!data.settings.ready || phone.replace(/\D/g, "").length < 10} onClick={test}><Send size={15} /> Test</Button>
+          <Button variant="secondary" disabled={!(data.settings.ready || data.settings.sandbox_active) || phone.replace(/\D/g, "").length < 10} onClick={test}><Send size={15} /> Test</Button>
         </div>
         <Button onClick={() => save()}><Save size={16} /> Save WhatsApp settings</Button>
       </div>
@@ -132,7 +138,10 @@ export function AdminWhatsApp() {
                 <tr key={i}>
                   <td className="whitespace-nowrap text-xs">{new Date(r.at).toLocaleString("en-IN")}</td>
                   <td className="text-xs">{r.kind}</td><td className="text-xs">{r.to}</td><td className="text-xs">{r.template}</td><td className="text-xs">{r.ref}</td>
-                  <td className={`text-xs ${r.status === "FAILED" ? "text-red-700" : "text-emerald-700"}`}>{r.status}{r.error ? ` — ${r.error}` : ""}</td>
+                  <td className={`text-xs ${r.status === "FAILED" ? "text-red-700" : r.status === "SANDBOX" ? "text-amber-700" : "text-emerald-700"}`}>
+                    {r.status}{r.error ? ` — ${r.error}` : ""}
+                    {r.preview && <div className="mt-0.5 max-w-md text-[11px] break-words text-gray-500">{r.preview}</div>}
+                  </td>
                 </tr>
               ))}
             </tbody>

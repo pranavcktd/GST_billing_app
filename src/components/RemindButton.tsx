@@ -28,9 +28,10 @@ export function RemindButton({ partyId, voucherId }: { partyId: string; voucherI
   async function whatsappApi() {
     setBusy(true); setErr(null);
     try {
-      const r = await api<{ to: string; charged_credits: boolean }>(`/reminders/whatsapp-send/${partyId}?voucher_id=${voucherId}`,
+      const r = await api<{ to: string; charged_credits: boolean; sandbox?: boolean; preview?: string }>(`/reminders/whatsapp-send/${partyId}?voucher_id=${voucherId}`,
         { body: phone ? { phone } : {} });
-      setDone(`Reminder sent on WhatsApp to ${r.to}${r.charged_credits ? " (1 API credit used)" : ""}.`);
+      setDone(r.sandbox ? `Sandbox — nothing was sent to ${r.to}. Would send: ${r.preview ?? ""}`
+        : `Reminder sent on WhatsApp to ${r.to}${r.charged_credits ? " (1 API credit used)" : ""}.`);
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   }
   async function whatsapp() {

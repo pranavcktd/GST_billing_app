@@ -19,12 +19,13 @@ export default function RegisterPage() {
   const verify = !!useConfig().whatsapp?.signup_verify;
   const [code, setCode] = useState("");
   const [sent, setSent] = useState<string | null>(null);
+  const [sandboxCode, setSandboxCode] = useState<string | null>(null);
 
   async function sendCode() {
     setError(null);
     try {
-      const r = await api<{ to: string }>("/auth/otp/send", { body: { phone: form.phone, purpose: "SIGNUP" } });
-      setSent(r.to);
+      const r = await api<{ to: string; sandbox_code?: string }>("/auth/otp/send", { body: { phone: form.phone, purpose: "SIGNUP" } });
+      setSent(r.to); setSandboxCode(r.sandbox_code ?? null);
     } catch (err) { setError((err as Error).message); }
   }
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -64,6 +65,7 @@ export default function RegisterPage() {
                 <Button type="button" variant="secondary" disabled={form.phone.length !== 10} onClick={sendCode}>{sent ? "Resend" : "Send code"}</Button>
               </div>
             </Field>
+            {sent && sandboxCode && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900"><b>Sandbox</b> — no WhatsApp message was sent. Your code is <b className="font-mono text-sm tracking-widest">{sandboxCode}</b></p>}
             {sent && (
               <Field label="Code from WhatsApp" required>
                 <Input inputMode="numeric" autoComplete="one-time-code" maxLength={6} required value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
