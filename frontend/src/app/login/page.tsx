@@ -14,13 +14,16 @@ import type { Me } from "@/lib/types";
 export default function LoginPage() {
   const { login } = useAuth();
   const router = useRouter();
-  const waLogin = !!useConfig().whatsapp?.login;
+  const wa = useConfig().whatsapp;
+  const waLogin = !!wa?.login;
+  const sandboxMode = !!wa?.sandbox;
   const [mode, setMode] = useState<"email" | "whatsapp">("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const [sandboxCode, setSandboxCode] = useState<string | null>(null);
   const [wait, setWait] = useState(0);
   const [otp, setOtp] = useState("");
   const [needOtp, setNeedOtp] = useState(false);
@@ -43,8 +46,8 @@ export default function LoginPage() {
   async function sendCode() {
     setBusy(true); setError(null);
     try {
-      const r = await api<{ to: string; resend_in: number }>("/auth/otp/send", { body: { phone, purpose: "LOGIN" } });
-      setSentTo(r.to); setWait(r.resend_in); setCode("");
+      const r = await api<{ to: string; resend_in: number; sandbox_code?: string }>("/auth/otp/send", { body: { phone, purpose: "LOGIN" } });
+      setSentTo(r.to); setWait(r.resend_in); setCode(""); setSandboxCode(r.sandbox_code ?? null);
     } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
 
@@ -115,6 +118,7 @@ export default function LoginPage() {
             </Field>
             {sentTo && (
               <>
+                {sandboxCode && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900"><b>Sandbox</b> — no WhatsApp message was sent. Your code is <b className="font-mono text-sm tracking-widest">{sandboxCode}</b></p>}
                 <Field label="Code from WhatsApp" hint={`If ${sentTo} is linked to an account, the code is on its way. It works for 5 minutes.`}>
                   <Input autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code}
                     onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} className="text-center text-lg tracking-widest" />
@@ -127,6 +131,7 @@ export default function LoginPage() {
               </>
             )}
             <p className="text-xs text-gray-500">No code? Sign in with e-mail once and link your mobile in Settings → Security.</p>
+            {sandboxMode && !sentTo && <p className="text-xs text-amber-700">Sandbox mode: codes are shown here instead of being sent on WhatsApp.</p>}
           </>
         )}
         <Button type="submit" className="w-full"

@@ -22,6 +22,7 @@ export function SecuritySettings({ canApprove }: { canApprove: boolean }) {
   const [mob, setMob] = useState("");
   const [mobCode, setMobCode] = useState("");
   const [mobSent, setMobSent] = useState(false);
+  const [mobSandbox, setMobSandbox] = useState<string | null>(null);
 
   const run = async (fn: () => Promise<unknown>, ok: string) => {
     setErr(null); setMsg(null);
@@ -78,9 +79,10 @@ export function SecuritySettings({ canApprove }: { canApprove: boolean }) {
             <>
               <p className="text-sm text-gray-600">Link your mobile number to sign in with a one-time code on WhatsApp — no password to remember.</p>
               <Field label="Mobile number"><Input type="tel" inputMode="numeric" maxLength={10} value={mob} onChange={(e) => { setMob(e.target.value.replace(/\D/g, "")); setMobSent(false); }} /></Field>
+              {mobSent && mobSandbox && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900"><b>Sandbox</b> — no WhatsApp message was sent. Your code is <b className="font-mono text-sm tracking-widest">{mobSandbox}</b></p>}
               {mobSent && <Field label="Code from WhatsApp"><Input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={mobCode} onChange={(e) => setMobCode(e.target.value.replace(/\D/g, ""))} /></Field>}
               <div className="flex justify-end gap-2">
-                <Button variant={mobSent ? "secondary" : "primary"} disabled={mob.length !== 10} onClick={() => run(async () => { await api("/auth/mobile", { body: { phone: mob } }); setMobSent(true); }, "Code sent on WhatsApp")}>{mobSent ? "Send again" : "Send code"}</Button>
+                <Button variant={mobSent ? "secondary" : "primary"} disabled={mob.length !== 10} onClick={() => run(async () => { const r = await api<{ sandbox_code?: string }>("/auth/mobile", { body: { phone: mob } }); setMobSent(true); setMobSandbox(r.sandbox_code ?? null); }, "Code sent on WhatsApp")}>{mobSent ? "Send again" : "Send code"}</Button>
                 {mobSent && <Button disabled={mobCode.length !== 6} onClick={() => run(async () => { await api("/auth/mobile", { body: { phone: mob, code: mobCode } }); setMobSent(false); setMobCode(""); }, "Number linked — you can now sign in with WhatsApp")}>Verify</Button>}
               </div>
             </>

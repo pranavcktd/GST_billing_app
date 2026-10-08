@@ -9,6 +9,10 @@ Messages outside a customer conversation must use templates approved by Meta, so
     reminder_template  body {{1}} customer, {{2}} amount due, {{3}} business, {{4}} link to the bill
 Delivery statuses arrive at /api/whatsapp/webhook?key=<webhook_key> and are matched by message id (wamid).
 
+Sandbox (live sending off, `sandbox` on, development server only): nothing is sent and nothing is charged — every message
+is recorded with status SANDBOX and its text (Admin → WhatsApp log), and sign-in codes are shown on screen. Never on a
+production server: showing codes there would let anyone sign in to any account.
+
 Settings: platform_settings["whatsapp_api"].
 """
 
@@ -33,14 +37,14 @@ PRESETS = {
     "OTHER": dict(label="Other (Meta-compatible API)", base_url="", api_version="v1", auth_header="apikey"),
 }
 DEFAULTS = dict(
-    enabled=False, provider="SPRINGEDGE", base_url="", api_version="v3", auth_header="apikey", phone_number_id="",
+    enabled=False, sandbox=True, provider="SPRINGEDGE", base_url="", api_version="v3", auth_header="apikey", phone_number_id="",
     api_key_enc=None, webhook_key=None,
     login_enabled=True, signup_verify=False,
     otp_template="login_otp", otp_lang="en", otp_button=True,
     invoice_template="invoice_document", invoice_lang="en",
     reminder_template="payment_reminder", reminder_lang="en",
 )
-EDITABLE = ("enabled", "provider", "base_url", "api_version", "auth_header", "phone_number_id", "login_enabled", "signup_verify",
+EDITABLE = ("enabled", "sandbox", "provider", "base_url", "api_version", "auth_header", "phone_number_id", "login_enabled", "signup_verify",
             "otp_template", "otp_lang", "otp_button", "invoice_template", "invoice_lang", "reminder_template", "reminder_lang")
 
 OTP_MINUTES = 5
@@ -64,7 +68,17 @@ def _key(s: dict) -> str | None:
 
 
 def ready(s: dict) -> bool:
+    """Live: real messages through the vendor."""
     return bool(s.get("enabled") and s.get("base_url") and s.get("phone_number_id") and _key(s))
+
+
+def sandbox(s: dict) -> bool:
+    """Simulated messages: live is off, sandbox is on, and this is a development server."""
+    return not ready(s) and bool(s.get("sandbox")) and get_settings().is_dev
+
+
+def active(s: dict) -> bool:
+    return ready(s) or sandbox(s)
 
 
 def public_settings(db: Session) -> dict:
@@ -72,7 +86,7 @@ def public_settings(db: Session) -> dict:
     key = _key(s)
     return {k: v for k, v in s.items() if k != "api_key_enc"} | {
         "api_key_set": bool(key), "api_key_hint": f"{key[:4]}…{key[-4:]}" if key and len(key) > 10 else None,
-        "ready": ready(s), "presets": PRESETS}
+        "ready": ready(s), "sandbox_active": sandbox(s), "dev_server": get_settings().is_dev, "presets": PRESETS}
 
 
 def save_settings(db: Session, values: dict) -> dict:
@@ -98,8 +112,9 @@ def save_settings(db: Session, values: dict) -> dict:
 def flags(db: Session) -> dict:
     """What the sign-in / sign-up pages may offer (public)."""
     s = settings(db)
-    on = ready(s)
-    return {"login": on and bool(s["login_enabled"]), "signup_verify": on and bool(s["signup_verify"]), "send": on}
+    on = active(s)
+    return {"login": on and bool(s["login_enabled"]), "signup_verify": on and bool(s["signup_verify"]), "send": on,
+            "sandbox": sandbox(s)}
 
 
 # ================================================================ phone numbers
@@ -134,7 +149,12 @@ def _http_post(url: str, headers: dict, body: dict) -> httpx.Response:
 def _send(db: Session, s: dict, to: str, template: str, lang: str, components: list[dict], *, kind: str,
           business_id: str | None = None, account_id: str | None = None, ref: str | None = None, by: str | None = None) -> WhatsAppMessage:
     if not ready(s):
-        raise HTTPException(503, "WhatsApp messaging is not set up by the platform administrator.")
+        if not sandbox(s):
+            raise HTTPException(503, "WhatsApp messaging is not set up by the platform administrator.")
+        msg = WhatsAppMessage(business_id=business_id, account_id=account_id, kind=kind, to=to, template=template, ref=ref, by=by,
+                              wamid=f"sandbox.{secrets.token_hex(8)}", status="SANDBOX", preview=_preview(template, components))
+        db.add(msg)
+        return msg
     key = _key(s)
     auth = {"Authorization": f"Bearer {key}"} if s["auth_header"] == "Bearer" else {s["auth_header"]: key}
     url = f"{s['base_url']}/{s['api_version']}/{s['phone_number_id']}/messages"
@@ -159,6 +179,19 @@ def _send(db: Session, s: dict, to: str, template: str, lang: str, components: l
     msg.wamid, msg.status = data["messages"][0].get("id"), "SENT"
     db.add(msg)
     return msg
+
+
+def _preview(template: str, components: list[dict]) -> str:
+    """What the customer would see, for the sandbox log: template name, attachment and body variables in order."""
+    parts, n = [template], 0
+    for c in components:
+        for p in c.get("parameters") or []:
+            if p.get("type") == "document":
+                parts.append(f"[PDF {p['document'].get('filename', '')}: {p['document'].get('link', '')}]")
+            elif c.get("type") == "body":
+                n += 1
+                parts.append(f"{{{{{n}}}}} = {p.get('text', '')}")
+    return " · ".join(parts)[:1000]
 
 
 def send_otp(db: Session, to: str, code: str) -> WhatsAppMessage:
@@ -230,7 +263,10 @@ def issue_otp(db: Session, phone: str, purpose: str, ip: str | None) -> dict:
         db.commit()
         raise HTTPException(502, e.message) from e
     db.commit()
-    return {"sent": True, "to": masked(phone), "expires_in": OTP_MINUTES * 60, "resend_in": OTP_RESEND_SECONDS}
+    out = {"sent": True, "to": masked(phone), "expires_in": OTP_MINUTES * 60, "resend_in": OTP_RESEND_SECONDS}
+    if sandbox(settings(db)):
+        out["sandbox_code"] = code  # development server only (see module notes)
+    return out
 
 
 def check_otp(db: Session, phone: str, purpose: str, code: str) -> None:

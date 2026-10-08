@@ -38,8 +38,9 @@ def enable(client, root, **extra):
 
 
 def test_admin_settings_and_signin_with_whatsapp(client, monkeypatch):
-    assert client.get("/api/meta").json()["whatsapp"] == {"login": False, "signup_verify": False, "send": False}
     root = superadmin(client, monkeypatch)
+    client.put("/api/admin/whatsapp", headers=root, json={"sandbox": False})
+    assert client.get("/api/meta").json()["whatsapp"] == {"login": False, "signup_verify": False, "send": False, "sandbox": False}
     v = enable(client, root)
     assert v["settings"]["ready"] and v["settings"]["api_key_set"] and "api_key_enc" not in v["settings"]
     assert "/api/whatsapp/webhook?key=" in v["webhook_url"]
@@ -97,6 +98,7 @@ def test_send_invoice_quota_and_credits(client, monkeypatch):
     h, cust, item = setup(client)
     v = sale(client, h, cust, item)
     root = superadmin(client, monkeypatch)
+    client.put("/api/admin/whatsapp", headers=root, json={"sandbox": False})
     assert client.post(f"/api/vouchers/{v['id']}/whatsapp", headers=h, json={"phone": "9876543210"}).status_code == 503
     enable(client, root)
     fake(monkeypatch)
@@ -144,3 +146,35 @@ def test_send_invoice_quota_and_credits(client, monkeypatch):
     hook = {"entry": [{"changes": [{"value": {"statuses": [{"id": "wamid.TEST1", "status": "read", "recipient_id": "919876543210"}]}}]}]}
     assert client.post(f"/api/whatsapp/webhook?key={key}", json=hook).json()["updated"] == 1
     assert client.get(f"/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token={key}&hub.challenge=42").text == "42"
+
+
+def test_sandbox_when_live_is_off(client, monkeypatch):
+    """Development server, live off: nothing sent or charged, messages logged with their text, codes shown on screen."""
+    from app.config import get_settings
+
+    SENT.clear()
+    monkeypatch.setattr(W, "_http_post", lambda *a: (_ for _ in ()).throw(AssertionError("sandbox must not call the vendor")))
+    h, cust, item = setup(client)
+    v = sale(client, h, cust, item)
+    root = superadmin(client, monkeypatch)
+    assert client.get("/api/meta").json()["whatsapp"] == {"login": True, "signup_verify": False, "send": True, "sandbox": True}
+
+    # link a number and sign in with the code shown on screen
+    r = client.post("/api/auth/mobile", headers=h, json={"phone": "9123456780"}).json()
+    client.post("/api/auth/mobile", headers=h, json={"phone": "9123456780", "code": r["sandbox_code"]})
+    monkeypatch.setattr(W, "OTP_RESEND_SECONDS", 0)
+    code = client.post("/api/auth/otp/send", json={"phone": "9123456780"}).json()["sandbox_code"]
+    assert client.post("/api/auth/otp/login", json={"phone": "9123456780", "code": code}).status_code == 200
+
+    # invoice: simulated, free, not counted in the month's messages
+    monkeypatch.setitem(P.PLANS["ENTERPRISE"], "whatsapp_quota", 0)
+    r = client.post(f"/api/vouchers/{v['id']}/whatsapp", headers=h, json={"phone": "9876543210"}).json()
+    assert r["sandbox"] and not r["charged_credits"] and v["number"] in r["preview"] and "[PDF " in r["preview"]
+    assert client.get("/api/whatsapp/status", headers=h).json()["used"] == 0
+    log = client.get("/api/admin/whatsapp", headers=root).json()
+    assert log["settings"]["sandbox_active"] and log["recent"][0]["status"] == "SANDBOX" and log["this_month"] == {}
+
+    # never on a production server
+    monkeypatch.setattr(get_settings(), "app_env", "production")
+    assert client.get("/api/meta").json()["whatsapp"]["login"] is False
+    assert client.post(f"/api/vouchers/{v['id']}/whatsapp", headers=h, json={"phone": "9876543210"}).status_code == 503
