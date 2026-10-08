@@ -114,9 +114,10 @@ FIELDS: list[Field] = [
           "Used for useful-life depreciation (Schedule II)."),
     # ---- API credits (paid government-connected actions)
     Field("api_credit_costs", "API credits", "Credits per action", "map_number",
-          {"EINVOICE": 1, "EWAYBILL": 1, "CANCEL": 1, "FILING_SYNC": 1},
+          {"EINVOICE": 1, "EWAYBILL": 1, "CANCEL": 1, "FILING_SYNC": 1, "WHATSAPP": 1},
           "EINVOICE = generate IRN, EWAYBILL = generate e-way bill, CANCEL = cancel either, FILING_SYNC = fetch one "
-          "financial year of GST filing status. Plans include a monthly allowance; beyond it businesses buy packs."),
+          "financial year of GST filing status, WHATSAPP = an invoice / reminder sent on WhatsApp after the plan's free monthly "
+          "messages. Plans include a monthly allowance; beyond it businesses buy packs."),
     Field("api_credit_packs", "API credits", "Credit packs (credits = price ₹, excl. GST)", "map_number",
           {"100": 299, "500": 1199, "2000": 3999}, "Prepaid credits businesses can buy; they do not expire."),
     # ---- payroll (statutory rates; effective-dated like the GST rules)

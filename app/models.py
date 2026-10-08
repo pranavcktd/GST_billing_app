@@ -62,6 +62,8 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(120))
     email: Mapped[str] = mapped_column(String(200), unique=True, index=True)
     phone: Mapped[str | None] = mapped_column(String(20))
+    mobile: Mapped[str | None] = mapped_column(String(12), unique=True, index=True)  # WhatsApp-verified, 91XXXXXXXXXX
+    mobile_verified_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     password_hash: Mapped[str] = mapped_column(String(100))
     platform_role: Mapped[str | None] = mapped_column(String(12))  # SUPERADMIN / RESELLER
     reseller_commission_pct: Mapped[Decimal | None] = mapped_column(Rate)
@@ -963,6 +965,40 @@ class PayrollLine(Base):
     deductions: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
     net: Mapped[Decimal] = mapped_column(Money, default=Decimal("0"))
     note: Mapped[str | None] = mapped_column(String(200))
+
+
+class PhoneOtp(Base):
+    """One-time sign-in / verification codes sent on WhatsApp (only a keyed hash of the code is kept)."""
+
+    __tablename__ = "phone_otps"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    phone: Mapped[str] = mapped_column(String(12), index=True)
+    purpose: Mapped[str] = mapped_column(String(8))  # LOGIN / SIGNUP / VERIFY
+    code_hash: Mapped[str] = mapped_column(String(64))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    ip: Mapped[str | None] = mapped_column(String(45), index=True)
+    expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class WhatsAppMessage(Base):
+    """Every WhatsApp message sent through the API, with its delivery status (from the provider's webhook)."""
+
+    __tablename__ = "whatsapp_messages"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str | None] = mapped_column(String(32), index=True)
+    account_id: Mapped[str | None] = mapped_column(String(32), index=True)
+    kind: Mapped[str] = mapped_column(String(8))  # OTP / INVOICE / REMINDER
+    to: Mapped[str] = mapped_column(String(15))
+    template: Mapped[str | None] = mapped_column(String(80))
+    wamid: Mapped[str | None] = mapped_column(String(128), index=True)
+    status: Mapped[str] = mapped_column(String(10), default="SENT")  # SENT / DELIVERED / READ / FAILED
+    error: Mapped[str | None] = mapped_column(String(300))
+    ref: Mapped[str | None] = mapped_column(String(64))
+    by: Mapped[str | None] = mapped_column(String(120))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+    updated_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ApiCredit(Base):

@@ -18,7 +18,8 @@ from ..models import ApiCredit
 from . import config_store as C
 
 ACTIONS = {"EINVOICE": "e-Invoice (IRN)", "EWAYBILL": "e-Way bill", "CANCEL": "Cancellation (IRN / e-way bill)",
-           "FILING_SYNC": "GST filing status (one year)"}
+           "FILING_SYNC": "GST filing status (one year)",
+           "WHATSAPP": "WhatsApp message (beyond the plan's monthly messages)"}
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
 

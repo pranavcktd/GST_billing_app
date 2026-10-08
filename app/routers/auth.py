@@ -26,7 +26,8 @@ from ..security import (
     verify_password,
 )
 from ..services import config_store, mailer
-from ..services.platform_audit import log
+from ..services import whatsapp as W
+from ..services.platform_audit import client_ip, log
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger("gst_billing.auth")
@@ -111,12 +112,121 @@ def register(data: RegisterIn, db: DB, request: Request):
     email = data.email.lower()
     if db.scalar(select(User).where(func.lower(User.email) == email)):
         raise HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists")
-    user = User(name=data.name, email=email, phone=data.phone, password_hash=hash_password(data.password))
+    mobile = None
+    if W.flags(db)["signup_verify"] or data.phone_code:
+        # mobile number verified on WhatsApp before the account (and its free trial) is created
+        mobile = W.normalize(data.phone)
+        if not mobile:
+            raise HTTPException(422, "Enter your 10-digit mobile number and the code sent to it on WhatsApp")
+        if db.scalar(select(User).where(User.mobile == mobile)):
+            raise HTTPException(status.HTTP_409_CONFLICT, "This mobile number is already linked to an account — sign in instead")
+        W.check_otp(db, mobile, "SIGNUP", data.phone_code or "")
+    user = User(name=data.name, email=email, phone=data.phone, password_hash=hash_password(data.password),
+                mobile=mobile, mobile_verified_at=now() if mobile else None)
     db.add(user)
     db.flush()
     log(db, user, "CREATE", "user", f"Signed up: {email}", entity_id=user.id, request=request)
     db.commit()
     return TokenOut(token=token_for(user), **me_payload(db, user).model_dump())
+
+
+# ---------------------------------------------------------------- WhatsApp codes
+class PhoneIn(BaseModel):
+    phone: str = Field(max_length=20)
+    purpose: Literal["LOGIN", "SIGNUP"] = "LOGIN"
+
+
+def _mobile(phone: str) -> str:
+    m = W.normalize(phone)
+    if not m:
+        raise HTTPException(422, "Enter a 10-digit Indian mobile number")
+    return m
+
+
+@router.post("/otp/send")
+def otp_send(data: PhoneIn, db: DB, request: Request):
+    """Sign-in or sign-up code on WhatsApp. For sign-in the answer is the same whether or not the number has an account."""
+    f = W.flags(db)
+    if not (f["login"] if data.purpose == "LOGIN" else f["send"]):
+        raise HTTPException(503, "WhatsApp codes are not available right now — use your e-mail and password.")
+    mobile = _mobile(data.phone)
+    user = db.scalar(select(User).where(User.mobile == mobile))
+    if data.purpose == "SIGNUP" and user:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This mobile number is already linked to an account — sign in instead")
+    if data.purpose == "LOGIN" and (not user or not user.is_active):
+        # no message is sent (and nothing is charged) for numbers without an account
+        return {"sent": True, "to": W.masked(mobile), "expires_in": W.OTP_MINUTES * 60, "resend_in": W.OTP_RESEND_SECONDS}
+    return W.issue_otp(db, mobile, data.purpose, client_ip(request))
+
+
+class OtpLoginIn(BaseModel):
+    phone: str = Field(max_length=20)
+    code: str = Field(min_length=4, max_length=8)
+    otp: str | None = None  # authenticator code when 2FA is on
+
+
+@router.post("/otp/login", response_model=TokenOut)
+def otp_login(data: OtpLoginIn, db: DB, request: Request):
+    if not W.flags(db)["login"]:
+        raise HTTPException(503, "WhatsApp sign-in is not available right now — use your e-mail and password.")
+    mobile = _mobile(data.phone)
+    user = db.scalar(select(User).where(User.mobile == mobile))
+    if user and _aware(user.locked_until) and _aware(user.locked_until) > now():
+        mins = int((_aware(user.locked_until) - now()).total_seconds() // 60) + 1
+        raise HTTPException(status.HTTP_423_LOCKED, f"Too many wrong attempts — try again in {mins} minute(s)")
+    W.check_otp(db, mobile, "LOGIN", data.code)  # no account → no code was sent → "expired"
+    if not user:
+        raise HTTPException(400, "The code has expired — ask for a new one.")
+    if not user.is_active:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This account is disabled — contact your administrator")
+    if user.totp_enabled:
+        if not data.otp:
+            db.rollback()  # keep the WhatsApp code usable for the second step
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, {"message": "Enter the 6-digit code from your authenticator app",
+                                                                "code": "OTP_REQUIRED"})
+        if not totp_ok(decrypt_secret(user.totp_secret_enc), data.otp):
+            db.rollback()
+            user.failed_logins = (user.failed_logins or 0) + 1
+            db.commit()
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, {"message": "The code is not correct", "code": "OTP_REQUIRED"})
+    user.failed_logins, user.locked_until = 0, None
+    user.previous_login_at, user.last_login_at = user.last_login_at, now()
+    log(db, user, "LOGIN", "login", f"Signed in with WhatsApp code: {user.email}", entity_id=user.id, request=request)
+    db.commit()
+    return TokenOut(token=token_for(user), **me_payload(db, user).model_dump())
+
+
+class MobileVerifyIn(BaseModel):
+    phone: str = Field(max_length=20)
+    code: str | None = Field(None, max_length=8)
+
+
+@router.post("/mobile")
+def link_mobile(data: MobileVerifyIn, db: DB, user: CurrentUser, request: Request):
+    """Link a WhatsApp number to your account: without `code` a code is sent, with it the number is linked."""
+    if not W.flags(db)["send"]:
+        raise HTTPException(503, "WhatsApp is not set up on this platform yet.")
+    mobile = _mobile(data.phone)
+    other = db.scalar(select(User).where(User.mobile == mobile))
+    if other and other.id != user.id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This mobile number is linked to another account")
+    if not data.code:
+        return W.issue_otp(db, mobile, "VERIFY", client_ip(request))
+    W.check_otp(db, mobile, "VERIFY", data.code)
+    user.mobile, user.mobile_verified_at = mobile, now()
+    if not user.phone:
+        user.phone = mobile[2:]
+    log(db, user, "UPDATE", "user", f"Linked WhatsApp number {W.masked(mobile)}", entity_id=user.id, request=request)
+    db.commit()
+    return {"mobile": mobile}
+
+
+@router.delete("/mobile")
+def unlink_mobile(db: DB, user: CurrentUser, request: Request):
+    user.mobile, user.mobile_verified_at = None, None
+    log(db, user, "UPDATE", "user", "Removed WhatsApp sign-in number", entity_id=user.id, request=request)
+    db.commit()
+    return {"mobile": None}
 
 
 class LoginWithOtp(LoginIn):
