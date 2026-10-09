@@ -11,7 +11,8 @@ from ..deps import DB, BCtx
 from ..models import Business, Voucher
 from ..permissions import voucher_module
 from ..schemas import VoucherDetailOut
-from ..services import invoice_pdf, mailer
+from ..models import BusinessCertificate
+from ..services import dsc, invoice_pdf, mailer
 from ..services.plans import account_of, business_plan
 from ..services.platform_audit import log
 from ..services.vouchers import to_detail
@@ -60,12 +61,20 @@ class EmailIn(BaseModel):
     subject: str | None = Field(None, max_length=200)
     message: str | None = Field(None, max_length=2000)
     attach_pdf: bool = True
+    sign: bool | None = None  # digitally sign the attached PDF (None = the business's setting)
 
 
-def _pdf(db, v: Voucher, biz: Business, copies: str | None = None) -> bytes:
+def _pdf(db, v: Voucher, biz: Business, copies: str | None = None, sign: bool | None = None) -> bytes:
+    """The document PDF; digitally signed when the business has a certificate and signs every PDF (or `sign` asks)."""
     plan = business_plan(db, biz.id)
     labels = ["ORIGINAL"] if copies == "original" else None
-    return invoice_pdf.render(v, biz, watermark=bool(plan["watermark"]), copies=labels)
+    cert = db.get(BusinessCertificate, biz.id)
+    do_sign = dsc.usable(cert) and (cert.mode == "AUTO" if sign is None else sign)
+    pdf = invoice_pdf.render(v, biz, watermark=bool(plan["watermark"]), copies=labels,
+                             signed_by=cert.subject if do_sign else None)
+    if do_sign:
+        pdf = dsc.sign_pdf(pdf, cert, reason=f"{v.number} issued by {biz.legal_name or biz.name}", location=biz.city)
+    return pdf
 
 
 def _pdf_response(content: bytes, v: Voucher, download: bool) -> Response:
@@ -75,10 +84,10 @@ def _pdf_response(content: bytes, v: Voucher, download: bool) -> Response:
 
 
 @router.get("/vouchers/{vid}/pdf")
-def voucher_pdf(vid: str, ctx: BCtx, download: bool = False, copies: str | None = None):
-    """The document as a PDF (all copy labels from print settings, or copies=original)."""
+def voucher_pdf(vid: str, ctx: BCtx, download: bool = False, copies: str | None = None, sign: bool | None = None):
+    """The document as a PDF (all copy labels from print settings, or copies=original); `sign` overrides the DSC setting."""
     v = _voucher(ctx, vid)
-    return _pdf_response(_pdf(ctx.db, v, ctx.business, copies), v, download)
+    return _pdf_response(_pdf(ctx.db, v, ctx.business, copies, sign), v, download)
 
 
 @router.post("/vouchers/{vid}/email")
@@ -101,7 +110,7 @@ def email_voucher(vid: str, data: EmailIn, ctx: BCtx, request: Request):
         <p style="text-align:center;margin:24px 0"><a href="{link}" style="background:#1f65bb;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">View / download the full document</a></p>""",
         footer=f"{e(biz.name)}{' · GSTIN ' + e(biz.gstin) if biz.gstin else ''}")
     cfg = mailer.business_smtp(ctx.db, ctx.bid, account_of(ctx.db, ctx.bid))
-    attachments = [(invoice_pdf.filename(v), _pdf(ctx.db, v, biz, "original"), "application/pdf")] if data.attach_pdf else None
+    attachments = [(invoice_pdf.filename(v), _pdf(ctx.db, v, biz, "original", data.sign), "application/pdf")] if data.attach_pdf else None
     mailer.send(cfg, [str(x) for x in data.to], data.subject or f"{to_detail(ctx, v).title} {v.number} from {biz.name}", body,
                 cc=[str(x) for x in data.cc], reply_to=biz.email, attachments=attachments)
     log(ctx.db, ctx.user, "ACTION", "e-mail", f"E-mailed {v.number} to {', '.join(map(str, data.to))}", entity_id=v.id,
