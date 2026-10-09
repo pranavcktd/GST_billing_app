@@ -13,6 +13,7 @@ import { AdminHsnMaster } from "@/components/admin/AdminHsnMaster";
 import { AdminIntegrations } from "@/components/admin/AdminIntegrations";
 import { AdminWhatsApp } from "@/components/admin/AdminWhatsApp";
 import { AdminIfsc } from "@/components/admin/AdminIfsc";
+import { AdminSignup } from "@/components/admin/AdminSignup";
 import { AdminRazorpay } from "@/components/admin/AdminRazorpay";
 import { AdminPlanConfig } from "@/components/admin/AdminPlanConfig";
 import { AdminRateNotices } from "@/components/admin/AdminRateNotices";
@@ -95,7 +96,7 @@ function Admin() {
       {tab === "HSN master" && <AdminHsnMaster />}
       {tab === "Rate notices" && <AdminRateNotices />}
       {tab === "Pricing" && <AdminPlanConfig />}
-      {tab === "Integrations" && <div className="space-y-8"><AdminRazorpay /><AdminIntegrations /><AdminIfsc /><AdminWhatsApp /><AdminDocuments /></div>}
+      {tab === "Integrations" && <div className="space-y-8"><AdminRazorpay /><AdminSignup /><AdminIntegrations /><AdminIfsc /><AdminWhatsApp /><AdminDocuments /></div>}
       {tab === "Backups" && <AdminBackups />}
       {tab === "Audit" && <AdminAudit />}
       {tab === "Email" && (
