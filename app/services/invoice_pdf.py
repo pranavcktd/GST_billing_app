@@ -114,7 +114,7 @@ def _image(url: str | None, max_w: float, max_h: float, db=None):
 
 
 def render(v: Voucher, biz: Business, *, watermark: bool = False, copies: list[str] | None = None,
-           images: bool = True) -> bytes:
+           images: bool = True, signed_by: str | None = None) -> bytes:
     font, bold = _fonts()
     ps = {**DEFAULT_PRINT, **(biz.print_settings or {})}
     accent = colors.HexColor(ps.get("accent") or "#1f65bb") if str(ps.get("accent") or "").startswith("#") else colors.HexColor("#1f65bb")
@@ -344,6 +344,9 @@ def render(v: Voucher, biz: Business, *, watermark: bool = False, copies: list[s
             img = _image(biz.signature_url, 35 * mm, 14 * mm, object_session(biz)) if images else None
             sign += [img] if img else [Spacer(1, 14 * mm)]
             sign.append(P("Authorised signatory", S("sg2", alignment=2, textColor=colors.HexColor("#6b7280"))))
+            if signed_by:
+                sign.append(P(f"Digitally signed by {escape(signed_by)}<br/>Date: {dt.datetime.now():%d-%m-%Y %H:%M}",
+                              S("sg3", alignment=2, size=fs - 1.5, lead=fs, textColor=colors.HexColor("#047857"))))
         cells = [[foot_left or "", qr or "", sign or ""]]
         ft = Table(cells, colWidths=[W * 0.5, W * 0.2, W * 0.3])
         ft.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "BOTTOM"), ("LEFTPADDING", (0, 0), (-1, -1), 0),

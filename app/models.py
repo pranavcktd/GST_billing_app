@@ -971,6 +971,25 @@ class PayrollLine(Base):
     note: Mapped[str | None] = mapped_column(String(200))
 
 
+class BusinessCertificate(Base):
+    """Digital signature certificate (.pfx / .p12) of a business, stored encrypted (services/dsc.py).
+    Not part of business backups: it holds a private key."""
+
+    __tablename__ = "business_certificates"
+    business_id: Mapped[str] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"), primary_key=True)
+    pfx_enc: Mapped[str] = mapped_column(Text)
+    password_enc: Mapped[str] = mapped_column(Text)
+    subject: Mapped[str | None] = mapped_column(String(200))
+    organisation: Mapped[str | None] = mapped_column(String(200))
+    issuer: Mapped[str | None] = mapped_column(String(200))
+    serial: Mapped[str | None] = mapped_column(String(64))
+    not_before: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+    not_after: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+    mode: Mapped[str] = mapped_column(String(10), default="AUTO")  # AUTO = every PDF / ON_REQUEST
+    uploaded_by: Mapped[str | None] = mapped_column(String(120))
+    uploaded_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class PhoneOtp(Base):
     """One-time sign-in / verification codes sent on WhatsApp (only a keyed hash of the code is kept)."""
 
