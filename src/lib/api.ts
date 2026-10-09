@@ -32,7 +32,7 @@ export const session = {
 };
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string, public code?: string, public plan?: string) {
+  constructor(public status: number, message: string, public code?: string, public plan?: string, public detail?: unknown) {
     super(message);
   }
 }
@@ -118,7 +118,7 @@ export async function api<T = unknown>(
     }
     if (res.status === 403 && structured?.code && ACCESS_CODES.includes(structured.code)) uiHooks.accessBlocked?.(structured.code, structured.message);
     if (res.status === 402 && (structured?.code === "UPGRADE" || structured?.code === "CREDITS")) uiHooks.showUpgrade?.(structured.message, structured.plan);
-    throw new ApiError(res.status, errorMessage(body, res.status), structured?.code, structured?.plan);
+    throw new ApiError(res.status, errorMessage(body, res.status), structured?.code, structured?.plan, structured);
   }
   return body as T;
 }
