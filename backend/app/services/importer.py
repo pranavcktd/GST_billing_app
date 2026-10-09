@@ -468,6 +468,8 @@ def _import_parties(ctx: Ctx, rows, res: Resolver):
             ctx.db.flush()
         except ValidationError as e:
             yield n, _pyd_err(e)
+        except (TypeError, ValueError) as e:
+            yield n, f"Value not understood ({e})"
         except RowError as e:
             yield n, str(e)
     res.created["parties"] += created
@@ -523,6 +525,8 @@ def _import_items(ctx: Ctx, rows, res: Resolver):
             ctx.db.flush()
         except ValidationError as e:
             yield n, _pyd_err(e)
+        except (TypeError, ValueError) as e:
+            yield n, f"Value not understood ({e})"
         except RowError as e:
             yield n, str(e)
     res.summary = f"{created} items created, {updated} updated"
@@ -571,6 +575,8 @@ def _import_payments(ctx: Ctx, rows, res: Resolver, ptype: PaymentType):
             count += 1
         except ValidationError as e:
             yield n, _pyd_err(e)
+        except (TypeError, ValueError) as e:
+            yield n, f"Value not understood ({e})"
         except (RowError, HTTPException) as e:
             yield n, getattr(e, "detail", None) or str(e)
     res.summary = f"{count} payments"
@@ -695,6 +701,8 @@ def _import_vouchers(ctx: Ctx, rows, res: Resolver, vtype: VoucherType):
             yield first_row, f"{doc_no}: {e}"
         except HTTPException as e:
             yield first_row, f"{doc_no}: {e.detail}"
+        except (TypeError, ValueError) as e:
+            yield first_row, f"{doc_no}: value not understood ({e})"
     res.summary = f"{count} documents"
 
 
