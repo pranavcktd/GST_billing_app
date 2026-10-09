@@ -1,14 +1,15 @@
 "use client";
 
-import { DatabaseBackup, Download, FileSpreadsheet, Mail, RotateCcw, SearchCheck, Share2, Trash2, Upload } from "lucide-react";
+import { DatabaseBackup, Download, Eraser, FileSpreadsheet, Mail, RotateCcw, SearchCheck, Share2, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
 import { Button, Card, ErrorBox, Field, Input, Loading, PageHeader } from "@/components/ui";
 import { ApiError, api, apiBlob, saveBlob } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
+import { useAuth, usePerms } from "@/lib/auth";
+import { DataWipeDialog } from "@/components/DataWipeDialog";
 import { useFetch } from "@/lib/useFetch";
 import type { Business } from "@/lib/types";
 
-interface BackupRow { id: string; kind: "AUTO" | "MANUAL"; size: number; created_at: string; emailed_to: string | null; filename: string; excel_filename: string }
+interface BackupRow { id: string; kind: "AUTO" | "MANUAL" | "WIPE"; size: number; created_at: string; emailed_to: string | null; filename: string; excel_filename: string }
 interface RestoreErr { file?: string; row: number | null; message: string }
 interface RestoreOut { id: string | null; name: string | null; method: "exact" | "excel"; ok: boolean; edited?: string[]; skipped?: string[];
   summary?: Record<string, string>; errors?: RestoreErr[] }
@@ -22,6 +23,8 @@ export default function BackupPage() {
   const { data: biz, setData: setBiz } = useFetch<Business>("/businesses/current");
   const { data: opts } = useFetch<{ excel: boolean }>("/backups/settings");
   const excel = !!opts?.excel;
+  const { role } = usePerms();
+  const [wipe, setWipe] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -137,6 +140,17 @@ export default function BackupPage() {
           )}
         </Card>
       </div>
+      {role === "OWNER" && (
+        <Card className="mb-5 flex flex-wrap items-center justify-between gap-3 border-red-100 p-5">
+          <div>
+            <h2 className="font-semibold text-gray-900">Clear data</h2>
+            <p className="text-sm text-gray-500">Finished testing? Clear sales, purchases, parties, items… — choose what. A backup is saved and e-mailed first; your company profile stays.</p>
+          </div>
+          <Button variant="danger" onClick={() => setWipe(true)}><Eraser size={16} /> Clear data…</Button>
+        </Card>
+      )}
+      {wipe && <DataWipeDialog path="/data-wipe" onClose={() => { setWipe(false); reload(); }} />}
+
       <Card className="overflow-x-auto">
         <h2 className="px-5 pt-4 pb-2 font-semibold text-gray-900">Saved backups</h2>
         {backups.length === 0 ? <p className="px-5 pb-5 text-sm text-gray-500">No backups yet.</p> : (
@@ -146,7 +160,7 @@ export default function BackupPage() {
               {backups.map((b) => (
                 <tr key={b.id}>
                   <td>{when(b.created_at)}</td>
-                  <td>{b.kind === "AUTO" ? "Automatic" : "Manual"}</td>
+                  <td>{b.kind === "AUTO" ? "Automatic" : b.kind === "WIPE" ? "Before clearing data" : "Manual"}</td>
                   <td>{size(b.size)}</td>
                   <td>{b.emailed_to ?? ""}</td>
                   <td className="whitespace-nowrap text-right">

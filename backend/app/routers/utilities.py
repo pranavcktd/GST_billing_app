@@ -14,6 +14,7 @@ from ..deps import DB, BCtx, CurrentUser
 from ..gst.constants import GST_RATES, Role
 from ..models import Backup, Business, HsnCode, Item, Membership, User
 from ..services import backup as bk
+from ..services import data_wipe as wipe_svc
 from ..services import excel_backup as xb
 from ..services.importer import ENTITIES, run_import, template
 from ..permissions import ACTIONS, DEFAULTS, FLAGS, MODULES, ROLE_LABELS, effective, normalise
@@ -254,6 +255,26 @@ def restore_saved_backup(backup_id: str, ctx: BCtx):
                             f"{ctx.business.name} (restored {b.created_at:%d-%m-%Y %H:%M})")
     ctx.db.commit()
     return {"id": biz.id, "name": biz.name}
+
+
+# ---------------------------------------------------------------- clear data (after testing, before going live)
+class WipeIn(BaseModel):
+    groups: list[str] = Field(min_length=1, max_length=20)
+    confirm_name: str = Field(max_length=200)
+
+
+@router.get("/data-wipe")
+def data_wipe_options(ctx: BCtx):
+    ctx.require(Role.OWNER)
+    return {"groups": wipe_svc.options(), "counts": wipe_svc.counts(ctx.db, ctx.bid), "business_name": ctx.business.name,
+            "backup_email": ctx.business.backup_email or ctx.user.email}
+
+
+@router.post("/data-wipe")
+def data_wipe(data: WipeIn, ctx: BCtx):
+    """Owner only: clear the chosen data of this business. A backup is saved (and e-mailed) first."""
+    ctx.require(Role.OWNER)
+    return wipe_svc.wipe(ctx.db, ctx.business, data.groups, data.confirm_name, ctx.user)
 
 
 # ---------------------------------------------------------------- company members

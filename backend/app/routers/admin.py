@@ -24,6 +24,7 @@ from ..models import (
 )
 from ..security import hash_password
 from ..services import backup as bk
+from ..services import data_wipe as WIPE
 from ..services import excel_backup as XB
 from ..services import config_store, mailer
 from ..services import plans as P
@@ -331,6 +332,30 @@ def businesses(db: DB, _: SuperAdmin, search: str | None = None):
     return out
 
 
+class WipeIn(BaseModel):
+    groups: list[str] = Field(min_length=1, max_length=20)
+    confirm_name: str = Field(max_length=200)
+
+
+@router.get("/businesses/{business_id}/data-wipe")
+def admin_wipe_options(business_id: str, db: DB, _: SuperAdmin):
+    biz = db.get(Business, business_id)
+    if not biz:
+        raise HTTPException(404, "Business not found")
+    owner = db.get(User, biz.owner_id) if biz.owner_id else None
+    return {"groups": WIPE.options(), "counts": WIPE.counts(db, biz.id), "business_name": biz.name,
+            "backup_email": biz.backup_email or (owner.email if owner else None)}
+
+
+@router.post("/businesses/{business_id}/data-wipe")
+def admin_wipe(business_id: str, data: WipeIn, db: DB, me: SuperAdmin):
+    """Clear chosen data of any business (backup saved to that business and e-mailed to it first)."""
+    biz = db.get(Business, business_id)
+    if not biz:
+        raise HTTPException(404, "Business not found")
+    return WIPE.wipe(db, biz, data.groups, data.confirm_name, me, by_admin=True)
+
+
 class ExcelBackupIn(BaseModel):
     enabled: bool | None = None  # None = follow the platform default
 
@@ -463,6 +488,18 @@ def create_backup(data: BackupIn, db: DB, me: SuperAdmin, request: Request):
     log(db, me, "CREATE", "backup", f"{data.scope.title()} backup created", request=request)
     db.commit()
     return out
+
+
+@router.get("/backups/sql")
+def download_sql(db: DB, me: SuperAdmin, request: Request):
+    """Whole database as a plain .sql file (data only) — see services/sql_dump.py for how to load it."""
+    from ..services import sql_dump
+
+    name = sql_dump.filename()
+    body = sql_dump.dump(db)
+    log(db, me, "EXPORT", "backup", f"Downloaded database export {name}", request=request)
+    db.commit()
+    return Response(body, media_type="application/sql", headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
 @router.get("/backups/{backup_id}/download")
