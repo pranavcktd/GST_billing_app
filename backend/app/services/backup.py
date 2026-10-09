@@ -4,6 +4,7 @@ Restore never overwrites live data: it creates a fresh company, giving every
 record a new id and remapping all references to it.
 """
 
+import base64
 import datetime as dt
 import gzip
 import json
@@ -11,22 +12,30 @@ import uuid
 from decimal import Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import Date, DateTime, Numeric, delete, insert, select, update
+from sqlalchemy import Date, DateTime, LargeBinary, Numeric, delete, insert, select, update
 from sqlalchemy.orm import Session
 
 from ..gst.constants import Role
 from ..models import (
     Account,
     AccountTransfer,
+    Attendance,
     Backup,
+    Bom,
+    BomLine,
     Business,
     CapitalEntry,
-    Godown,
-    StockTransfer,
+    ComplianceFiling,
     Counter,
+    Document,
+    DocumentBlob,
+    Employee,
     ExpenseCategory,
     ExpenseItem,
+    Godown,
+    GstReturnStatus,
     HsnCode,
+    ImageFile,
     Item,
     Loan,
     LoanTxn,
@@ -34,7 +43,16 @@ from ..models import (
     Party,
     Payment,
     PaymentAllocation,
+    PayrollLine,
+    PayrollRun,
+    PriceList,
+    PriceListItem,
+    Production,
+    RecurringInvoice,
+    ReminderLog,
+    SalaryAdvance,
     StockMovement,
+    StockTransfer,
     TaxPayment,
     Voucher,
     VoucherLine,
@@ -44,12 +62,20 @@ FORMAT = "gst-billing-backup"
 VERSION = 1
 
 # insert order respects foreign keys
-TABLES = [Business, Account, Godown, ExpenseCategory, ExpenseItem, Party, Item, Loan, HsnCode, Voucher, VoucherLine,
-          StockTransfer, StockMovement, Payment, PaymentAllocation, Counter, AccountTransfer, CapitalEntry, LoanTxn, TaxPayment]
+TABLES = [Business, Account, Godown, ExpenseCategory, ExpenseItem, Party, Item, Loan, HsnCode, PriceList, PriceListItem,
+          Bom, BomLine, Voucher, VoucherLine, StockTransfer, StockMovement, Payment, PaymentAllocation, Counter,
+          AccountTransfer, CapitalEntry, LoanTxn, TaxPayment, Production, RecurringInvoice, Employee, Attendance,
+          SalaryAdvance, PayrollRun, PayrollLine, ComplianceFiling, GstReturnStatus, ReminderLog, ImageFile, Document,
+          DocumentBlob]
+# rows of tables without business_id belong to a parent row: (column, parent model)
+CHILD_OF = {"voucher_lines": ("voucher_id", Voucher), "payment_allocations": ("payment_id", Payment),
+            "price_list_items": ("price_list_id", PriceList), "bom_lines": ("bom_id", Bom),
+            "payroll_lines": ("run_id", PayrollRun), "document_blobs": ("document_id", Document)}
 # id references stored without a foreign key
-LOOSE_REFS = {"vouchers": ["source_voucher_id", "converted_to_id"]}
+LOOSE_REFS = {"vouchers": ["source_voucher_id", "converted_to_id"], "documents": ["storage_id"]}
 SELF_REFS = {"vouchers": ["original_voucher_id"]}
-USER_REFS = {"created_by_id"}
+USER_REFS = {"created_by_id", "owner_id"}  # become the person restoring; other user links (staff logins) are dropped
+IMG = "/api/files/img/"
 KEEP_BACKUPS = 7
 
 
@@ -59,7 +85,7 @@ def _encode(v):
     if isinstance(v, (dt.date, dt.datetime)):
         return v.isoformat()
     if isinstance(v, bytes):
-        return None
+        return base64.b64encode(v).decode()
     return v.value if hasattr(v, "value") else v
 
 
@@ -69,10 +95,9 @@ def _rows(db: Session, model, bid: str) -> list[dict]:
         q = select(t).where(t.c.business_id == bid)
     elif model is Business:
         q = select(t).where(t.c.id == bid)
-    elif model is VoucherLine:
-        q = select(t).where(t.c.voucher_id.in_(select(Voucher.id).where(Voucher.business_id == bid)))
-    elif model is PaymentAllocation:
-        q = select(t).where(t.c.payment_id.in_(select(Payment.id).where(Payment.business_id == bid)))
+    elif t.name in CHILD_OF:
+        col, parent = CHILD_OF[t.name]
+        q = select(t).where(t.c[col].in_(select(parent.id).where(parent.business_id == bid)))
     else:
         return []
     return [{k: _encode(v) for k, v in r._mapping.items()} for r in db.execute(q)]
@@ -127,19 +152,26 @@ def filename(business_name: str, created: dt.datetime) -> str:
 
 
 def email_backup(db: Session, business: Business, to: str, blob: bytes, created: dt.datetime) -> None:
-    from . import mailer
+    from . import excel_backup, mailer
     from .plans import account_of
 
     cfg = mailer.business_smtp(db, business.id, account_of(db, business.id))
+    excel = excel_backup.allowed(db, business)
     body = mailer.layout(f"Backup of {business.name}", f"<p>Attached is the backup of <b>{business.name}</b> taken on "
-                         f"{created:%d %b %Y %H:%M}.</p><p>Restore it from Utilities → Backup & Restore.</p>")
+                         f"{created:%d %b %Y %H:%M}.</p>"
+                         + ("<p>The .zip file has the same data as Excel sheets you can open and read. "
+                            "Either file can be restored from Utilities → Backup & Restore.</p>" if excel else
+                            "<p>Restore it from Utilities → Backup & Restore.</p>"))
     mailer.send(cfg, [to], f"Backup of {business.name} — {created:%d %b %Y}", body,
-                attachments=[(filename(business.name, created), blob, "application/octet-stream")])
+                attachments=[(filename(business.name, created), blob, "application/octet-stream")]
+                + ([(excel_backup.zip_name(business.name, created), excel_backup.build_zip(blob), "application/zip")] if excel else []))
 
 
 def _decode(col, v):
     if v is None:
         return None
+    if isinstance(col.type, LargeBinary):
+        return base64.b64decode(v)
     if isinstance(col.type, Numeric):
         return Decimal(v)
     if isinstance(col.type, DateTime):
@@ -169,10 +201,24 @@ def restore_as_new(db: Session, blob: bytes, user_id: str, new_name: str | None 
         raise HTTPException(400, "Backup has no company data")
     new_bid = idmap[biz_rows[0]["id"]]
 
-    fk_cols = {}
+    fk_cols, user_cols = {}, {}
     for m in TABLES:
         t = m.__table__
-        fk_cols[t.name] = [c.name for c in t.c if c.foreign_keys] + LOOSE_REFS.get(t.name, [])
+        user_cols[t.name] = {c.name for c in t.c if any(fk.column.table.name == "users" for fk in c.foreign_keys)} | (
+            USER_REFS & set(t.c.keys()))
+        fk_cols[t.name] = [c.name for c in t.c if c.foreign_keys and c.name not in user_cols[t.name]] + LOOSE_REFS.get(t.name, [])
+
+    def relink_images(v):
+        """Logo / signature / photo links point at image ids, which change too."""
+        if isinstance(v, str) and IMG in v:
+            head, _, tail = v.partition(IMG)
+            old, dot, ext = tail.partition(".")
+            return f"{head}{IMG}{idmap.get(old, old)}{dot}{ext}"
+        if isinstance(v, dict):
+            return {k: relink_images(x) for k, x in v.items()}
+        if isinstance(v, list):
+            return [relink_images(x) for x in v]
+        return v
 
     deferred = []
     for m in TABLES:
@@ -186,11 +232,11 @@ def restore_as_new(db: Session, blob: bytes, user_id: str, new_name: str | None 
                 v = _decode(c, row[c.name])
                 if c.name == "id":
                     v = idmap[v]
-                elif c.name in USER_REFS:
-                    v = user_id
+                elif c.name in user_cols[t.name]:
+                    v = user_id if c.name in USER_REFS else None
                 elif c.name in fk_cols[t.name] and v is not None:
                     v = idmap.get(v, v)
-                out[c.name] = v
+                out[c.name] = relink_images(v)
             if t.name == "businesses":
                 out["name"] = new_name or f"{out['name']} (restored)"
                 out["owner_id"] = user_id

@@ -698,9 +698,9 @@ def _import_vouchers(ctx: Ctx, rows, res: Resolver, vtype: VoucherType):
     res.summary = f"{count} documents"
 
 
-def run_import(ctx: Ctx, entity: str, filename: str, content: bytes, dry_run: bool) -> dict:
-    fields, title = spec(entity)
-    rows = read_rows(filename, content, fields)
+def import_rows(ctx: Ctx, entity: str, rows: list[tuple[int, dict]]) -> tuple[str, dict, list[dict]]:
+    """Saves parsed rows without committing: (summary, created counts, errors)."""
+    fields, _ = spec(entity)
     res = Resolver(ctx)
     res.summary = ""
     missing_required = []
@@ -721,10 +721,17 @@ def run_import(ctx: Ctx, entity: str, filename: str, content: bytes, dry_run: bo
             "expense-items": lambda: _import_expense_items(ctx, rows, res),
         }[entity]()
     errors = missing_required + [{"row": n, "message": m} for n, m in gen]
+    return res.summary, res.created, errors
+
+
+def run_import(ctx: Ctx, entity: str, filename: str, content: bytes, dry_run: bool) -> dict:
+    fields, title = spec(entity)
+    rows = read_rows(filename, content, fields)
+    summary, created, errors = import_rows(ctx, entity, rows)
     ok = not errors
     if ok and not dry_run:
         ctx.db.commit()
     else:
         ctx.db.rollback()
     return {"title": title, "rows": len(rows), "ok": ok, "dry_run": dry_run, "saved": ok and not dry_run,
-            "summary": res.summary, "created": res.created, "errors": sorted(errors, key=lambda e: e["row"])[:500]}
+            "summary": summary, "created": created, "errors": sorted(errors, key=lambda e: e["row"])[:500]}
