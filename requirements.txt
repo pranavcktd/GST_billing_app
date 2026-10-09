@@ -20,3 +20,5 @@ pytest>=8.2
 pypdf>=5.0
 reportlab>=4.2
 pyhanko>=0.25
+google-auth>=2.30
+requests>=2.31

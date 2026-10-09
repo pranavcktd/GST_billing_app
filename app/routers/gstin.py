@@ -87,6 +87,30 @@ def status(data: StatusIn, db: DB, user: CurrentUser):
 
 
 
+# ---------------------------------------------------------------- sign-up options (services/signup.py)
+class SignupSettingsIn(BaseModel):
+    verify: Literal["OFF", "WHATSAPP", "EMAIL", "EITHER"] | None = None
+    google_enabled: bool | None = None
+    google_client_id: str | None = Field(None, max_length=200, pattern=r"^([0-9A-Za-z._-]+\.apps\.googleusercontent\.com)?$")
+
+
+@router.get("/admin/signup")
+def signup_settings(db: DB, admin: SuperAdmin):
+    from ..services import signup
+
+    return {**signup.settings(db), "methods_now": signup.methods(db), "email_ready": signup.email_ready(db)}
+
+
+@router.put("/admin/signup")
+def put_signup_settings(data: SignupSettingsIn, db: DB, admin: SuperAdmin, request: Request):
+    from ..services import signup
+
+    s = signup.save_settings(db, data.model_dump())
+    log(db, admin, "CONFIG", "signup", f"Sign-up: verify {s['verify']}, Google {'on' if s['google_enabled'] else 'off'}", request=request)
+    db.commit()
+    return {**s, "methods_now": signup.methods(db), "email_ready": signup.email_ready(db)}
+
+
 # ---------------------------------------------------------------- IFSC → bank branch (services/ifsc.py)
 @router.get("/ifsc/{code}")
 def ifsc_lookup(code: str, db: DB, user: CurrentUser):

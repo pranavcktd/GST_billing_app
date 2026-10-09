@@ -64,6 +64,8 @@ class User(Base):
     phone: Mapped[str | None] = mapped_column(String(20))
     mobile: Mapped[str | None] = mapped_column(String(12), unique=True, index=True)  # WhatsApp-verified, 91XXXXXXXXXX
     mobile_verified_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    email_verified_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    google_sub: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)  # "Continue with Google"
     password_hash: Mapped[str] = mapped_column(String(100))
     platform_role: Mapped[str | None] = mapped_column(String(12))  # SUPERADMIN / RESELLER
     reseller_commission_pct: Mapped[Decimal | None] = mapped_column(Rate)
@@ -988,6 +990,20 @@ class BusinessCertificate(Base):
     mode: Mapped[str] = mapped_column(String(10), default="AUTO")  # AUTO = every PDF / ON_REQUEST
     uploaded_by: Mapped[str | None] = mapped_column(String(120))
     uploaded_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class EmailOtp(Base):
+    """E-mail verification codes at sign-up (only a keyed hash of the code is kept)."""
+
+    __tablename__ = "email_otps"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    email: Mapped[str] = mapped_column(String(200), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    ip: Mapped[str | None] = mapped_column(String(45), index=True)
+    expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
 
 class PhoneOtp(Base):

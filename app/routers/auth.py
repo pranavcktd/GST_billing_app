@@ -26,6 +26,7 @@ from ..security import (
     verify_password,
 )
 from ..services import config_store, mailer
+from ..services import signup as SU
 from ..services import whatsapp as W
 from ..services.platform_audit import client_ip, log
 
@@ -112,20 +113,83 @@ def register(data: RegisterIn, db: DB, request: Request):
     email = data.email.lower()
     if db.scalar(select(User).where(func.lower(User.email) == email)):
         raise HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists")
-    mobile = None
-    if W.flags(db)["signup_verify"] or data.phone_code:
+    mobile, email_ok = None, False
+    ways = SU.methods(db)  # verification the super admin asks for (WhatsApp and / or e-mail code)
+    if data.phone_code or (ways and not data.email_code and "WHATSAPP" in ways):
         # mobile number verified on WhatsApp before the account (and its free trial) is created
         mobile = W.normalize(data.phone)
         if not mobile:
-            raise HTTPException(422, "Enter your 10-digit mobile number and the code sent to it on WhatsApp")
+            raise HTTPException(422, "Enter your 10-digit mobile number and the code sent to it on WhatsApp"
+                                if ways == ["WHATSAPP"] else "Verify your mobile (WhatsApp code) or your e-mail (e-mail code)")
         if db.scalar(select(User).where(User.mobile == mobile)):
             raise HTTPException(status.HTTP_409_CONFLICT, "This mobile number is already linked to an account — sign in instead")
         W.check_otp(db, mobile, "SIGNUP", data.phone_code or "")
+    elif data.email_code or ways:
+        if "EMAIL" not in ways and not data.email_code:
+            raise HTTPException(422, "Verify your mobile number with the WhatsApp code")
+        if not data.email_code:
+            raise HTTPException(422, "Enter the code sent to your e-mail" if ways == ["EMAIL"]
+                                else "Verify your mobile (WhatsApp code) or your e-mail (e-mail code)")
+        SU.check_email_code(db, email, data.email_code or "")
+        email_ok = True
     user = User(name=data.name, email=email, phone=data.phone, password_hash=hash_password(data.password),
-                mobile=mobile, mobile_verified_at=now() if mobile else None)
+                mobile=mobile, mobile_verified_at=now() if mobile else None, email_verified_at=now() if email_ok else None)
     db.add(user)
     db.flush()
     log(db, user, "CREATE", "user", f"Signed up: {email}", entity_id=user.id, request=request)
+    db.commit()
+    return TokenOut(token=token_for(user), **me_payload(db, user).model_dump())
+
+
+# ---------------------------------------------------------------- e-mail code (sign-up) and Google
+class EmailCodeIn(BaseModel):
+    email: EmailStr
+
+
+@router.post("/email-code")
+def email_code(data: EmailCodeIn, db: DB, request: Request):
+    """Verification code to the e-mail address, before an account is created."""
+    if "EMAIL" not in SU.methods(db):
+        raise HTTPException(400, "E-mail verification is not used for sign-up on this platform.")
+    if db.scalar(select(User).where(func.lower(User.email) == data.email.lower())):
+        raise HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists — sign in instead")
+    return SU.issue_email_code(db, str(data.email), client_ip(request))
+
+
+class GoogleIn(BaseModel):
+    credential: str = Field(min_length=20, max_length=5000)
+    otp: str | None = None  # authenticator code when 2FA is on
+
+
+@router.post("/google", response_model=TokenOut)
+def google(data: GoogleIn, db: DB, request: Request):
+    """Continue with Google: signs in the account with that e-mail, or creates one (nothing else asked — the next
+    screen is business details)."""
+    g = SU.google_identity(db, data.credential)
+    user = db.scalar(select(User).where(User.google_sub == g["sub"])) if g["sub"] else None
+    user = user or db.scalar(select(User).where(func.lower(User.email) == g["email"]))
+    created = user is None
+    if created:
+        user = User(name=g["name"][:120], email=g["email"], password_hash=hash_password(secrets.token_urlsafe(24)),
+                    google_sub=g["sub"], email_verified_at=now())
+        db.add(user)
+        db.flush()
+        log(db, user, "CREATE", "user", f"Signed up with Google: {user.email}", entity_id=user.id, request=request)
+    else:
+        if not user.is_active:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "This account is disabled — contact your administrator")
+        if user.totp_enabled:
+            if not data.otp:
+                raise HTTPException(status.HTTP_401_UNAUTHORIZED, {"message": "Enter the 6-digit code from your authenticator app",
+                                                                    "code": "OTP_REQUIRED"})
+            if not totp_ok(decrypt_secret(user.totp_secret_enc), data.otp):
+                raise HTTPException(status.HTTP_401_UNAUTHORIZED, {"message": "The code is not correct", "code": "OTP_REQUIRED"})
+        if not user.google_sub:
+            user.google_sub = g["sub"]
+        user.email_verified_at = user.email_verified_at or now()
+        user.failed_logins, user.locked_until = 0, None
+        user.previous_login_at, user.last_login_at = user.last_login_at, now()
+        log(db, user, "LOGIN", "login", f"Signed in with Google: {user.email}", entity_id=user.id, request=request)
     db.commit()
     return TokenOut(token=token_for(user), **me_payload(db, user).model_dump())
 

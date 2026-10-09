@@ -95,6 +95,7 @@ class RegisterIn(BaseModel):
     password: Annotated[str, StringConstraints(min_length=8, max_length=128)]
     phone: Opt(20) = None
     phone_code: Opt(6) = None  # WhatsApp code that verifies `phone`
+    email_code: Opt(6) = None  # e-mail code that verifies `email`
 
 
 class LoginIn(BaseModel):
