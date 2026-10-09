@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { BusinessForm } from "@/components/BusinessForm";
+import { DscSettings } from "@/components/DscSettings";
 import { PrintSettingsForm } from "@/components/PrintSettingsForm";
 import { SecuritySettings } from "@/components/SecuritySettings";
 import { SmtpForm } from "@/components/SmtpForm";
@@ -62,6 +63,7 @@ export default function SettingsPage() {
       {tab === "business" && (
         <div className="max-w-4xl">
           <BusinessForm initial={data} portal={data.gst_portal} showUploads submitLabel="Save settings" onSubmit={(b) => saveBusiness(b as Partial<Business>)} />
+          <DscSettings canEdit={canEdit && ["OWNER", "ADMIN"].includes(mine?.role ?? "")} />
         </div>
       )}
       {tab === "print" && <PrintSettingsForm business={data} onSave={(ps: PrintSettings) => saveBusiness({ print_settings: ps })} />}
