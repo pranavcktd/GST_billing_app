@@ -119,7 +119,7 @@ FIELDS: list[Field] = [
           "financial year of GST filing status, WHATSAPP = an invoice / reminder sent on WhatsApp after the plan's free monthly "
           "messages. Plans include a monthly allowance; beyond it businesses buy packs."),
     Field("api_credit_packs", "API credits", "Credit packs (credits = price ₹, excl. GST)", "map_number",
-          {"100": 299, "500": 1199, "2000": 3999}, "Prepaid credits businesses can buy; they do not expire."),
+          {"100": 199, "500": 799, "2000": 2499}, "Prepaid credits businesses can buy; they do not expire."),
     # ---- payroll (statutory rates; effective-dated like the GST rules)
     Field("pf_employee_rate", "Payroll", "EPF — employee share (% of EPF wage)", "number", 12),
     Field("pf_employer_rate", "Payroll", "EPF — employer share (% of EPF wage, EPF + EPS)", "number", 12),
@@ -147,7 +147,7 @@ FIELDS: list[Field] = [
     Field("subscription_gst_rate", "Subscription & company", "GST on subscription fees (%)", "number", 18),
     Field("trial_days", "Subscription & company", "Free trial days", "int", 14),
     Field("multi_year_offers", "Subscription & company", "Multi-year plans (years = % off the yearly price)", "map_number",
-          {"2": 15, "3": 25},
+          {"2": 20, "3": 35},
           "Paid upfront: price = yearly price × years − this discount. Years 2 to 5. Remove a line to stop offering it."),
     Field("brand", "Subscription & company", "Product brand", "map_text",
           {"app_name": "SmartHisab", "by_line": "by Corenexgen",
