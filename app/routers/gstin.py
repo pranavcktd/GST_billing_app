@@ -84,3 +84,35 @@ def status(data: StatusIn, db: DB, user: CurrentUser):
     """Free: has this GSTIN been verified on this platform before, and what was the result?"""
     found = G.last_status(db, data.gstins)
     return {g.strip().upper(): found.get(g.strip().upper(), {"verified": False}) for g in data.gstins if g}
+
+
+
+# ---------------------------------------------------------------- IFSC → bank branch (services/ifsc.py)
+@router.get("/ifsc/{code}")
+def ifsc_lookup(code: str, db: DB, user: CurrentUser):
+    from ..services import ifsc
+
+    return ifsc.lookup(db, code, user.id)
+
+
+class IfscSettingsIn(BaseModel):
+    enabled: bool | None = None
+    base_url: str | None = Field(None, max_length=200, pattern=r"^https://\S+$")
+    hourly_limit_user: int | None = Field(None, ge=1, le=10000)
+
+
+@router.get("/admin/ifsc-api")
+def ifsc_settings(db: DB, admin: SuperAdmin):
+    from ..services import ifsc
+
+    return ifsc.settings(db)
+
+
+@router.put("/admin/ifsc-api")
+def put_ifsc_settings(data: IfscSettingsIn, db: DB, admin: SuperAdmin, request: Request):
+    from ..services import ifsc
+
+    out = ifsc.save_settings(db, data.model_dump())
+    log(db, admin, "CONFIG", "ifsc-api", f"IFSC lookup: {'on' if out['enabled'] else 'off'}, {out['base_url']}", request=request)
+    db.commit()
+    return out
