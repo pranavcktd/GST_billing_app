@@ -241,3 +241,16 @@ def test_hierarchy_resets(client, monkeypatch):
     accept_invites(client, s9)
     m = next(x for x in client.get("/api/members", headers=h).json() if x["email"] == "staff9@x.in")
     assert post(client, h, f"/api/members/{m['id']}/reset-password", {}, 200)["sent"]
+
+
+def test_server_listed_super_admin_cannot_be_demoted_in_ui(client, monkeypatch):
+    """E-mails in SUPERADMIN_EMAILS are made super admin on every request, so the panel refuses to demote them."""
+    monkeypatch.setattr(get_settings(), "superadmin_emails", "root@platform.in,boss@platform.in")
+    root = signup(client, "root@platform.in")
+    signup(client, "boss@platform.in")
+    client.get("/api/auth/me", headers=root)
+    users = client.get("/api/admin/users", headers=root).json()
+    boss = next(u for u in (users if isinstance(users, list) else users["users"]) if u["email"] == "boss@platform.in")
+    assert boss["superadmin_by_server"] is True
+    r = client.put(f"/api/admin/users/{boss['id']}/platform-role", headers=root, json={"role": None})
+    assert r.status_code == 400 and "SUPERADMIN_EMAILS" in r.json()["detail"]

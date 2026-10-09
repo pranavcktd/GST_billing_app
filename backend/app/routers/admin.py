@@ -10,6 +10,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, or_, select
 
+from ..config import get_settings
 from ..deps import DB, SuperAdmin
 from ..gst.constants import PlatformRole, Role
 from ..models import (
@@ -54,6 +55,7 @@ def _user_row(db, u: User) -> dict:
     reseller = db.get(User, sub.reseller_id) if sub and sub.reseller_id else None
     locked = u.locked_until and (u.locked_until if u.locked_until.tzinfo else u.locked_until.replace(tzinfo=dt.timezone.utc)) > dt.datetime.now(dt.timezone.utc)
     return dict(id=u.id, name=u.name, email=u.email, phone=u.phone, level=_level(db, u), active=u.is_active,
+                superadmin_by_server=u.email.lower() in get_settings().superadmins,
                 locked=bool(locked), totp=u.totp_enabled, last_login_at=u.last_login_at, created_at=u.created_at,
                 commission_pct=float(u.reseller_commission_pct or 0) if u.platform_role == "RESELLER" else None,
                 plan=P.current(db, u.id).plan if sub else None, reseller=reseller.name if reseller else None,
@@ -276,6 +278,10 @@ class PlatformRoleIn(BaseModel):
 @router.put("/users/{user_id}/platform-role")
 def set_platform_role(user_id: str, data: PlatformRoleIn, db: DB, me: SuperAdmin, request: Request):
     u = _get_user(db, user_id)
+    if data.role != "SUPERADMIN" and u.email.lower() in get_settings().superadmins:
+        # otherwise the next request would silently make them super admin again (see deps.current_user)
+        raise HTTPException(400, f"{u.email} is a super admin set in the server configuration (SUPERADMIN_EMAILS). "
+                                 "Remove it there and restart the server, then change the role here.")
     if u.platform_role == "SUPERADMIN" and data.role != "SUPERADMIN":
         if u.id == me.id:
             raise HTTPException(400, "You cannot remove your own super admin access")
