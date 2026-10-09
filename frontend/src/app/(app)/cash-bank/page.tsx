@@ -1,5 +1,6 @@
 "use client";
 
+import { IfscInput } from "@/components/IfscInput";
 import { ArrowLeftRight, Banknote, Landmark, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -194,7 +195,10 @@ export default function CashBankPage() {
             {draft.type === "BANK" && (
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Bank name"><Input value={draft.bank_name} onChange={(e) => setDraft({ ...draft, bank_name: e.target.value })} /></Field>
-                <Field label="IFSC"><Input value={draft.ifsc} maxLength={11} className="uppercase" onChange={(e) => setDraft({ ...draft, ifsc: e.target.value.toUpperCase() })} /></Field>
+                <Field label="IFSC" className="col-span-2 sm:col-span-1">
+                  <IfscInput value={draft.ifsc} onChange={(v) => setDraft((d) => d && { ...d, ifsc: v })}
+                    onFound={(i) => setDraft((d) => d && { ...d, bank_name: i.bank ?? d.bank_name, name: d.name || `${i.bank ?? "Bank"} A/c` })} />
+                </Field>
                 <Field label="Account no." className="col-span-2"><Input value={draft.account_no} onChange={(e) => setDraft({ ...draft, account_no: e.target.value })} /></Field>
               </div>
             )}

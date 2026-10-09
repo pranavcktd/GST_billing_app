@@ -1,5 +1,6 @@
 "use client";
 
+import { IfscInput, branchText } from "@/components/IfscInput";
 import { ArrowLeft, ArrowRight, BadgeCheck, Building2, FileX2, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { ImageUpload } from "@/components/ImageUpload";
@@ -304,7 +305,10 @@ export function BusinessForm({
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Bank name"><Input {...text("bank_name")} /></Field>
           <Field label="Account number"><Input {...text("bank_account_no")} /></Field>
-          <Field label="IFSC"><Input maxLength={11} className="uppercase" {...text("bank_ifsc")} /></Field>
+          <Field label="IFSC" hint="Type the IFSC — bank name and branch fill in automatically">
+            <IfscInput value={b.bank_ifsc ?? ""} onChange={(v) => set("bank_ifsc", v as never)}
+              onFound={(i) => { if (i.bank) set("bank_name", i.bank as never); set("bank_branch", branchText(i) as never); }} />
+          </Field>
           <Field label="Branch"><Input {...text("bank_branch")} /></Field>
           <Field label="UPI ID" hint="e.g. shopname@okicici"><Input {...text("upi_id")} /></Field>
         </div>
