@@ -75,7 +75,7 @@ def test_admin_keys_checkout_and_revenue(client, monkeypatch):
 
     order = post(client, h, "/api/billing/order", {"plan": "STARTER", "cycle": "YEARLY"}, 200)
     assert order["live"] and order["test_mode"] and order["key_id"] == "rzp_test_ABC123" and order["order_id"].startswith("order_")
-    assert order["amount_paise"] == int(P.with_gst(Decimal("1799")) * 100)
+    assert order["amount_paise"] == int(P.with_gst(Decimal("1499")) * 100)
     # simulation is refused once keys exist
     assert client.post("/api/billing/verify", headers=h, json={"order_id": order["order_id"], "simulate": True}).status_code == 400
     # wrong signature

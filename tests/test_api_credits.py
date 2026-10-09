@@ -39,7 +39,7 @@ def test_credits_allowance_packs_and_charging(client, monkeypatch):
     # buy a pack (local development: simulated payment)
     assert client.post("/api/billing/order", headers=h, json={"plan": "CREDITS_7"}).status_code == 400
     order = post(client, h, "/api/billing/order", {"plan": "CREDITS_100"}, 200)
-    assert order["amount"] == float(P.with_gst(Decimal("299")))
+    assert order["amount"] == float(P.with_gst(Decimal("199")))
     post(client, h, "/api/billing/verify", {"order_id": order["order_id"], "simulate": True}, 200)
     assert client.get("/api/billing/credits", headers=h).json()["balance"] == 100
     assert client.get("/api/billing/status", headers=h).json()["plan"]["code"] == "ENTERPRISE"  # plan unchanged

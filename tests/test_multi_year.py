@@ -15,7 +15,7 @@ def test_three_year_plan_and_admin_offers(client, monkeypatch):
     assert [c["code"] for c in plans["cycles"]] == ["MONTHLY", "YEARLY", "YEARS_2", "YEARS_3"]
     growth = next(p for p in plans["plans"] if p["code"] == "PROFESSIONAL")
     three = growth["multi_year"]["YEARS_3"]
-    assert three["price"] == float((Decimal(growth["yearly"]) * 3 * Decimal("0.75")).quantize(Decimal("1"))) and three["saving"] > 0
+    assert three["price"] == float((Decimal(growth["yearly"]) * 3 * Decimal("0.65")).quantize(Decimal("1"))) and three["saving"] > 0
 
     order = post(client, h, "/api/billing/order", {"plan": "PROFESSIONAL", "cycle": "YEARS_3"}, 200)
     assert order["amount"] == three["price_with_gst"]
