@@ -159,3 +159,33 @@ def test_super_admin_switches_excel_backup(client, monkeypatch):
     client.put(f"/api/admin/businesses/{bid}/excel-backup", headers=root, json={"enabled": None})
     row = next(x for x in client.get("/api/admin/businesses", headers=root).json() if x["id"] == bid)
     assert row["excel_backup"] is None and row["excel_backup_on"] is False
+
+
+def test_zip_of_extracted_folder(client):
+    """People extract the zip, edit a file, and zip the whole folder again: files then sit inside a folder."""
+    from tests.test_api_flow import make_business, signup
+
+    h = make_business(client, signup(client, "folder@x.in"))
+    post(client, h, "/api/expenses/items", {"name": "Tea", "category_id": client.get("/api/expenses/categories", headers=h).json()[0]["id"]})
+    blob = _zip(client, h)
+    z = zipfile.ZipFile(io.BytesIO(blob))
+    biz_file = next(n for n in z.namelist() if "Business details" in n)
+    wb = load_workbook(io.BytesIO(z.read(biz_file)))
+    ws = wb["Data"]
+    ws.cell(row=2, column=[c.value for c in ws[1]].index("Address") + 1, value="Shop 20, New Market Road")
+    buf = io.BytesIO()
+    wb.save(buf)
+    auth = {"Authorization": h["Authorization"]}
+    for keep_manifest in (True, False):  # without the manifest, files are recognised by their names
+        out = io.BytesIO()
+        with zipfile.ZipFile(out, "w") as o:
+            for n in z.namelist():
+                if n == "manifest.json" and not keep_manifest:
+                    continue
+                o.writestr(f"My backup/{n}", buf.getvalue() if n == biz_file else z.read(n))
+        r = _restore(client, auth, out.getvalue(), name=f"Folder {keep_manifest}")
+        assert r.status_code == 201, r.text
+        assert r.json()["method"] == "excel"
+        h2 = {**auth, "X-Business-Id": r.json()["id"]}
+        assert client.get("/api/businesses/current", headers=h2).json()["address"] == "Shop 20, New Market Road"
+        assert [e["name"] for e in client.get("/api/expenses/items", headers=h2).json()].count("Tea") == 1

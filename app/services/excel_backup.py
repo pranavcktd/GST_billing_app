@@ -339,13 +339,14 @@ def _entity_of(name: str, manifest: dict) -> str | None:
     if name in manifest.get("files", {}):
         return manifest["files"][name]["entity"]
     low = name.lower()
-    guesses = [("business", "business"), ("bank", "accounts"), ("customer", "parties"), ("supplier", "parties"),
-               ("part", "parties"), ("item", "items"), ("hsn", "hsn"), ("expense item", "expense-items"),
-               ("purchase order", "purchase-orders"), ("purchase", "purchases"), ("debit", "debit-notes"),
-               ("sale order", "sale-orders"), ("sales", "sales"), ("invoice", "sales"), ("credit", "credit-notes"),
-               ("estimate", "estimates"), ("quotation", "estimates"), ("challan", "delivery-challans"),
-               ("expense", "expenses"), ("stock", "stock"), ("received", "payments-in"), ("made", "payments-out"),
-               ("staff", "staff"), ("employee", "staff"), ("attendance", "attendance"), ("payroll", "payroll")]
+    # most specific first: "Expense items" before "items", "Credit notes (sales returns)" before "sales" …
+    guesses = [("attendance", "attendance"), ("payroll", "payroll"), ("business", "business"), ("bank", "accounts"),
+               ("expense item", "expense-items"), ("hsn", "hsn"), ("credit note", "credit-notes"), ("debit note", "debit-notes"),
+               ("purchase order", "purchase-orders"), ("sale order", "sale-orders"), ("estimate", "estimates"),
+               ("quotation", "estimates"), ("challan", "delivery-challans"), ("payments received", "payments-in"),
+               ("payments made", "payments-out"), ("stock adjust", "stock"), ("customer", "parties"), ("supplier", "parties"),
+               ("part", "parties"), ("item", "items"), ("purchase", "purchases"), ("sales", "sales"), ("invoice", "sales"),
+               ("expense", "expenses"), ("staff", "staff"), ("employee", "staff")]
     return next((e for k, e in guesses if k in low), None)
 
 
@@ -359,9 +360,15 @@ def restore_zip(db: Session, user: User, blob: bytes, name: str | None = None, m
         z = zipfile.ZipFile(io.BytesIO(blob))
     except zipfile.BadZipFile as e:
         raise HTTPException(400, "This is not a valid .zip file") from e
-    names = [n for n in z.namelist() if not n.endswith("/")]
-    manifest = json.loads(z.read("manifest.json")) if "manifest.json" in names else {}
-    xlsx = {n.rsplit("/", 1)[-1]: z.read(n) for n in names if n.lower().endswith(".xlsx") and not n.rsplit("/", 1)[-1].startswith("~$")}
+    # files may sit inside a folder (zipping the extracted folder); Mac zips add __MACOSX/ copies
+    names = [n for n in z.namelist() if not n.endswith("/") and "__MACOSX" not in n]
+    base = lambda n: n.replace("\\", "/").rsplit("/", 1)[-1]  # noqa: E731
+    man = next((n for n in names if base(n) == "manifest.json"), None)
+    try:
+        manifest = json.loads(z.read(man)) if man else {}
+    except ValueError:
+        manifest = {}
+    xlsx = {base(n): z.read(n) for n in names if n.lower().endswith(".xlsx") and not base(n).startswith("~$")}
     exact = next((z.read(n) for n in names if n.lower().endswith(".gstbak")), None)
     edited = [n for n, b in xlsx.items()
               if hashlib.sha256(b).hexdigest() != (manifest.get("files", {}).get(n) or {}).get("sha256")]
@@ -472,7 +479,10 @@ def _restore_excel(db: Session, user: User, xlsx: dict[str, bytes], manifest: di
                     errs = _import_staff(ctx, rows)
                     summary[fname] = f"{len(rows)} employees"
                 else:
-                    s, _, errs = IM.import_rows(ctx, ent, rows)
+                    try:
+                        s, _, errs = IM.import_rows(ctx, ent, rows)
+                    except Exception as e:  # noqa: BLE001 — never a server error for a bad file
+                        s, errs = "", [{"row": None, "message": f"Could not read this file ({type(e).__name__}: {e})"}]
                     summary[fname] = s
                 errors += [{"file": fname, **e} for e in errs]
         if not errors:
