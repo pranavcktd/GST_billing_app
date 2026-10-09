@@ -9,6 +9,7 @@ import { useFetch } from "@/lib/useFetch";
 
 export interface AdminUser {
   id: string; name: string; email: string; phone: string | null; level: string; active: boolean; locked: boolean; totp: boolean;
+  superadmin_by_server?: boolean;
   last_login_at: string | null; created_at: string; commission_pct: number | null; plan: string | null; reseller: string | null;
   memberships: { business_id: string; business: string; role: string; owner: boolean }[];
 }
@@ -100,8 +101,14 @@ export function AdminUsers({ onChanged }: { onChanged?: () => void }) {
             {menu.locked && <Action icon={Lock} label="Unlock (clear failed sign-ins)" onClick={() => { run(() => api(`/admin/users/${menu.id}/unlock`, { body: {} })); setMenu(null); }} />}
             {menu.totp && <Action icon={ShieldOff} label="Turn off two-factor sign-in (lost phone)" onClick={() => { run(() => api(`/admin/users/${menu.id}/reset-2fa`, { body: {} })); setMenu(null); }} />}
             <Action icon={LogOut} label="Sign out of all devices" onClick={() => { run(() => api(`/admin/users/${menu.id}/sign-out`, { body: {} })); setMenu(null); }} />
+            {menu.superadmin_by_server && (
+              <p className="rounded-lg bg-purple-50 px-3 py-2 text-xs text-purple-900">
+                <b>Super admin set by the server configuration</b> (SUPERADMIN_EMAILS). To change this person&apos;s role, remove the
+                e-mail from that setting and restart the server first — otherwise they become super admin again at the next sign-in.
+              </p>
+            )}
             <div className="grid grid-cols-3 gap-2 pt-1">
-              {(["SUPERADMIN", "RESELLER", null] as const).map((r) => (
+              {(["SUPERADMIN", "RESELLER", null] as const).filter((r) => !menu.superadmin_by_server || r === "SUPERADMIN").map((r) => (
                 <Button key={r ?? "none"} variant="secondary" className="!text-xs" disabled={(menu.level === r) || (r === null && !["SUPERADMIN", "RESELLER"].includes(menu.level))}
                   onClick={() => { run(() => api(`/admin/users/${menu.id}/platform-role`, { method: "PUT", body: { role: r } })); setMenu(null); }}>
                   {r === null ? "Remove platform role" : `Make ${LEVELS[r].toLowerCase()}`}
