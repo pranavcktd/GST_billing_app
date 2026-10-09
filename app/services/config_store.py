@@ -136,6 +136,9 @@ FIELDS: list[Field] = [
           "Each filing: code, name, authority, who it applies to, frequency, due date rule and the penalty text "
           "shown when it is late. {late_fee_per_day} and {interest_rate} are replaced with the values above. "
           "When the government extends a due date, add a version from the relevant date with the new rule."),
+    Field("compliance_extensions", "Compliance calendar", "Due-date extensions (one period)", "json", [],
+          "When the government extends a due date for one period: filing code, period, new due date and the "
+          "notification / circular reference. The calendar shows the new date and the reason."),
     # ---- external portals (every "open portal" button in the app reads these)
     Field("links", "Portals & links", "Government portals and external links", "map_text", dict(LINKS),
           "Where the app's portal buttons go. If a department moves a page, change the address here — every user "
@@ -213,7 +216,7 @@ def app_name() -> str:
     return effective()["brand"].get("app_name") or "SmartHisab"
 
 
-SERVER_ONLY = {"compliance_rules"}  # large and only used by the server — not sent with /api/meta
+SERVER_ONLY = {"compliance_rules", "compliance_extensions"}  # large and only used by the server — not sent with /api/meta
 
 
 def public(on: dt.date | None = None, full: bool = False) -> dict:
@@ -327,6 +330,12 @@ def clean_values(values: dict) -> dict:
                     v = json.loads(v)
                 except ValueError as e:
                     raise ConfigError(f"{f.label}: not valid JSON ({e})") from None
+            if key == "compliance_extensions":
+                from .compliance_calendar import clean_extensions  # local import: that module reads this one
+                try:
+                    v = clean_extensions(v)
+                except (ValueError, TypeError) as e:
+                    raise ConfigError(f"{f.label}: {e}") from None
             if key == "compliance_rules":
                 from .compliance_calendar import clean_rules  # local import: that module reads this one
                 try:

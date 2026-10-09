@@ -24,7 +24,7 @@ from decimal import Decimal
 
 from . import config_store as C
 
-from .compliance_rules import COMPANIES, DEFAULT_RULES  # noqa: F401 — re-exported
+from .compliance_rules import COMPANIES, DEFAULT_RULES, with_defaults  # noqa: F401 — re-exported
 
 AUTHORITIES = {"GST": "GST", "INCOME_TAX": "Income tax", "TDS": "TDS", "MCA": "Company law (MCA)",
                "LLP": "LLP (MCA)", "PAYROLL": "PF / ESI"}
@@ -45,6 +45,47 @@ def enabled_laws() -> list[str]:
     except KeyError:
         v = None
     return [x for x in (v or LAWS) if x in LAWS]
+
+
+# ================================================================ one-off extensions
+def extensions() -> dict[tuple[str, str], dict]:
+    """(rule code, period key) → {due_date, note} from the super admin's extension list."""
+    try:
+        rows = C.get("compliance_extensions") or []
+    except KeyError:
+        rows = []
+    return {(e["code"], e["period_key"]): e for e in rows if e.get("code") and e.get("period_key") and e.get("due_date")}
+
+
+def _extend(rule: dict, o: dict, ext: dict) -> dict:
+    e = ext.get((rule["code"], o["period_key"]))
+    if not e:
+        return o
+    return {**o, "due_date": dt.date.fromisoformat(str(e["due_date"])[:10]), "extended_from": o["due_date"],
+            "extension_note": e.get("note") or "Due date extended by the government"}
+
+
+def clean_extensions(rows) -> list[dict]:
+    if rows in (None, ""):
+        return []
+    if not isinstance(rows, list):
+        raise ValueError("Extensions must be a list")
+    out, seen = [], set()
+    for e in rows:
+        if not isinstance(e, dict):
+            raise ValueError("Each extension must be an object")
+        code, key = str(e.get("code") or "").strip(), str(e.get("period_key") or "").strip()
+        if not code or not key:
+            raise ValueError("Each extension needs a filing and a period")
+        try:
+            due = dt.date.fromisoformat(str(e.get("due_date"))[:10])
+        except ValueError:
+            raise ValueError(f"{code} {key}: the new due date is not a valid date") from None
+        if (code, key) in seen:
+            raise ValueError(f"{code} {key} is extended twice")
+        seen.add((code, key))
+        out.append({"code": code, "period_key": key, "due_date": due.isoformat(), "note": str(e.get("note") or "").strip()[:300]})
+    return out
 
 
 # ================================================================ helpers
@@ -192,11 +233,15 @@ def calendar_for(biz, rules: list[dict], done: dict[tuple[str, str], dict], toda
     start = today - dt.timedelta(days=460)
     end = today + dt.timedelta(days=ahead_days)
     items = []
-    for rule in rules:
+    ext = extensions()
+    for rule in with_defaults(rules):
         if not applies(rule, biz, s):
             continue
         fee = _fee_per_day(rule)
-        for o in occurrences(rule, biz.state_code, start, end):
+        for o in occurrences(rule, biz.state_code, start - dt.timedelta(days=200), end):
+            o = _extend(rule, o, ext)
+            if not start <= o["due_date"] <= end:
+                continue
             rec = done.get((rule["code"], o["period_key"]))
             if _before_registration(o, reg) or (not rec and o["due_date"] < track_from):
                 continue
@@ -211,6 +256,9 @@ def calendar_for(biz, rules: list[dict], done: dict[tuple[str, str], dict], toda
                 days_left=max(-days, 0), done=rec,
                 late_fee_so_far=float(min(fee * days, Decimal(str(rule.get("fee_cap") or fee * days))))
                 if fee is not None and status == "OVERDUE" else None,
+                period_start=o["period_start"], period_end=o["period_end"],
+                nil_check=rule.get("nil_check"), nil_note=render(rule.get("nil_note")) or None, nil=None,
+                extended_from=o.get("extended_from"), extension_note=o.get("extension_note"),
             ))
     order = {"OVERDUE": 0, "DUE_SOON": 1, "UPCOMING": 2, "DONE": 3}
     items.sort(key=lambda x: (order[x["status"]], x["due_date"] if x["status"] != "DONE" else -x["due_date"].toordinal()))
@@ -260,11 +308,13 @@ def register(biz, rules: list[dict], done: dict[tuple[str, str], dict], fy: int,
     track_from = dt.date.fromisoformat(s["track_from"])
     fy_start, fy_end = dt.date(fy, 4, 1), dt.date(fy + 1, 3, 31)
     rows = []
-    for rule in rules:
+    ext = extensions()
+    for rule in with_defaults(rules):
         if rule.get("authority") != law or not applies(rule, biz, s):
             continue
         fee = _fee_per_day(rule)
         for o in occurrences(rule, biz.state_code, fy_start, dt.date(fy + 2, 12, 31)):
+            o = _extend(rule, o, ext)
             if not (fy_start <= o["period_start"] <= fy_end) or _before_registration(o, registration_date(biz)):
                 continue
             rec = done.get((rule["code"], o["period_key"]))
@@ -282,7 +332,9 @@ def register(biz, rules: list[dict], done: dict[tuple[str, str], dict], fy: int,
                 penalty=render(rule.get("penalty")) if st == "OVERDUE" else None,
                 late_fee_so_far=float(min(fee * days, Decimal(str(rule.get("fee_cap") or fee * days))))
                 if fee is not None and st == "OVERDUE" else None,
-                link=rule.get("link"),
+                link=rule.get("link"), period_end=o["period_end"],
+                nil_check=rule.get("nil_check"), nil_note=render(rule.get("nil_note")) or None, nil=None,
+                extended_from=o.get("extended_from"), extension_note=o.get("extension_note"),
             ))
     rows.sort(key=lambda r: (r["period_start"], r["due_date"]))
     columns = []
