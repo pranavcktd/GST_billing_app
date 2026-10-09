@@ -1,6 +1,6 @@
 "use client";
 
-import { DatabaseBackup, Download, RotateCcw, Trash2, Upload } from "lucide-react";
+import { Database, DatabaseBackup, Download, RotateCcw, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Button, Card, ErrorBox, Field, Input, Loading, Select } from "@/components/ui";
@@ -62,6 +62,8 @@ export function AdminBackups() {
           <div className="font-semibold text-gray-900">Full platform</div>
           <p className="text-xs text-gray-500">Every account, business, user and setting.</p>
           <Button className="w-full" disabled={busy} onClick={() => run(() => api("/admin/backups", { body: { scope: "FULL" } }), "Full backup created")}><DatabaseBackup size={15} /> Back up now</Button>
+          <Button variant="secondary" className="w-full" disabled={busy} title="Plain PostgreSQL file (data only) — for the database administrator"
+            onClick={() => run(() => downloadFile("/admin/backups/sql"), "Database exported (.sql)")}><Database size={15} /> Download database (.sql)</Button>
           <label className="flex items-center gap-2 text-xs text-gray-600">
             <input type="checkbox" checked={data.auto_full_backup} onChange={(e) => run(() => api("/admin/backups/auto", { method: "PUT", body: { enabled: e.target.checked } }), "Setting saved")} />
             Automatic daily (last 7 kept)

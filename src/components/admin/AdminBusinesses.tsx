@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowRightLeft } from "lucide-react";
+import { ArrowRightLeft, Eraser } from "lucide-react";
+import { DataWipeDialog } from "@/components/DataWipeDialog";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Button, Card, ErrorBox, Field, Input, Loading } from "@/components/ui";
@@ -19,6 +20,7 @@ export function AdminBusinesses() {
   const [transfer, setTransfer] = useState<Biz | null>(null);
   const [email, setEmail] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [wipe, setWipe] = useState<Biz | null>(null);
   const { data: excelDefault, setData: setExcelDefault } = useFetch<{ default: boolean }>("/admin/excel-backup");
 
   async function setExcel(b: Biz, v: string) {
@@ -64,13 +66,17 @@ export function AdminBusinesses() {
                     <span className={`ml-1.5 text-xs ${b.excel_backup_on ? "text-emerald-700" : "text-gray-400"}`}>{b.excel_backup_on ? "●" : "○"}</span>
                   </td>
                   <td className="text-xs">{new Date(b.created_at).toLocaleDateString("en-IN")}</td>
-                  <td className="text-right"><Button variant="secondary" className="!py-1" onClick={() => { setTransfer(b); setEmail(""); setErr(null); }}><ArrowRightLeft size={14} /> Transfer</Button></td>
+                  <td className="whitespace-nowrap text-right">
+                    <Button variant="secondary" className="!py-1" onClick={() => { setTransfer(b); setEmail(""); setErr(null); }}><ArrowRightLeft size={14} /> Transfer</Button>
+                    <Button variant="danger" className="ml-1 !py-1" onClick={() => setWipe(b)}><Eraser size={14} /> Clear data</Button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </Card>
+      {wipe && <DataWipeDialog path={`/admin/businesses/${wipe.id}/data-wipe`} onClose={() => { setWipe(null); reload(); }} />}
       {transfer && (
         <Modal title={`Transfer ${transfer.name}`} onClose={() => setTransfer(null)}>
           <div className="space-y-3 text-sm">
