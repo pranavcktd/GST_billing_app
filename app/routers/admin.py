@@ -24,6 +24,7 @@ from ..models import (
 )
 from ..security import hash_password
 from ..services import backup as bk
+from ..services import excel_backup as XB
 from ..services import config_store, mailer
 from ..services import plans as P
 from ..services.platform_audit import log
@@ -325,8 +326,38 @@ def businesses(db: DB, _: SuperAdmin, search: str | None = None):
         out.append(dict(id=b.id, name=b.name, gstin=b.gstin, created_at=b.created_at,
                         owner=owner.name if owner else None, owner_email=owner.email if owner else None,
                         members=db.scalar(select(func.count(Membership.id)).where(Membership.business_id == b.id)),
-                        backups=db.scalar(select(func.count(Backup.id)).where(Backup.business_id == b.id))))
+                        backups=db.scalar(select(func.count(Backup.id)).where(Backup.business_id == b.id)),
+                        excel_backup=b.excel_backup, excel_backup_on=XB.allowed(db, b)))
     return out
+
+
+class ExcelBackupIn(BaseModel):
+    enabled: bool | None = None  # None = follow the platform default
+
+
+@router.get("/excel-backup")
+def excel_backup_default(db: DB, _: SuperAdmin):
+    return {"default": XB.platform_default(db)}
+
+
+@router.put("/excel-backup")
+def set_excel_backup_default(data: ExcelBackupIn, db: DB, me: SuperAdmin, request: Request):
+    XB.set_platform_default(db, bool(data.enabled))
+    log(db, me, "CONFIG", "excel-backup", f"Excel backups for all businesses by default: {'on' if data.enabled else 'off'}", request=request)
+    db.commit()
+    return {"default": XB.platform_default(db)}
+
+
+@router.put("/businesses/{business_id}/excel-backup")
+def set_business_excel_backup(business_id: str, data: ExcelBackupIn, db: DB, me: SuperAdmin, request: Request):
+    biz = db.get(Business, business_id)
+    if not biz:
+        raise HTTPException(404, "Business not found")
+    biz.excel_backup = data.enabled
+    state = "platform default" if data.enabled is None else ("on" if data.enabled else "off")
+    log(db, me, "CONFIG", "excel-backup", f"Excel backups for {biz.name}: {state}", business_id=biz.id, request=request)
+    db.commit()
+    return {"excel_backup": biz.excel_backup, "excel_backup_on": XB.allowed(db, biz)}
 
 
 class TransferIn(BaseModel):

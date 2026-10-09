@@ -191,7 +191,7 @@ def save_voucher(ctx: Ctx, data: VoucherIn, voucher: Voucher | None = None) -> V
             raise bad("The source document is cancelled or already converted")
 
     godown = resolve_godown(db, ctx.bid, data.godown_id) if meta["stock"] else None
-    if voucher is None and vtype == VoucherType.SALE:
+    if voucher is None and vtype == VoucherType.SALE and not ctx.restoring:
         check_invoice_limit(db, ctx.bid)
     custom_keys = {f["key"] for f in ((biz.print_settings or {}).get("custom_fields") or [])}
     extra = {k: v for k, v in (data.extra_fields or {}).items() if k in custom_keys and v} or None

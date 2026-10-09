@@ -64,6 +64,7 @@ class Ctx:
     membership: Membership
     perms: dict = field(default_factory=dict)
     approval_pin: str | None = None
+    restoring: bool = False  # re-creating existing records from a backup: plan invoice limits do not apply
 
     @property
     def bid(self) -> str:

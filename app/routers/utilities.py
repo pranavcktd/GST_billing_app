@@ -14,6 +14,7 @@ from ..deps import DB, BCtx, CurrentUser
 from ..gst.constants import GST_RATES, Role
 from ..models import Backup, Business, HsnCode, Item, Membership, User
 from ..services import backup as bk
+from ..services import excel_backup as xb
 from ..services.importer import ENTITIES, run_import, template
 from ..permissions import ACTIONS, DEFAULTS, FLAGS, MODULES, ROLE_LABELS, effective, normalise
 from ..services.plans import check_backup_quota, check_business_limit, check_user_limit, require_feature
@@ -156,7 +157,13 @@ def update_tax_slab(data: SlabUpdate, ctx: BCtx):
 # ---------------------------------------------------------------- backup & restore
 def _backup_out(b: Backup, biz_name: str) -> dict:
     return dict(id=b.id, kind=b.kind, size=b.size, created_at=b.created_at, emailed_to=b.emailed_to,
-                filename=bk.filename(biz_name, b.created_at))
+                filename=bk.filename(biz_name, b.created_at), excel_filename=xb.zip_name(biz_name, b.created_at))
+
+
+@router.get("/backups/settings")
+def backup_settings(ctx: BCtx):
+    """Which backup options the super admin has enabled for this business."""
+    return {"excel": xb.allowed(ctx.db, ctx.business)}
 
 
 @router.get("/backups")
@@ -190,6 +197,18 @@ def download_backup(backup_id: str, ctx: BCtx):
                     headers={"Content-Disposition": f'attachment; filename="{bk.filename(ctx.business.name, b.created_at)}"'})
 
 
+@router.get("/backups/{backup_id}/excel")
+def download_backup_excel(backup_id: str, ctx: BCtx):
+    """The backup as a .zip of Excel files (plus the exact backup inside, so the zip can be restored too)."""
+    ctx.need("backup", "export")
+    xb.require(ctx.db, ctx.business)
+    b = ctx.db.get(Backup, backup_id)
+    if not b or b.business_id != ctx.bid:
+        raise HTTPException(404, "Backup not found")
+    return Response(xb.build_zip(b.data), media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{xb.zip_name(ctx.business.name, b.created_at)}"'})
+
+
 @router.delete("/backups/{backup_id}", status_code=204)
 def delete_backup(backup_id: str, ctx: BCtx):
     ctx.need("backup", "delete")
@@ -201,15 +220,27 @@ def delete_backup(backup_id: str, ctx: BCtx):
 
 
 @router.post("/backups/restore", status_code=201)
-async def restore_backup(db: DB, user: CurrentUser, file: UploadFile = File(...), name: str | None = Form(None)):
-    """Restore a backup file as a NEW company owned by the current user (live data is never overwritten)."""
+async def restore_backup(db: DB, user: CurrentUser, file: UploadFile = File(...), name: str | None = Form(None),
+                         mode: Literal["auto", "exact", "excel"] = Form("auto"), dry_run: bool = Form(False)):
+    """Restore a backup file (.gstbak) or an Excel backup (.zip) as a NEW company owned by the current user
+    (live data is never overwritten). `dry_run` checks an Excel restore and saves nothing."""
     blob = await file.read()
     if len(blob) > 200 * 1024 * 1024:
         raise HTTPException(400, "Backup file is too large")
     check_business_limit(db, user.id)
+    if xb.is_zip(blob):
+        if not xb.allowed_for_user(db, user):
+            raise HTTPException(403, "Restoring Excel backups is not enabled for your account — ask the platform administrator.")
+        res = xb.restore_zip(db, user, blob, name, mode, dry_run)
+        if not res["ok"] and not dry_run:
+            raise HTTPException(422, {"message": "The Excel files have errors — nothing was restored", "code": "RESTORE_ERRORS",
+                                      "errors": res["errors"], "summary": res.get("summary")})
+        if res.get("business_id") and res["method"] == "exact":
+            db.commit()
+        return {"id": res.get("business_id"), "name": res.get("business_name"), **res}
     biz = bk.restore_as_new(db, blob, user.id, name)
     db.commit()
-    return {"id": biz.id, "name": biz.name}
+    return {"id": biz.id, "name": biz.name, "method": "exact", "ok": True}
 
 
 @router.post("/backups/{backup_id}/restore", status_code=201)
