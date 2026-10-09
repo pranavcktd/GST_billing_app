@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AuthCard } from "@/components/AuthCard";
+import { GoogleButton } from "@/components/GoogleButton";
 import { Button, ErrorBox, Field, Input } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -82,6 +83,7 @@ export default function LoginPage() {
 
   return (
     <AuthCard title="Welcome back" sub="Sign in to manage your billing">
+      {!needOtp && <GoogleButton text="signin_with" />}
       <form onSubmit={submit} className="space-y-4">
         {waLogin && !needOtp && (
           <div className="flex rounded-lg bg-gray-100 p-1">

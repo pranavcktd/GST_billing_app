@@ -11,6 +11,7 @@ from .config import get_settings
 from . import audit
 from .deps import DB
 from .services import config_store
+from .services import signup as signup_service
 from .services import whatsapp as wa_service
 from .routers import (
     auth,
@@ -131,6 +132,7 @@ def meta(db: DB):
         "units": [{"code": c, "name": n} for c, n in cfg["uqc"].items()],
         "config": cfg,
         "whatsapp": wa_service.flags(db),
+        "signup": signup_service.flags(db),
     }
 
 

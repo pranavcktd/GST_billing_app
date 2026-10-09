@@ -103,7 +103,7 @@ export function AdminWhatsApp() {
           {tpl("reminder", "Payment reminder template", "Utility · {{1}} customer {{2}} amount due {{3}} business {{4}} link")}
           <h3 className="pt-2 font-semibold">Sign-in</h3>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.login_enabled} onChange={(e) => set("login_enabled", e.target.checked)} /> Offer “Sign in with WhatsApp”</label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.signup_verify} onChange={(e) => set("signup_verify", e.target.checked)} /> New accounts must verify their mobile on WhatsApp</label>
+          <p className="text-xs text-gray-500">How new accounts are verified (WhatsApp / e-mail / Google) is set in the “Sign-up &amp; sign-in” card above.</p>
         </Card>
       </div>
       <div className="flex flex-wrap items-end justify-between gap-3">

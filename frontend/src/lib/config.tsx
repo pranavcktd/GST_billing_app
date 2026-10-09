@@ -14,6 +14,7 @@ import { GST_RATES, STATES, UNITS } from "@/lib/constants";
 
 export interface AppConfig {
   whatsapp?: { login: boolean; signup_verify: boolean; send: boolean; sandbox?: boolean };
+  signup?: { verify: string[]; google_client_id: string | null };
   gst_rates: number[]; b2cl_limit: number; invoice_number_max_len: number; ewb_threshold: number; ewb_km_per_day?: number;
   einvoice_turnover_limit: number; composition_rates: Record<string, number>; hsn_digits_small: number;
   hsn_digits_large: number; late_fee_per_day: number; interest_rate: number; gstr1_due_day: number;
@@ -96,7 +97,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
       .then((r) => (r.ok ? r.json() : null))
       .then((meta) => {
         if (!alive || !meta?.config) return;
-        const next: AppConfig = { ...DEFAULT_CONFIG, ...meta.config, whatsapp: meta.whatsapp };
+        const next: AppConfig = { ...DEFAULT_CONFIG, ...meta.config, whatsapp: meta.whatsapp, signup: meta.signup };
         const text = JSON.stringify(next);
         try { localStorage.setItem(KEY, text); } catch { /* private mode */ }
         if (text === JSON.stringify(initial)) return;
