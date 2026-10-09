@@ -287,6 +287,36 @@ def credit_pack(plan: str) -> int | None:
     return None
 
 
+def multi_year_offers() -> dict[int, Decimal]:
+    """Years → % off the yearly price (Admin → GST config → Subscription & company)."""
+    from . import config_store
+
+    try:
+        offers = config_store.get("multi_year_offers") or {}
+    except KeyError:
+        offers = {}
+    return {int(k): Decimal(str(v)) for k, v in sorted(offers.items(), key=lambda kv: int(kv[0])) if str(k).isdigit()}
+
+
+def cycle_years(cycle: str) -> int | None:
+    """YEARS_3 → 3 (a multi-year plan paid upfront); None for other cycles."""
+    if cycle.startswith("YEARS_") and cycle[6:].isdigit():
+        return int(cycle[6:])
+    return None
+
+
+def multi_year_price(plan: str, years: int) -> Decimal:
+    """Price before GST of `years` years paid upfront, rounded to the rupee."""
+    disc = multi_year_offers().get(years)
+    if disc is None:
+        raise HTTPException(400, f"A {years}-year plan is not offered")
+    return (Decimal(PLANS[plan]["yearly"]) * years * (100 - disc) / 100).quantize(Decimal("1"))
+
+
+def cycle_days(cycle: str) -> int:
+    return 365 * (cycle_years(cycle) or 1) if cycle != "MONTHLY" else 30
+
+
 def price(plan: str, cycle: str) -> Decimal:
     if plan == ADDON["code"]:
         return with_gst(ADDON["yearly"])
@@ -300,6 +330,9 @@ def price(plan: str, cycle: str) -> Decimal:
         return with_gst(Decimal(str(packs[n])))
     if plan not in PLANS or plan == "FREE":
         raise HTTPException(400, "Choose a paid plan")
+    years = cycle_years(cycle)
+    if years:
+        return with_gst(multi_year_price(plan, years))
     if cycle not in ("MONTHLY", "YEARLY"):
         raise HTTPException(400, "Invalid billing cycle")
     return with_gst(PLANS[plan]["monthly" if cycle == "MONTHLY" else "yearly"])
@@ -400,6 +433,6 @@ def activate(db: Session, pay: SubscriptionPayment, payment_id: str) -> Subscrip
 
         api_credits.add(db, pay.account_id, credit_pack(pay.plan), "PACK", f"Bought {credit_pack(pay.plan)} credits")
     else:
-        extend(sub, pay.plan, 365 if pay.cycle == "YEARLY" else 30)
+        extend(sub, pay.plan, cycle_days(pay.cycle))
     db.flush()
     return sub
