@@ -22,6 +22,7 @@ export interface Rule {
   due: DueSpec; months_in_quarter?: number[];
   month_overrides?: Record<string, DueSpec>; quarter_overrides?: Record<string, DueSpec>;
   fee_per_day?: number | string | null; fee_cap?: number | null;
+  nil_check?: "gst" | "payroll" | "tds" | null; nil_note?: string | null;
 }
 
 const LAWS: Record<string, string> = { GST: "GST", INCOME_TAX: "Income tax", TDS: "TDS", MCA: "Company law (MCA)", LLP: "LLP (MCA)", PAYROLL: "EPF / ESI", OTHER: "Other" };
@@ -166,6 +167,15 @@ function RuleForm({ initial, codes, links, onCancel, onSave }: {
           <Field label="If filed late (penalty / consequence)" className="sm:col-span-3"
             hint="Write {late_fee_per_day} or {interest_rate} to show the current values from the GST rules section.">
             <Textarea rows={2} value={r.penalty ?? ""} onChange={(e) => setR({ ...r, penalty: e.target.value })} />
+          </Field>
+          <Field label="Nil return note" className="sm:col-span-2" hint="Shown on the filing; highlighted when the app finds no activity for the period.">
+            <Textarea rows={2} value={r.nil_note ?? ""} onChange={(e) => setR({ ...r, nil_note: e.target.value || null })} />
+          </Field>
+          <Field label="Check for activity in">
+            <Select value={r.nil_check ?? ""} onChange={(e) => setR({ ...r, nil_check: (e.target.value || null) as Rule["nil_check"] })}>
+              <option value="">Do not check</option><option value="gst">Sales / purchases / expenses</option>
+              <option value="payroll">Payroll for the month</option><option value="tds">TDS deducted on payments</option>
+            </Select>
           </Field>
           <Field label="Portal button opens">
             <Select value={r.link ?? ""} onChange={(e) => setR({ ...r, link: e.target.value || null })}>

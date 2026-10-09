@@ -18,6 +18,7 @@ interface Item {
   code: string; name: string; authority: string; authority_label: string; description: string; penalty: string;
   link: string | null; period_key: string; period: string; due_date: string; status: Status; days_overdue: number;
   days_left: number; late_fee_so_far: number | null;
+  nil?: boolean | null; nil_note?: string | null; extended_from?: string | null; extension_note?: string | null;
   done: { id: string; done_on: string; reference: string | null; note: string | null; by: string | null; source?: string } | null;
 }
 interface Settings {
@@ -106,14 +107,14 @@ export default function CompliancePage() {
       <PageHeader title="Compliance calendar"
         sub={`${ENTITY_TYPES[data.entity_type] ?? data.entity_type} · ${GST_LABEL[data.gst_type] ?? data.gst_type} — returns and filings that apply to you, with due dates`}
         actions={<>
-          {sync?.available && (
+          {sync?.available && (tab === "TODO" || tab === "GST") && (
             <Button onClick={runSync} disabled={syncing} title="Fetches the filing status of your GST returns from the GST portal. Years already complete are not fetched again.">
               <RefreshCw size={16} className={syncing ? "animate-spin" : ""} /> {syncing ? "Syncing…" : "Sync GST returns"}
             </Button>
           )}
           <Button variant="secondary" onClick={() => setProfile(true)}><Settings2 size={16} /> Your compliance profile</Button>
         </>} />
-      {(syncMsg || sync?.last_sync_at) && (
+      {(syncMsg || sync?.last_sync_at) && (tab === "TODO" || tab === "GST") && (
         <p className="mb-3 text-xs text-gray-600">
           {syncMsg && <b className="mr-2 text-gray-900">{syncMsg}</b>}
           {sync?.last_sync_at && `Last synced ${new Date(sync.last_sync_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}. `}
@@ -186,6 +187,17 @@ export default function CompliancePage() {
                   </div>
                   <div className="mt-1 font-medium text-gray-900">{i.name} <span className="font-normal text-gray-500">— {i.period}</span></div>
                   <div className="text-sm text-gray-600">Due {fmtDate(i.due_date)} · {i.description}</div>
+                  {i.extended_from && (
+                    <div className="mt-1.5 rounded-md bg-sky-50 px-3 py-1.5 text-xs text-sky-900">
+                      <b>Due date extended</b> from {fmtDate(i.extended_from)} to {fmtDate(i.due_date)}{i.extension_note ? ` — ${i.extension_note}` : ""}
+                    </div>
+                  )}
+                  {i.status !== "DONE" && i.nil && (
+                    <div className="mt-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+                      <b>No activity found in the app for this period — a nil return is likely needed.</b> {i.nil_note}
+                    </div>
+                  )}
+                  {(i.status === "DUE_SOON" || i.status === "OVERDUE") && !i.nil && i.nil !== false && i.nil_note && <div className="mt-1 text-xs text-gray-500">Nil period? {i.nil_note}</div>}
                   {i.status === "OVERDUE" && (
                     <div className="mt-2 rounded-md bg-red-50 px-3 py-2 text-xs text-red-800">
                       <b>If not filed:</b> {i.penalty}
