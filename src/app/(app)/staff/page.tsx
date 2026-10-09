@@ -1,5 +1,6 @@
 "use client";
 
+import { IfscInput } from "@/components/IfscInput";
 import { CalendarDays, Pencil, Plus, Trash2, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -141,7 +142,10 @@ function EmployeeForm({ initial, onClose, onSaved }: { initial: Partial<Employee
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Bank" info={false}><Input {...t("bank_name")} /></Field>
           <Field label="Account no." info={false}><Input {...t("bank_account")} /></Field>
-          <Field label="IFSC" info={false}><Input {...t("bank_ifsc")} className="uppercase" maxLength={11} /></Field>
+          <Field label="IFSC" info={false}>
+            <IfscInput value={f.bank_ifsc ?? ""} onChange={(v) => setF((x) => ({ ...x, bank_ifsc: v }))}
+              onFound={(i) => setF((x) => ({ ...x, bank_name: i.bank ?? x.bank_name }))} />
+          </Field>
         </div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.is_active ?? true} onChange={(e) => setF({ ...f, is_active: e.target.checked })} /> Active (still working here)</label>
         <div className="flex justify-between gap-2">
