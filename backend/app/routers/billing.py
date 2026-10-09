@@ -19,9 +19,22 @@ from ..services import razorpay_cfg as rz
 router = APIRouter(prefix="/billing", tags=["billing"])
 
 
+def _multi_year(code: str) -> dict:
+    p = P.PLANS[code]
+    if not p["yearly"]:
+        return {}
+    out = {}
+    for years, disc in P.multi_year_offers().items():
+        total = P.multi_year_price(code, years)
+        out[f"YEARS_{years}"] = dict(years=years, discount_pct=float(disc), price=float(total),
+                                     price_with_gst=float(P.with_gst(total)), per_year=float(total / years),
+                                     saving=float(Decimal(p["yearly"]) * years - total))
+    return out
+
+
 def _plan_out(code: str) -> dict:
     p = P.PLANS[code]
-    return dict(code=code, name=p["name"], audience=p["audience"], highlights=p["highlights"],
+    return dict(code=code, name=p["name"], audience=p["audience"], highlights=p["highlights"], multi_year=_multi_year(code),
                 monthly=float(p["monthly"]), yearly=float(p["yearly"]),
                 monthly_with_gst=float(P.with_gst(p["monthly"])), yearly_with_gst=float(P.with_gst(p["yearly"])),
                 **{k: p[k] for k in ("invoices_per_month", "invoices_per_year", "businesses", "users", "godowns",
@@ -32,7 +45,9 @@ def _plan_out(code: str) -> dict:
 @router.get("/plans")
 def plans():
     """Public — used by the landing / pricing page."""
-    return {"plans": [_plan_out(c) for c in P.ORDER], "trial_days": int(config_store.get("trial_days")), "trial_plan": P.TRIAL_PLAN,
+    cycles = [{"code": "MONTHLY", "label": "Monthly"}, {"code": "YEARLY", "label": "Yearly"}] + [
+        {"code": f"YEARS_{y}", "label": f"{y} years", "years": y, "discount_pct": float(d)} for y, d in P.multi_year_offers().items()]
+    return {"plans": [_plan_out(c) for c in P.ORDER], "cycles": cycles, "trial_days": int(config_store.get("trial_days")), "trial_plan": P.TRIAL_PLAN,
             "gst_rate": float(config_store.get("subscription_gst_rate")),
             "addon": {"code": P.ADDON["code"], "name": P.ADDON["name"], "yearly": float(P.ADDON["yearly"]),
                       "yearly_with_gst": float(P.with_gst(P.ADDON["yearly"]))},
@@ -63,7 +78,7 @@ def status(ctx: BCtx):
 
 class OrderIn(BaseModel):
     plan: str = Field(pattern=r"^(STARTER|PROFESSIONAL|ENTERPRISE|ADDON_BUSINESSES|CREDITS_\d{1,6})$")
-    cycle: Literal["MONTHLY", "YEARLY"] = "YEARLY"
+    cycle: str = Field("YEARLY", pattern=r"^(MONTHLY|YEARLY|YEARS_[2-5])$")
 
 
 @router.post("/order")

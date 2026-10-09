@@ -146,6 +146,9 @@ FIELDS: list[Field] = [
     # ---- billing & brand
     Field("subscription_gst_rate", "Subscription & company", "GST on subscription fees (%)", "number", 18),
     Field("trial_days", "Subscription & company", "Free trial days", "int", 14),
+    Field("multi_year_offers", "Subscription & company", "Multi-year plans (years = % off the yearly price)", "map_number",
+          {"2": 15, "3": 25},
+          "Paid upfront: price = yearly price × years − this discount. Years 2 to 5. Remove a line to stop offering it."),
     Field("brand", "Subscription & company", "Product brand", "map_text",
           {"app_name": "SmartHisab", "by_line": "by Corenexgen",
            "tagline": "Billing, stock and accounts — made simple for Indian businesses"},
@@ -355,6 +358,8 @@ def clean_values(values: dict) -> dict:
                     _num(x, f"{f.label} {k}") if f.type == "map_number" else str(x).strip())
             if key == "links" and any(not x.startswith(("https://", "http://")) or " " in x for x in m.values()):
                 raise ConfigError("Links must be full web addresses starting with https://")
+            if key == "multi_year_offers" and any(not k.isdigit() or not 2 <= int(k) <= 5 or not 0 <= float(v) < 100 for k, v in m.items()):
+                raise ConfigError("Multi-year plans: each line is YEARS = DISCOUNT %, years 2 to 5, discount 0 to 99")
             if key == "api_credit_packs" and any(not k.isdigit() or int(k) <= 0 for k in m):
                 raise ConfigError("Credit packs: each line is CREDITS = PRICE, e.g. 100 = 299")
             if key == "states" and any(not (c.isdigit() and len(c) == 2) for c in m):

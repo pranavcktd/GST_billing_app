@@ -2,7 +2,7 @@
 
 import { Coins, Crown, PlusCircle } from "lucide-react";
 import { useState } from "react";
-import { type PlanOut, PlanCards } from "@/components/PlanCards";
+import { type Cycle, type PlanOut, CycleToggle, PlanCards } from "@/components/PlanCards";
 import { Button, Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -17,7 +17,7 @@ interface Status {
   payments_live: boolean; dev_mode: boolean; test_mode: boolean;
   payments: { id: string; plan: string; cycle: string; amount: number; status: string; payment_id: string | null; mode: string | null; method: string | null; created_at: string }[];
 }
-interface Plans { plans: PlanOut[]; trial_days: number; addon: { code: string; name: string; yearly: number; yearly_with_gst: number } }
+interface Plans { plans: PlanOut[]; cycles?: Cycle[]; trial_days: number; addon: { code: string; name: string; yearly: number; yearly_with_gst: number } }
 interface Credits {
   allowance: number; used_this_month: number; free_left: number; balance: number; api_enabled: boolean;
   costs: Record<string, number>; actions: Record<string, string>;
@@ -58,7 +58,7 @@ export default function BillingPage() {
   const { data: st, error, reload } = useFetch<Status>("/billing/status");
   const { data: plans } = useFetch<Plans>("/billing/plans");
   const { data: credits, reload: reloadCredits } = useFetch<Credits>("/billing/credits");
-  const [cycle, setCycle] = useState<"MONTHLY" | "YEARLY">("YEARLY");
+  const [cycle, setCycle] = useState<string>("YEARLY");
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [now] = useState(() => Date.now());
@@ -66,7 +66,7 @@ export default function BillingPage() {
   if (error) return <ErrorBox message={error} />;
   if (!st || !plans) return <Loading />;
 
-  async function buy(plan: string, c: "MONTHLY" | "YEARLY") {
+  async function buy(plan: string, c: string) {
     setErr(null); setMsg(null);
     try {
       const order = await api<Order>("/billing/order", { body: { plan, cycle: c } });
@@ -79,7 +79,7 @@ export default function BillingPage() {
         await new Promise<void>((resolve, reject) => {
           const rzp = new window.Razorpay!({
             key: order.key_id, order_id: order.order_id, amount: order.amount_paise, currency: "INR",
-            name: APP_NAME, description: plan.startsWith("CREDITS_") ? `${plan.slice(8)} API credits` : `${plan} plan — ${c.toLowerCase()}`,
+            name: APP_NAME, description: plan.startsWith("CREDITS_") ? `${plan.slice(8)} API credits` : `${plan} plan — ${c.startsWith("YEARS_") ? `${c.slice(6)} years` : c.toLowerCase()}`,
             prefill: { email: order.email, contact: order.phone ?? "" }, theme: { color: "#1f65bb" },
             handler: async (r: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
               try {
@@ -144,13 +144,7 @@ export default function BillingPage() {
 
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-900">Plans</h2>
-        <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 text-sm">
-          {(["MONTHLY", "YEARLY"] as const).map((c) => (
-            <button key={c} onClick={() => setCycle(c)} className={`rounded-md px-4 py-1.5 ${cycle === c ? "bg-brand-600 text-white" : "text-gray-700"}`}>
-              {c === "MONTHLY" ? "Monthly" : "Yearly (save ~25%)"}
-            </button>
-          ))}
-        </div>
+        <CycleToggle cycles={plans.cycles} value={cycle} onChange={setCycle} />
       </div>
       <PlanCards plans={plans.plans} cycle={cycle} current={st.status === "TRIAL" ? undefined : p.code}
         onChoose={st.is_owner ? (pl) => buy(pl.code, cycle) : undefined} />
@@ -224,7 +218,7 @@ export default function BillingPage() {
             <tbody>
               {st.payments.map((x) => (
                 <tr key={x.id}>
-                  <td>{new Date(x.created_at).toLocaleDateString("en-IN")}</td><td>{x.plan}</td><td>{x.cycle}</td>
+                  <td>{new Date(x.created_at).toLocaleDateString("en-IN")}</td><td>{x.plan}</td><td>{x.cycle.startsWith("YEARS_") ? `${x.cycle.slice(6)} years` : x.cycle.toLowerCase()}</td>
                   <td className="num">{money(x.amount)}</td><td>{x.status}{x.mode === "TEST" ? " · test" : x.mode === "DEV" ? " · simulated" : ""}{x.method ? ` · ${x.method}` : ""}</td><td className="font-mono text-xs">{x.payment_id}</td>
                 </tr>
               ))}

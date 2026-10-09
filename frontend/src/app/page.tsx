@@ -30,7 +30,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { BrandLogo } from "@/components/BrandLogo";
-import { type PlanOut, PlanCards } from "@/components/PlanCards";
+import { type Cycle, type PlanOut, CycleToggle, PlanCards } from "@/components/PlanCards";
 import { Loading } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { useConfig } from "@/lib/config";
@@ -43,7 +43,7 @@ import { useFetch } from "@/lib/useFetch";
  */
 
 interface PlansData {
-  plans: PlanOut[]; trial_days: number;
+  plans: PlanOut[]; cycles?: Cycle[]; trial_days: number;
   credit_packs?: { credits: number; price: number }[]; credit_costs?: Record<string, number>;
 }
 
@@ -336,7 +336,7 @@ export default function Landing() {
   const router = useRouter();
   const config = useConfig();
   const { data } = useFetch<PlansData>("/billing/plans");
-  const [cycle, setCycle] = useState<"MONTHLY" | "YEARLY">("YEARLY");
+  const [cycle, setCycle] = useState<string>("YEARLY");
   const name = config.brand?.app_name || "SmartHisab";
   const trial = data?.trial_days ?? config.trial_days ?? 14;
   const cheapest = data?.plans.filter((p) => p.yearly > 0).sort((a, b) => a.yearly - b.yearly)[0];
@@ -476,13 +476,7 @@ export default function Landing() {
               <h2 className="mt-2 text-3xl font-bold text-gray-900 sm:text-4xl">Unlimited bills on every paid plan</h2>
               <p className="mt-2 text-gray-600">One plan covers your whole account. Upgrade or downgrade any time. Prices exclude GST.</p>
             </div>
-            <div className="inline-flex rounded-xl bg-gray-100 p-1 text-sm">
-              {(["MONTHLY", "YEARLY"] as const).map((c) => (
-                <button key={c} onClick={() => setCycle(c)} className={`rounded-lg px-4 py-1.5 font-medium ${cycle === c ? "bg-white text-gray-900 shadow-sm" : "text-gray-600"}`}>
-                  {c === "MONTHLY" ? "Monthly" : <>Yearly <span className="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-700">save ~25%</span></>}
-                </button>
-              ))}
-            </div>
+            <CycleToggle cycles={data?.cycles} value={cycle} onChange={setCycle} />
           </Reveal>
           {data ? (
             <PlanCards plans={data.plans} cycle={cycle} cta={(p) => (
