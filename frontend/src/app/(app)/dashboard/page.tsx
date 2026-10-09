@@ -1,9 +1,12 @@
 "use client";
 
-import { AlertTriangle, Banknote, Boxes, Landmark, Receipt } from "lucide-react";
+import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Banknote, Boxes, CalendarDays, HandCoins, Landmark, Receipt,
+  ReceiptIndianRupee, ShoppingCart, Sparkles, TrendingUp, Wallet } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
+import { useAuth, usePerms } from "@/lib/auth";
 import { TrendChart } from "@/components/TrendChart";
-import { Card, ErrorBox, Loading, PageHeader, StatusBadge } from "@/components/ui";
+import { Card, ErrorBox, Loading, StatusBadge } from "@/components/ui";
 import { KINDS, kindOf } from "@/lib/constants";
 import { fmtDate, money, qty } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
@@ -23,16 +26,77 @@ interface Dashboard {
   recent: Voucher[];
 }
 
-function Tile({ label, value, href, sub }: { label: string; value: number | null; href?: string; sub?: string }) {
+const TONES = {
+  indigo: "from-indigo-500 to-violet-500 shadow-indigo-500/30", emerald: "from-emerald-500 to-teal-500 shadow-emerald-500/30",
+  amber: "from-amber-400 to-orange-500 shadow-amber-500/30", sky: "from-sky-500 to-cyan-500 shadow-sky-500/30",
+  rose: "from-rose-500 to-pink-500 shadow-rose-500/30", slate: "from-slate-600 to-slate-800 shadow-slate-500/30",
+};
+
+function Tile({ label, value, href, sub, icon: Icon, tone }: {
+  label: string; value: number | null; href?: string; sub?: string; icon: React.ElementType; tone: keyof typeof TONES;
+}) {
   if (value === null) return null;
   const body = (
-    <Card className="h-full p-4 transition-colors hover:border-gray-300">
-      <div className="text-xs font-medium text-gray-500">{label}</div>
-      <div className="mt-1 text-xl font-semibold text-gray-900 tabular-nums">{money(value)}</div>
+    <Card className="group h-full p-4 transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-100">
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-xs font-medium text-gray-500">{label}</div>
+        <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-md ${TONES[tone]}`}>
+          <Icon size={16} aria-hidden />
+        </span>
+      </div>
+      <div className="mt-1 text-xl font-semibold tracking-tight text-gray-900 tabular-nums">{money(value)}</div>
       {sub && <div className="mt-0.5 text-xs text-gray-500">{sub}</div>}
     </Card>
   );
   return href ? <Link href={href}>{body}</Link> : body;
+}
+
+function Welcome({ salesToday }: { salesToday: number | null }) {
+  const { me, business } = useAuth();
+  const { can } = usePerms();
+  const [now] = useState(() => new Date());
+  const h = now.getHours();
+  const hello = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+  const first = (me?.user.name ?? "").split(" ")[0];
+  const actions = [
+    { href: "/v/sales/new", label: "New sale", icon: ReceiptIndianRupee, ok: can("sales", "create") },
+    { href: "/v/purchases/new", label: "Purchase", icon: ShoppingCart, ok: can("purchases", "create") },
+    { href: "/payments/in", label: "Receive payment", icon: HandCoins, ok: can("payments_in", "create") },
+    { href: "/v/expenses/new", label: "Add expense", icon: Wallet, ok: can("expenses", "create") },
+  ].filter((a) => a.ok);
+  return (
+    <div className="relative mb-5 overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-indigo-800 p-5 text-white shadow-xl shadow-indigo-500/20 sm:p-7">
+      <div aria-hidden className="pointer-events-none absolute -top-16 -right-10 h-56 w-56 rounded-full bg-amber-300/25 blur-3xl" />
+      <div aria-hidden className="pointer-events-none absolute -bottom-20 left-1/3 h-56 w-56 rounded-full bg-sky-400/20 blur-3xl" />
+      <div className="relative flex flex-wrap items-end justify-between gap-5">
+        <div>
+          <p className="flex items-center gap-1.5 text-sm text-indigo-100"><CalendarDays size={15} aria-hidden />
+            {now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{hello}{first ? `, ${first}` : ""}</h1>
+          <p className="mt-1 text-sm text-indigo-100">{business?.name}{salesToday !== null ? <> · Sales today <b className="text-white">{money(salesToday)}</b></> : null}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {actions.map(({ href, label, icon: Icon }) => (
+            <Link key={label} href={href} className="inline-flex items-center gap-1.5 rounded-xl bg-white/15 px-3.5 py-2 text-sm font-medium ring-1 ring-white/25 backdrop-blur transition hover:bg-white/25">
+              <Icon size={16} aria-hidden /> {label}
+            </Link>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CardTitle({ icon: Icon, tone, children, right }: { icon: React.ElementType; tone: keyof typeof TONES; children: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <h2 className="mb-3 flex items-center justify-between gap-2 font-semibold text-gray-900">
+      <span className="flex items-center gap-2">
+        <span className={`inline-flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br text-white ${TONES[tone]}`}><Icon size={14} aria-hidden /></span>
+        {children}
+      </span>
+      {right}
+    </h2>
+  );
 }
 
 export default function DashboardPage() {
@@ -43,25 +107,22 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Dashboard" sub="Your business at a glance" />
+      <Welcome salesToday={data.sales_today} />
       <ComplianceAlert />
       <EinvoiceAlert />
       <RateNotices />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        <Tile label="Sales today" value={data.sales_today} href="/v/sales" />
-        <Tile label="Sales this month" value={data.sales_month} href="/v/sales" sub="net of credit notes" />
-        <Tile label="Purchases this month" value={data.purchases_month} href="/v/purchases" />
-        <Tile label="Received this month" value={data.received_month} href="/payments/in" />
-        <Tile label="To collect" value={data.receivable} href="/reports/outstanding" sub="receivable" />
-        <Tile label="To pay" value={data.payable} href="/reports/outstanding" sub="payable" />
+        <Tile label="Sales today" value={data.sales_today} href="/v/sales" icon={Sparkles} tone="indigo" />
+        <Tile label="Sales this month" value={data.sales_month} href="/v/sales" sub="net of credit notes" icon={TrendingUp} tone="emerald" />
+        <Tile label="Purchases this month" value={data.purchases_month} href="/v/purchases" icon={ShoppingCart} tone="sky" />
+        <Tile label="Received this month" value={data.received_month} href="/payments/in" icon={HandCoins} tone="slate" />
+        <Tile label="To collect" value={data.receivable} href="/reports/outstanding" sub="receivable" icon={ArrowDownLeft} tone="amber" />
+        <Tile label="To pay" value={data.payable} href="/reports/outstanding" sub="payable" icon={ArrowUpRight} tone="rose" />
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-3">
         {data.cash_bank && <Card className="p-5">
-          <h2 className="mb-3 flex items-center justify-between font-semibold text-gray-900">
-            <span className="flex items-center gap-2"><Landmark size={16} className="text-gray-500" aria-hidden /> Cash & bank</span>
-            <span className="tabular-nums">{money(data.cash_bank.total)}</span>
-          </h2>
+          <CardTitle icon={Landmark} tone="indigo" right={<span className="tabular-nums">{money(data.cash_bank.total)}</span>}>Cash & bank</CardTitle>
           <ul className="divide-y divide-gray-100 text-sm">
             {data.cash_bank.accounts.map((a) => (
               <li key={a.id} className="flex justify-between py-2">
@@ -79,10 +140,7 @@ export default function DashboardPage() {
           )}
         </Card>}
         <Card className="p-5">
-          <h2 className="mb-3 flex items-center justify-between font-semibold text-gray-900">
-            <span className="flex items-center gap-2"><Boxes size={16} className="text-gray-500" aria-hidden /> Inventory</span>
-            <Link href="/reports/r/stock-summary" className="text-xs font-normal text-brand-600 hover:underline">Stock summary</Link>
-          </h2>
+          <CardTitle icon={Boxes} tone="sky" right={<Link href="/reports/r/stock-summary" className="text-xs font-normal text-brand-600 hover:underline">Stock summary</Link>}>Inventory</CardTitle>
           <dl className="grid grid-cols-2 gap-3 text-sm">
             <div><dt className="text-xs text-gray-500">Stock value (cost)</dt><dd className="font-semibold tabular-nums">{data.inventory.value === null ? "—" : money(data.inventory.value)}</dd></div>
             <div><dt className="text-xs text-gray-500">At sale price</dt><dd className="font-semibold tabular-nums">{money(data.inventory.sale_value)}</dd></div>
@@ -98,10 +156,7 @@ export default function DashboardPage() {
           </dl>
         </Card>
         {data.expenses && <Card className="p-5">
-          <h2 className="mb-3 flex items-center justify-between font-semibold text-gray-900">
-            <span className="flex items-center gap-2"><Receipt size={16} className="text-gray-500" aria-hidden /> Expenses this month</span>
-            <span className="tabular-nums">{money(data.expenses.month)}</span>
-          </h2>
+          <CardTitle icon={Receipt} tone="rose" right={<span className="tabular-nums">{money(data.expenses.month)}</span>}>Expenses this month</CardTitle>
           {data.expenses.top.length === 0 ? (
             <p className="text-sm text-gray-500">No expenses recorded this month. <Link href="/v/expenses/new" className="text-brand-600 hover:underline">Add expense</Link></p>
           ) : (
@@ -110,7 +165,7 @@ export default function DashboardPage() {
                 <li key={e.category}>
                   <div className="flex justify-between"><span className="text-gray-700">{e.category}</span><span className="tabular-nums">{money(e.amount)}</span></div>
                   <div className="mt-1 h-1.5 rounded-full bg-gray-100">
-                    <div className="h-1.5 rounded-full bg-gray-400" style={{ width: `${Math.max(4, (e.amount / (data.expenses?.month || 1)) * 100)}%` }} />
+                    <div className="h-1.5 rounded-full bg-gradient-to-r from-rose-400 to-pink-500" style={{ width: `${Math.max(4, (e.amount / (data.expenses?.month || 1)) * 100)}%` }} />
                   </div>
                 </li>
               ))}
@@ -121,13 +176,11 @@ export default function DashboardPage() {
 
       <div className="mt-5 grid gap-5 lg:grid-cols-3">
         <Card className="p-5 lg:col-span-2">
-          <h2 className="mb-3 font-semibold text-gray-900">Sales, purchases & expenses — last 6 months</h2>
+          <CardTitle icon={TrendingUp} tone="emerald">Sales, purchases & expenses — last 6 months</CardTitle>
           {data.trend.length ? <TrendChart data={data.trend.map((t) => ({ ...t, purchases: t.purchases ?? 0, expenses: t.expenses ?? 0 }))} /> : <p className="text-sm text-gray-500">Not available for your role.</p>}
         </Card>
         <Card className="p-5">
-          <h2 className="mb-3 flex items-center gap-2 font-semibold text-gray-900">
-            <AlertTriangle size={16} className="text-amber-600" aria-hidden /> Low stock
-          </h2>
+          <CardTitle icon={AlertTriangle} tone="amber">Low stock</CardTitle>
           {data.low_stock.length === 0 ? (
             <p className="text-sm text-gray-500">No items below their low-stock level.</p>
           ) : (

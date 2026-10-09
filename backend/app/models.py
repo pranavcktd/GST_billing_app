@@ -154,6 +154,8 @@ class Business(Base):
     stock_control: Mapped[str] = mapped_column(String(5), default="WARN", server_default="WARN")
     # Excel backups (.zip) — set by the super admin: None = platform default, True / False = this business only
     excel_backup: Mapped[bool | None] = mapped_column(Boolean)
+    # GST filing-status sync — set by the super admin: None = platform default, True / False = this business only
+    filing_sync: Mapped[bool | None] = mapped_column(Boolean)
     # payroll defaults: weekly offs, holidays, salary basis — see services/payroll.py
     payroll_settings: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)

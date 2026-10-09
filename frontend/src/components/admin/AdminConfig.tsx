@@ -7,6 +7,7 @@ import { api, qs } from "@/lib/api";
 import { fmtDate } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 import { ComplianceLawSwitches, ComplianceRulesEditor, type Rule } from "@/components/admin/ComplianceRulesEditor";
+import { ComplianceExtensionsEditor, type Extension } from "@/components/admin/ComplianceExtensionsEditor";
 
 type FieldType = "money" | "int" | "number" | "text" | "bool" | "rates" | "list" | "map_text" | "map_number" | "json";
 interface ConfigField { key: string; group: string; label: string; type: FieldType; default: unknown; help: string }
@@ -129,6 +130,20 @@ export function AdminConfig() {
                   <div key={f.key} className="md:col-span-2">
                     <div className="mb-1 text-xs font-medium text-gray-600">{f.label}{dirty ? " •" : ""}</div>
                     <ComplianceLawSwitches laws={laws} onChange={(next) => setEdits({ ...edits, [f.key]: next.join("\n") })} />
+                  </div>
+                );
+              }
+              if (f.key === "compliance_extensions") {
+                let rows: Extension[] = [];
+                let rules: Rule[] = [];
+                try { rows = JSON.parse(value) ?? []; } catch { /* kept as typed */ }
+                try { rules = JSON.parse(edits.compliance_rules ?? current(byKey.compliance_rules ?? f)) ?? []; } catch { /* none */ }
+                return (
+                  <div key={f.key} className="md:col-span-2">
+                    <div className="mb-1 text-xs font-medium text-gray-600">{f.label}{dirty ? " •" : ""}</div>
+                    <p className="mb-2 text-xs text-gray-500">{f.help}</p>
+                    <ComplianceExtensionsEditor rows={rows} rules={Array.isArray(rules) ? rules : []}
+                      onChange={(next) => setEdits({ ...edits, [f.key]: JSON.stringify(next, null, 2) })} />
                   </div>
                 );
               }

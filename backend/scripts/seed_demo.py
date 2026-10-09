@@ -96,7 +96,7 @@ def main(fresh: bool) -> None:
     api("PUT", f"/accounts/{cash['id']}", {"type": "CASH", "name": cash["name"], "opening_balance": 25000,
                                             "opening_date": START.isoformat()})
     bank = api("POST", "/accounts", {"type": "BANK", "name": "HDFC Current A/c", "bank_name": "HDFC Bank",
-                                      "account_no": "50200012345678", "ifsc": "HDFC0000123", "opening_balance": 185000,
+                                      "account_no": "50200012345678", "ifsc": "HDFC0000123", "opening_balance": 600000,
                                       "opening_date": START.isoformat()})
     print("company", name)
 
@@ -317,6 +317,16 @@ def main(fresh: bool) -> None:
     api("POST", f"/payroll/runs/{run['id']}/pay", {"date": TODAY.replace(day=min(7, TODAY.day)).isoformat(), "account_id": bank["id"], "mode": "BANK"})
     api("POST", "/payroll/runs", {"month": TODAY.strftime("%Y-%m")})  # this month, in progress
     print("staff & payroll done")
+
+    # ---------------------------------------------------------------- compliance: profile + past filings done
+    api("PUT", "/compliance/settings", {"gst_filing": "MONTHLY", "tax_audit": False, "tds": True, "pf": True, "esi": True,
+                                        "employees": 4, "track_from": START.isoformat()})
+    overdue = [i for i in api("GET", "/compliance/calendar?ahead_days=30")["items"] if i["status"] == "OVERDUE"]
+    for i in sorted(overdue, key=lambda x: x["due_date"])[:-1]:  # one stays overdue, to show the alert
+        done = dt.date.fromisoformat(i["due_date"]) - dt.timedelta(days=R.randint(1, 4))
+        api("POST", "/compliance/tasks", {"rule_code": i["code"], "period_key": i["period_key"], "done_on": done.isoformat(),
+                                          "reference": f"AA27{done:%m%y}{R.randint(10**6, 10**7)}" if i["authority"] == "GST" else None})
+    print("compliance done")
 
     api("POST", "/backups", {})
     print(f"\nDone. Sign in as {EMAIL} / {PASSWORD} and pick '{name}'.")

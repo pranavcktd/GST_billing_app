@@ -173,19 +173,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen">
       {open && <div className="fixed inset-0 z-30 bg-black/30 lg:hidden" onClick={() => setOpen(false)} />}
       <aside
-        className={`no-print fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-gray-200 bg-white transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
+        className={`no-print fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-gradient-to-b from-slate-950 via-slate-900 to-indigo-950 text-slate-300 transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
-        <div className="flex h-14 items-center justify-between border-b border-gray-100 px-4">
-          <Link href="/dashboard"><BrandLogo size="sm" /></Link>
-          <button className="lg:hidden" onClick={() => setOpen(false)} aria-label="Close menu">
+        <div className="flex h-14 items-center justify-between border-b border-white/10 px-4">
+          <Link href="/dashboard" className="rounded-lg bg-white px-2 py-1"><BrandLogo size="sm" /></Link>
+          <button className="text-slate-300 lg:hidden" onClick={() => setOpen(false)} aria-label="Close menu">
             <X size={20} />
           </button>
         </div>
-        <nav className="flex-1 overflow-y-auto px-3 py-3">
+        <nav className="sidebar-scroll flex-1 overflow-y-auto px-3 py-3">
           {nav.map((group, gi) => (
             <div key={gi} className="mb-3">
               {group.section && (
-                <div className="px-2 pb-1 text-[11px] font-semibold tracking-wider text-gray-400 uppercase">{group.section}</div>
+                <div className="px-2 pt-1 pb-1 text-[10.5px] font-semibold tracking-wider text-slate-500 uppercase">{group.section}</div>
               )}
               {group.items.map(({ href, label, icon: Icon }) => {
                 const active = pathname === href || (pathname.startsWith(href + "/") &&
@@ -195,9 +195,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     key={href}
                     href={href}
                     onClick={() => setOpen(false)}
-                    className={`flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm ${active ? "bg-brand-50 font-medium text-brand-700" : "text-gray-700 hover:bg-gray-50"}`}
+                    className={`group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors ${active
+                      ? "bg-gradient-to-r from-indigo-500 to-violet-500 font-medium text-white shadow-md shadow-indigo-900/40"
+                      : "text-slate-300 hover:bg-white/5 hover:text-white"}`}
                   >
-                    <Icon size={17} />
+                    <Icon size={17} className={active ? "text-white" : "text-slate-400 group-hover:text-white"} />
                     {label}
                   </Link>
                 );
@@ -205,17 +207,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           ))}
         </nav>
-        <div className="border-t border-gray-100 p-3">
-          <div className="truncate px-2 text-sm font-medium text-gray-900">{me.user.name}</div>
-          <div className="truncate px-2 text-xs text-gray-500">{me.user.email}</div>
-          <button onClick={logout} className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-gray-700 hover:bg-gray-50">
+        <div className="border-t border-white/10 p-3">
+          <div className="flex items-center gap-2.5 px-2">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-orange-400 text-xs font-bold text-slate-900">
+              {me.user.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-white">{me.user.name}</div>
+              <div className="truncate text-xs text-slate-400">{me.user.email}</div>
+            </div>
+          </div>
+          <button onClick={logout} className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white">
             <LogOut size={16} /> Sign out
           </button>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="no-print sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-gray-200 bg-white/90 px-4 backdrop-blur">
+        <header className="no-print sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-gray-200/70 bg-white/80 px-4 shadow-[0_1px_12px_rgba(15,23,42,0.04)] backdrop-blur-lg">
           <button className="lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
             <Menu size={22} />
           </button>

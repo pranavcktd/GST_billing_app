@@ -116,10 +116,17 @@ def keys_for(ret: dict) -> list[tuple[str, str]]:
     return []
 
 
+def allowed(db: Session, biz: Business) -> bool:
+    """The super admin's switch: per business (Admin → Businesses), else the platform default (Admin → Integrations)."""
+    if biz.filing_sync is not None:
+        return bool(biz.filing_sync)
+    return bool(G.settings(db).get("filing_sync"))
+
+
 def sync(db: Session, biz: Business, rules: list[dict], user_name: str, today: dt.date | None = None,
          only_fy: int | None = None) -> dict:
     s = G.settings(db)
-    if not (s.get("enabled") and G._key(s)) or not s.get("filing_sync"):
+    if not (s.get("enabled") and G._key(s)) or not allowed(db, biz):
         raise HTTPException(503, "Fetching filing status is not switched on by the platform administrator — mark filings yourself.")
     if not biz.gstin or biz.gst_type.value not in ("REGULAR", "COMPOSITION"):
         raise HTTPException(400, "Only GST-registered businesses (with a GSTIN) can fetch return status.")

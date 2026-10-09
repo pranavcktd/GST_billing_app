@@ -26,6 +26,7 @@ from ..security import hash_password
 from ..services import backup as bk
 from ..services import data_wipe as WIPE
 from ..services import excel_backup as XB
+from ..services import filing_sync as FS
 from ..services import config_store, mailer
 from ..services import plans as P
 from ..services.platform_audit import log
@@ -328,8 +329,26 @@ def businesses(db: DB, _: SuperAdmin, search: str | None = None):
                         owner=owner.name if owner else None, owner_email=owner.email if owner else None,
                         members=db.scalar(select(func.count(Membership.id)).where(Membership.business_id == b.id)),
                         backups=db.scalar(select(func.count(Backup.id)).where(Backup.business_id == b.id)),
-                        excel_backup=b.excel_backup, excel_backup_on=XB.allowed(db, b)))
+                        excel_backup=b.excel_backup, excel_backup_on=XB.allowed(db, b),
+                        filing_sync=b.filing_sync, filing_sync_on=FS.allowed(db, b)))
     return out
+
+
+class SwitchIn(BaseModel):
+    enabled: bool | None = None  # None = follow the platform default
+
+
+@router.put("/businesses/{business_id}/filing-sync")
+def set_business_filing_sync(business_id: str, data: SwitchIn, db: DB, me: SuperAdmin, request: Request):
+    """Turn the 'fetch GST filing status' button on / off for one business (None = platform default)."""
+    biz = db.get(Business, business_id)
+    if not biz:
+        raise HTTPException(404, "Business not found")
+    biz.filing_sync = data.enabled
+    state = "platform default" if data.enabled is None else ("on" if data.enabled else "off")
+    log(db, me, "CONFIG", "filing-sync", f"GST filing status sync for {biz.name}: {state}", business_id=biz.id, request=request)
+    db.commit()
+    return {"filing_sync": biz.filing_sync, "filing_sync_on": FS.allowed(db, biz)}
 
 
 class WipeIn(BaseModel):

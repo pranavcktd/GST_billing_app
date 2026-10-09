@@ -16,7 +16,38 @@ router = APIRouter(prefix="/compliance", tags=["compliance calendar"])
 
 
 def _rules() -> list[dict]:
-    return C.get("compliance_rules") or CC.DEFAULT_RULES
+    return CC.with_defaults(C.get("compliance_rules") or CC.DEFAULT_RULES)
+
+
+def _mark_nil(ctx: BCtx, rows: list[dict]) -> None:
+    """For filings not yet made whose period has ended: did the business have any activity the return covers?
+    nil = True → nothing found in the app for that period, so a nil return is likely needed."""
+    from sqlalchemy import exists, func
+
+    from ..gst.constants import VoucherType as VT
+    from ..models import Payment, PayrollLine, PayrollRun, Voucher
+
+    today = dt.date.today()
+    cache: dict = {}
+    for r in rows:
+        kind = r.get("nil_check")
+        if not kind or r.get("done") or r["period_end"] >= today:
+            continue
+        key = (kind, r["period_start"], r["period_end"])
+        if key not in cache:
+            a, b = r["period_start"], r["period_end"]
+            if kind == "gst":
+                q = exists().where(Voucher.business_id == ctx.bid, Voucher.cancelled.is_(False), Voucher.date >= a, Voucher.date <= b,
+                                   Voucher.type.in_([VT.SALE, VT.SALE_RETURN, VT.PURCHASE, VT.PURCHASE_RETURN, VT.EXPENSE]))
+            elif kind == "payroll":
+                q = exists().where(PayrollRun.business_id == ctx.bid, PayrollRun.month == f"{a:%Y-%m}",
+                                   PayrollRun.id.in_(select(PayrollLine.run_id).where(PayrollLine.net > 0)))
+            elif kind == "tds":
+                q = exists().where(Payment.business_id == ctx.bid, Payment.date >= a, Payment.date <= b, Payment.tds_amount > 0)
+            else:
+                continue
+            cache[key] = not ctx.db.scalar(select(q))
+        r["nil"] = cache[key]
 
 
 def _biz(ctx: BCtx):
@@ -37,7 +68,9 @@ def _done(ctx: BCtx) -> dict[tuple[str, str], dict]:
 @router.get("/calendar")
 def get_calendar(ctx: BCtx, ahead_days: int = 120):
     ctx.need("reports_gst", "view")
-    return CC.calendar_for(_biz(ctx), _rules(), _done(ctx), ahead_days=min(max(ahead_days, 15), 400))
+    out = CC.calendar_for(_biz(ctx), _rules(), _done(ctx), ahead_days=min(max(ahead_days, 15), 400))
+    _mark_nil(ctx, out["items"])
+    return out
 
 
 @router.post("/sync")
@@ -58,6 +91,7 @@ def get_register(ctx: BCtx, law: str = "GST", fy: int | None = None):
     if not 2017 <= fy <= today.year + 1:
         raise HTTPException(422, "Choose a financial year from 2017-18")
     out = CC.register(_biz(ctx), _rules(), _done(ctx), fy, law.upper())
+    _mark_nil(ctx, out["rows"])
     if law.upper() == "GST":
         rows = ctx.db.scalars(select(GstReturnStatus).where(GstReturnStatus.business_id == ctx.bid, GstReturnStatus.fy == out["fy_label"])
                               .order_by(GstReturnStatus.return_period, GstReturnStatus.return_type)).all()
@@ -71,8 +105,10 @@ def get_register(ctx: BCtx, law: str = "GST", fy: int | None = None):
 def sync_available(ctx: BCtx):
     from ..services import gstin_verify as G
 
+    from ..services import filing_sync
+
     s = G.settings(ctx.db)
-    ok = bool(s.get("enabled") and G._key(s) and s.get("filing_sync"))
+    ok = bool(s.get("enabled") and G._key(s) and filing_sync.allowed(ctx.db, ctx.business))
     cs = ctx.business.compliance_settings or {}
     return {"available": ok and bool(ctx.business.gstin) and ctx.business.gst_type.value in ("REGULAR", "COMPOSITION"),
             "last_sync_at": cs.get("last_sync_at"), "min_hours": int(s.get("filing_sync_hours") or 24)}

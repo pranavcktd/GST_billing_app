@@ -16,6 +16,7 @@ interface Done { id: string; done_on: string; reference: string | null; note: st
 interface Row extends Markable {
   frequency: "MONTHLY" | "QUARTERLY" | "YEARLY"; period_start: string; due_date: string; status: St; days_overdue: number;
   days_left: number; done: Done | null; penalty: string | null; late_fee_so_far: number | null; link: string | null;
+  nil?: boolean | null; nil_note?: string | null; extended_from?: string | null; extension_note?: string | null;
 }
 interface PortalRow { return_type: string; return_period: string; status: string | null; filed: boolean; filed_on: string | null; arn: string | null; mode: string | null }
 interface Register {
@@ -61,6 +62,8 @@ function Cell({ r, onMark, onUndo }: { r?: Row; onMark: (r: Row) => void; onUndo
         {r.status === "OVERDUE" ? `Overdue · ${r.days_overdue} day${r.days_overdue === 1 ? "" : "s"}` : r.status === "NOT_TRACKED" ? "Not recorded" : `Due ${fmtDate(r.due_date)}`}
       </div>
       {(r.status === "OVERDUE" || r.status === "NOT_TRACKED") && <div className="text-[11px] text-gray-400">due {fmtDate(r.due_date)}</div>}
+      {r.extended_from && <div className="text-[11px] text-sky-700" title={r.extension_note ?? ""}>extended (was {fmtDate(r.extended_from)})</div>}
+      {r.nil && <div className="text-[11px] font-medium text-amber-700" title={r.nil_note ?? ""}>No activity · nil return</div>}
       {r.late_fee_so_far !== null && <div className="text-[11px] text-red-600" title={r.penalty ?? ""}>late fee ≈ {money(r.late_fee_so_far)}</div>}
       {r.status !== "UPCOMING" && <button className="text-[11px] font-medium text-brand-600 hover:underline" onClick={() => onMark(r)}>Mark filed</button>}
     </div>
@@ -110,7 +113,11 @@ export function ComplianceRegister({ law, version, syncAvailable, onMark, onChan
             <RefreshCw size={15} className={syncing ? "animate-spin" : ""} /> {syncing ? "Fetching…" : `Fetch FY ${fy}-${String(fy + 1).slice(-2)} from GST portal`}
           </Button>
         )}
-        <span className="ml-auto flex items-center gap-2 text-xs text-gray-500"><SourceBadge source="SYNC" /> fetched from the GST portal <SourceBadge source="MANUAL" /> entered by a user</span>
+        {law === "GST" ? (
+          <span className="ml-auto flex items-center gap-2 text-xs text-gray-500"><SourceBadge source="SYNC" /> fetched from the GST portal <SourceBadge source="MANUAL" /> entered by a user</span>
+        ) : (
+          <span className="ml-auto text-xs text-gray-500">There is no public status service for these filings — after filing on the portal, click <b>Mark as filed</b>.</span>
+        )}
       </div>
       {msg && <p className="text-sm font-medium text-gray-800">{msg}</p>}
       <ErrorBox message={error} />
@@ -169,7 +176,7 @@ export function ComplianceRegister({ law, version, syncAvailable, onMark, onChan
             </Card>
           )}
           {data.rows.some((r) => r.status === "NOT_TRACKED") && (
-            <p className="text-xs text-gray-500">“Not recorded” = due before {fmtDate(data.track_from)}, the date tracking starts (change it in Your compliance profile). Mark them filed, or fetch from the GST portal.</p>
+            <p className="text-xs text-gray-500">“Not recorded” = due before {fmtDate(data.track_from)}, the date tracking starts (change it in Your compliance profile). Mark them filed{law === "GST" ? ", or fetch from the GST portal" : ""}.</p>
           )}
         </>
       )}

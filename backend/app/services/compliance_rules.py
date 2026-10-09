@@ -10,6 +10,19 @@ NON_COMPANY = ["PROPRIETORSHIP", "PARTNERSHIP", "LLP", "HUF", "TRUST_SOCIETY", "
 GST_LATE = ("Late fee ₹{late_fee_per_day} per day (₹20 per day for a nil return), up to the maximum fixed for your "
             "turnover; interest at {interest_rate}% a year on tax paid late.")
 
+# Shown on a filing (and highlighted when the app finds no transactions for the period). nil_check says what to look at:
+# "gst" = sales / purchases / expenses, "payroll" = a payroll for the month, "tds" = TDS deducted on payments.
+NIL_GST = ("No sales or purchases in this period? A nil return must still be filed — skipping it attracts a late fee "
+           "(₹20 a day for a nil return) and repeated gaps can block e-way bills.")
+NIL_PF = ("No wages paid this month? While the EPF registration is active, check the EPFO portal for the nil / zero ECR "
+          "option or record why nothing was due — gaps can bring notices.")
+NIL_ESI = ("No wages paid this month? While the ESI registration is active, submit the month as nil on the ESIC portal "
+           "or record why nothing was due.")
+NIL_TDS = ("No TDS deducted this quarter? File the 'declaration for non-filing of TDS statement' on the TRACES / "
+           "income-tax portal so default notices are not issued.")
+NIL = {"GSTR1_M": ("gst", NIL_GST), "GSTR3B_M": ("gst", NIL_GST), "GSTR1_Q": ("gst", NIL_GST), "GSTR3B_Q": ("gst", NIL_GST),
+       "CMP08": ("gst", NIL_GST), "PF": ("payroll", NIL_PF), "ESI": ("payroll", NIL_ESI), "TDS_RET": ("tds", NIL_TDS)}
+
 DEFAULT_RULES: list[dict] = [
     # ------------------------------------------------------------------ GST — regular taxpayers
     dict(code="GSTR1_M", name="GSTR-1 (monthly)", authority="GST", link="gst_returns", frequency="MONTHLY",
@@ -134,3 +147,17 @@ DEFAULT_RULES: list[dict] = [
          description="ESI contribution for the month's wages (ESI applies from 10 employees in most states, for wages up to ₹21,000 a month).",
          penalty="Interest 12% a year and damages on late deposits."),
 ]
+
+for _r in DEFAULT_RULES:
+    if _r["code"] in NIL:
+        _r["nil_check"], _r["nil_note"] = NIL[_r["code"]]
+
+
+def with_defaults(rules: list[dict]) -> list[dict]:
+    """Rules saved by the super admin before nil-return notes existed get the built-in ones (until they set their own)."""
+    out = []
+    for r in rules:
+        if r.get("code") in NIL and "nil_check" not in r and "nil_note" not in r:
+            r = {**r, "nil_check": NIL[r["code"]][0], "nil_note": NIL[r["code"]][1]}
+        out.append(r)
+    return out
