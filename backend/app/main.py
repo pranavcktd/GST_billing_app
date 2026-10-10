@@ -10,13 +10,14 @@ from sqlalchemy.exc import IntegrityError
 from .config import get_settings
 from . import audit
 from .deps import DB
-from .services import config_store
+from .services import config_store, engagement
 from .services import edit_log  # noqa: F401 — registers the audit-trail hook and triggers
 from .services import notify  # noqa: F401 — registers the send-alert-e-mails-after-commit hook
 from .services import signup as signup_service
 from .services import whatsapp as wa_service
 from .routers import (
     admin_payments,
+    analytics,
     auth,
     helpdesk,
     support,
@@ -85,7 +86,7 @@ async def security_headers(request: Request, call_next):
 
 
 def _backup_loop():
-    """Hourly: automatic full backup (daily), recurring invoices, payment reminders (daily)."""
+    """Hourly: automatic full backup (daily), recurring invoices, payment reminders (daily), old analytics removed."""
     import time
 
     from .db import SessionLocal
@@ -110,6 +111,12 @@ def _backup_loop():
             maybe_run_daily(db)
         except Exception:  # noqa: BLE001
             logging.getLogger("gst_billing").exception("payment reminders failed")
+            db.rollback()
+        try:
+            from .routers.analytics import purge_old
+            purge_old(db)  # analytics older than the kept period
+        except Exception:  # noqa: BLE001
+            logging.getLogger("gst_billing").exception("analytics clean-up failed")
         finally:
             db.close()
 
@@ -128,7 +135,7 @@ async def integrity_error(_: Request, exc: IntegrityError):
     return JSONResponse(status_code=409, content={"detail": msg})
 
 
-for r in (admin_payments, notifications, helpdesk, support, team, auth, payroll, businesses, compliance, compliance_calendar, documents, dsc, gstin, integrations, mail, manufacturing, practice, privacy, price_lists, recurring, reminders, search, site, staff, parties, items, vouchers, payments, reports, uploads, cashbank, loans, expenses,
+for r in (admin_payments, analytics, notifications, helpdesk, support, team, auth, payroll, businesses, compliance, compliance_calendar, documents, dsc, gstin, integrations, mail, manufacturing, practice, privacy, price_lists, recurring, reminders, search, site, staff, parties, items, vouchers, payments, reports, uploads, cashbank, loans, expenses,
           utilities, godowns, einvoice, billing, exports, platform, admin, smtp, sharing, whatsapp):
     app.include_router(r.router, prefix="/api")
 
@@ -143,6 +150,7 @@ def meta(db: DB):
         "config": cfg,
         "whatsapp": wa_service.flags(db),
         "signup": signup_service.flags(db),
+        **engagement.public(db),  # analytics on/off, live chat (tawk.to) widget
     }
 
 

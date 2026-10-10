@@ -3,13 +3,14 @@
 import { AlarmClock, ArrowRight, Boxes, Check, ChevronDown, Coins, Sparkles, Truck, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { type Cycle, type PlanOut, CycleToggle, PlanCards } from "@/components/PlanCards";
 import { Loading } from "@/components/ui";
 import { useAuth } from "@/lib/auth";
 import { useConfig } from "@/lib/config";
 import { money } from "@/lib/format";
+import { trackEvent } from "@/lib/track";
 import { useFetch } from "@/lib/useFetch";
 import {
   type Card as CardText, type DayItem, type Faq as FaqItem, type FeatureGroup, CHECK_ICONS, DAY_ICONS, FEATURE_ICONS, fillLanding,
@@ -247,6 +248,19 @@ export default function Landing() {
   try { saved = site?.body ? JSON.parse(site.body) : null; } catch { saved = null; }
   const c = mergeLanding(saved);
   const t = (x: string) => fillLanding(x, { brand: name, trial });
+  // plan interest (Admin → Analytics): the pricing section was actually seen
+  const seenPricing = useRef(false);
+  const pricingRef = useCallback((el: HTMLElement | null) => {
+    if (!el || seenPricing.current || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver((entries) => {
+      if (!seenPricing.current && entries.some((e) => e.isIntersecting)) {
+        seenPricing.current = true;
+        trackEvent("PRICING_VIEW");
+        io.disconnect();
+      }
+    }, { threshold: 0.25 });
+    io.observe(el);
+  }, []);
 
   useEffect(() => {
     if (!loading && me) {
@@ -373,7 +387,7 @@ export default function Landing() {
       </section>
 
       {/* ---------------- pricing */}
-      <section id="pricing" className="scroll-mt-16 py-20">
+      <section id="pricing" ref={pricingRef} className="scroll-mt-16 py-20">
         <div className="mx-auto max-w-6xl px-4">
           <Reveal className="mb-10 flex flex-wrap items-end justify-between gap-4">
             <div>
@@ -381,11 +395,11 @@ export default function Landing() {
               <h2 className="mt-2 text-3xl font-bold text-gray-900 sm:text-4xl">{t(c.pricing.title)}</h2>
               <p className="mt-2 text-gray-600">{t(c.pricing.subtitle)}</p>
             </div>
-            <CycleToggle cycles={data?.cycles} value={cycle} onChange={setCycle} />
+            <CycleToggle cycles={data?.cycles} value={cycle} onChange={(c) => { setCycle(c); trackEvent("CYCLE", { cycle: c }); }} />
           </Reveal>
           {data ? (
             <PlanCards plans={data.plans} cycle={cycle} cta={(p) => (
-              <Link href="/register" className={`block w-full rounded-lg py-2 text-center text-sm font-medium ${p.code === "PROFESSIONAL" ? "bg-indigo-600 text-white hover:bg-indigo-700" : "border border-gray-300 text-gray-800 hover:bg-gray-50"}`}>
+              <Link href="/register" onClick={() => trackEvent("PLAN_CLICK", { plan: p.code, cycle })} className={`block w-full rounded-lg py-2 text-center text-sm font-medium ${p.code === "PROFESSIONAL" ? "bg-indigo-600 text-white hover:bg-indigo-700" : "border border-gray-300 text-gray-800 hover:bg-gray-50"}`}>
                 {p.code === "FREE" ? "Start free" : "Start free trial"}
               </Link>
             )} />

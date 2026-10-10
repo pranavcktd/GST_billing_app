@@ -15,6 +15,8 @@
 | Security and usage | Sign-in times, IP address, device and browser, audit trail of changes, consents given | Automatically |
 | Payments | Plan, amount, payment reference — card / bank details are handled by our payment gateway and not stored by us | Razorpay |
 | Messages | One-time codes, e-mails and WhatsApp messages you ask us to send, and their delivery status | Our e-mail / WhatsApp providers |
+| Website and app usage | Pages of our website visited (with a random browser id — not your IP address), the site that referred you, device type, plans you looked at, and which modules of the app you open and how often | Automatically, first-party |
+| Support | Help tickets, the messages and screenshots you attach, the screen you raised them from, and live-chat conversations | You |
 
 ## 3. Why we use it (purposes)
 
@@ -22,7 +24,8 @@
 - To provide the Service: billing, tax computation, e-invoice / e-way bill generation, reports, reminders, backups and support.
 - To meet our legal duties (tax, company and IT law, responding to lawful requests of authorities).
 - To send service messages (security alerts, billing, changes to these policies). Marketing messages are sent only with your consent and you can opt out at any time.
-- To improve the Service using aggregated, de-identified statistics only.
+- To answer support tickets and live-chat messages and follow up on them.
+- To improve the Service: which features are used, where people get stuck and which plans interest them. We use this for our own product and sales decisions only — never for advertising, and never sold.
 
 We process personal data on the basis of your consent (given when you sign up and recorded with its version and time) and for the legitimate uses the DPDP Act allows, such as complying with law.
 
@@ -39,6 +42,7 @@ Only with service providers who help us run the Service, under contracts that re
 | WhatsApp Business API provider | Sign-in codes, invoices and reminders you choose to send |
 | E-mail API provider | Sign-in codes, invoices, reminders, backups and notices |
 | Google | “Continue with Google”, if you use it |
+| tawk.to (live chat), only when switched on | The chat window on our website / app; messages you type there, and your name and e-mail if you are signed in |
 
 We may also disclose data when required by law or a valid order of a court or authority, or to protect the rights and safety of users and the Service. Resellers who manage a subscription see account and usage details, never invoices or books.
 
@@ -79,7 +83,7 @@ The Service is for businesses and is not meant for anyone under 18. We do not kn
 
 ## 10. Cookies and local storage
 
-We use only what is needed to run the Service: your sign-in session and preferences are kept in your browser’s storage, and offline billing keeps a temporary copy of data on your device. We do not use advertising or third-party tracking cookies.
+We use only what is needed to run the Service: your sign-in session and preferences are kept in your browser’s storage, and offline billing keeps a temporary copy of data on your device. For our own analytics we keep a random visitor id in your browser’s storage; it is not linked to advertising and is skipped when your browser sends “Do Not Track”. We do not use advertising or third-party tracking cookies. If live chat is switched on, the tawk.to chat window sets its own cookies to keep your conversation; you can avoid them by contacting us by e-mail or a help ticket instead.
 
 ## 11. Changes
 

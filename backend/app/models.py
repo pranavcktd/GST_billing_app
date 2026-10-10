@@ -892,6 +892,51 @@ class TicketAttachment(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class SiteVisit(Base):
+    """A page view on the public website (first-party analytics: a random browser id, no IP address kept)."""
+
+    __tablename__ = "site_visits"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    day: Mapped[dt.date] = mapped_column(Date, index=True)
+    visitor: Mapped[str] = mapped_column(String(40), index=True)  # random id kept in the browser
+    user_id: Mapped[str | None] = mapped_column(String(32))  # when signed in
+    path: Mapped[str] = mapped_column(String(200))
+    referrer: Mapped[str | None] = mapped_column(String(120))  # site only (e.g. google.com)
+    utm_source: Mapped[str | None] = mapped_column(String(60))
+    utm_campaign: Mapped[str | None] = mapped_column(String(60))
+    device: Mapped[str | None] = mapped_column(String(10))  # mobile / tablet / desktop
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class SiteEvent(Base):
+    """Something a visitor or user did that sales cares about: looked at pricing, clicked a plan, changed the billing cycle."""
+
+    __tablename__ = "site_events"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    day: Mapped[dt.date] = mapped_column(Date, index=True)
+    visitor: Mapped[str | None] = mapped_column(String(40))
+    user_id: Mapped[str | None] = mapped_column(String(32), index=True)
+    kind: Mapped[str] = mapped_column(String(20))  # PRICING_VIEW / PLAN_CLICK / CYCLE / SIGNUP_START
+    plan: Mapped[str | None] = mapped_column(String(30))
+    cycle: Mapped[str | None] = mapped_column(String(12))
+    page: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class ModuleUsage(Base):
+    """How often each person opened each module of the app, per day (Admin → Analytics)."""
+
+    __tablename__ = "module_usage"
+    __table_args__ = (UniqueConstraint("day", "user_id", "business_id", "module", name="uq_module_usage"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    day: Mapped[dt.date] = mapped_column(Date, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    business_id: Mapped[str] = mapped_column(String(32), default="")
+    module: Mapped[str] = mapped_column(String(80))
+    views: Mapped[int] = mapped_column(Integer, default=0)
+    last_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class PlatformSetting(Base):
     __tablename__ = "platform_settings"
     key: Mapped[str] = mapped_column(String(50), primary_key=True)
