@@ -1,0 +1,15 @@
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.db
+
+# secrets — set these in Railway's Variables, never commit them
+.env
+.env.*
+!.env.example
+
+# official HSN/SAC source files (licensed, kept local)
+data/
