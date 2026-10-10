@@ -14,10 +14,12 @@ from .services import config_store, engagement
 from .services import edit_log  # noqa: F401 — registers the audit-trail hook and triggers
 from .services import notify  # noqa: F401 — registers the send-alert-e-mails-after-commit hook
 from .services import signup as signup_service
+from .services import maintenance as maintenance_service
 from .services import whatsapp as wa_service
 from .routers import (
     admin_payments,
     analytics,
+    maintenance,
     auth,
     helpdesk,
     support,
@@ -135,9 +137,10 @@ async def integrity_error(_: Request, exc: IntegrityError):
     return JSONResponse(status_code=409, content={"detail": msg})
 
 
-for r in (admin_payments, analytics, notifications, helpdesk, support, team, auth, payroll, businesses, compliance, compliance_calendar, documents, dsc, gstin, integrations, mail, manufacturing, practice, privacy, price_lists, recurring, reminders, search, site, staff, parties, items, vouchers, payments, reports, uploads, cashbank, loans, expenses,
+for r in (admin_payments, analytics, maintenance, notifications, helpdesk, support, team, auth, payroll, businesses, compliance, compliance_calendar, documents, dsc, gstin, integrations, mail, manufacturing, practice, privacy, price_lists, recurring, reminders, search, site, staff, parties, items, vouchers, payments, reports, uploads, cashbank, loans, expenses,
           utilities, godowns, einvoice, billing, exports, platform, admin, smtp, sharing, whatsapp):
     app.include_router(r.router, prefix="/api")
+app.include_router(expenses.admin_router, prefix="/api")
 
 
 @app.get("/api/meta")
@@ -151,6 +154,7 @@ def meta(db: DB):
         "whatsapp": wa_service.flags(db),
         "signup": signup_service.flags(db),
         **engagement.public(db),  # analytics on/off, live chat (tawk.to) widget
+        "maintenance": maintenance_service.state(db),  # planned downtime: login page notice and countdown
     }
 
 

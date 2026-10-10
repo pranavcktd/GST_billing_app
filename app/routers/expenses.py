@@ -1,12 +1,17 @@
 """Expense categories and expense items (the expense documents themselves are vouchers of type EXPENSE)."""
 
-from fastapi import APIRouter, HTTPException
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy import func, select
 
-from ..deps import BCtx
+from ..deps import BCtx, DB, SuperAdmin
 from ..gst.constants import ExpenseKind, VoucherType
 from ..models import ExpenseCategory, ExpenseItem, Voucher, VoucherLine
 from ..services import config_store
+from ..services import expense_templates as ET
+from ..services.platform_audit import log
 from ..schemas import ExpenseCategoryIn, ExpenseCategoryOut, ExpenseItemIn, ExpenseItemOut
 
 router = APIRouter(prefix="/expenses", tags=["expenses"])
@@ -32,6 +37,7 @@ DEFAULT_CATEGORIES = [
 
 
 def seed_categories(db, business_id: str) -> None:
+    """Old built-in set — used only when restoring old backups (new businesses import from the standard list)."""
     blocked = {n.lower() for n in config_store.get("blocked_itc_categories")}
     for name, kind, *_ in DEFAULT_CATEGORIES:
         db.add(ExpenseCategory(business_id=business_id, name=name, kind=kind, itc_blocked=name.lower() in blocked))
@@ -128,3 +134,58 @@ def delete_item(item_id: str, ctx: BCtx):
     else:
         ctx.db.delete(it)
     ctx.db.commit()
+
+
+# ---------------------------------------------------------------- standard categories (services/expense_templates.py)
+@router.get("/templates")
+def templates(ctx: BCtx):
+    ctx.need("expenses", "view")
+    return ET.for_business(ctx.db, ctx.business)
+
+
+class ImportIn(BaseModel):
+    names: list[str] | None = None  # None = all
+
+
+@router.post("/templates/import")
+def import_templates(data: ImportIn, ctx: BCtx):
+    ctx.need("expenses", "create")
+    out = ET.import_into(ctx.db, ctx.business, data.names)
+    ctx.db.commit()
+    return out
+
+
+@router.post("/templates/skip")
+def skip_templates(ctx: BCtx):
+    ctx.need("expenses", "view")
+    ctx.business.expense_setup = ctx.business.expense_setup or "SKIPPED"
+    ctx.db.commit()
+    return {"choice": ctx.business.expense_setup}
+
+
+admin_router = APIRouter(prefix="/admin/expense-templates", tags=["super admin"])
+
+
+@admin_router.get("")
+def admin_templates(db: DB, _: SuperAdmin):
+    return {"categories": ET.get(db), "built_in": ET.get(db) is ET.BUILT_IN, "gst_rates": [float(r) for r in config_store.rates_on()]}
+
+
+class TemplatesIn(BaseModel):
+    categories: list[dict[str, Any]]
+
+
+@admin_router.put("")
+def save_templates(data: TemplatesIn, db: DB, me: SuperAdmin, request: Request):
+    cats = ET.save(db, data.categories)
+    log(db, me, "CONFIG", "expense templates", f"Standard expense categories saved ({len(cats)} categories)", request=request)
+    db.commit()
+    return admin_templates(db, me)
+
+
+@admin_router.delete("")
+def reset_templates(db: DB, me: SuperAdmin, request: Request):
+    ET.reset(db)
+    log(db, me, "CONFIG", "expense templates", "Standard expense categories reset to the built-in list", request=request)
+    db.commit()
+    return admin_templates(db, me)

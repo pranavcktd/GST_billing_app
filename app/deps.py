@@ -37,6 +37,9 @@ def current_user(
     if user.email.lower() in get_settings().superadmins and user.platform_role != PlatformRole.SUPERADMIN.value:
         user.platform_role = PlatformRole.SUPERADMIN.value
         db.commit()
+    from .services import maintenance  # local import, as above
+
+    maintenance.guard_request(db, user)  # planned downtime: everyone but super admins is signed out
     return user
 
 

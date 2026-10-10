@@ -166,6 +166,7 @@ def test_zip_of_extracted_folder(client):
     from tests.test_api_flow import make_business, signup
 
     h = make_business(client, signup(client, "folder@x.in"))
+    client.post("/api/expenses/templates/import", headers=h, json={})  # standard categories offered on first visit
     post(client, h, "/api/expenses/items", {"name": "Tea", "category_id": client.get("/api/expenses/categories", headers=h).json()[0]["id"]})
     blob = _zip(client, h)
     z = zipfile.ZipFile(io.BytesIO(blob))

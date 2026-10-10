@@ -27,7 +27,7 @@ def _abs(link: str | None) -> str | None:
 def email_html(title: str, body: str, link: str | None = None, button: str = "Open") -> str:
     paras = "".join(f"<p>{html.escape(line)}</p>" for line in body.split("\n") if line.strip())
     url = _abs(link)
-    btn = (f'<p><a href="{html.escape(url)}" style="background:#4f46e5;color:#fff;padding:9px 16px;border-radius:6px;'
+    btn = (f'<p><a href="{html.escape(url)}" style="background:#b8532a;color:#fff;padding:9px 16px;border-radius:6px;'
            f'text-decoration:none;display:inline-block">{html.escape(button)}</a></p>') if url and url.startswith("http") else ""
     return mailer.layout(html.escape(title), paras + btn)
 
