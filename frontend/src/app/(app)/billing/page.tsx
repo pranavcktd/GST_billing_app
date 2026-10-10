@@ -84,7 +84,7 @@ export default function BillingPage() {
           const rzp = new window.Razorpay!({
             key: order.key_id, order_id: order.order_id, amount: order.amount_paise, currency: "INR",
             name: APP_NAME, description: plan.startsWith("CREDITS_") ? `${plan.slice(8)} API credits` : `${plan} plan — ${c.startsWith("YEARS_") ? `${c.slice(6)} years` : c.toLowerCase()}`,
-            prefill: { email: order.email, contact: order.phone ?? "" }, theme: { color: "#1f65bb" },
+            prefill: { email: order.email, contact: order.phone ?? "" }, theme: { color: "#b8532a" },
             handler: async (r: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
               try {
                 await api("/billing/verify", { body: { order_id: r.razorpay_order_id, payment_id: r.razorpay_payment_id, signature: r.razorpay_signature } });

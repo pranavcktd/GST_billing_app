@@ -1,8 +1,9 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Sparkles, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ImportButton } from "@/components/ImportDialog";
+import { ExpenseStarter } from "@/components/ExpenseStarter";
 import { Button, Card, ErrorBox, Field, Input, Loading, PageHeader, Select } from "@/components/ui";
 import { api } from "@/lib/api";
 import { GST_RATES } from "@/lib/constants";
@@ -17,6 +18,7 @@ export default function ExpenseSetupPage() {
   const [item, setItem] = useState<{ id?: string; name: string; category_id: string; rate: string; gst_rate: number; hsn_sac: string }>(
     { name: "", category_id: "", rate: "", gst_rate: 0, hsn_sac: "" });
   const [error, setError] = useState<string | null>(null);
+  const [starter, setStarter] = useState(false);
 
   if (!cats || !items) return <Loading />;
   const catName = (id: string | null) => cats.find((c) => c.id === id)?.name ?? "—";
@@ -52,7 +54,11 @@ export default function ExpenseSetupPage() {
     <>
       <PageHeader title="Expense categories & items"
         sub="Direct expenses (manufacturing, freight inward, wages) go into cost of goods; indirect ones (rent, salary, petrol, tea) into operating expenses in P&L."
-        actions={<ImportButton entity="expense-items" title="expense items" onDone={() => { reloadItems(); reloadCats(); }} />} />
+        actions={<>
+          <Button variant="secondary" onClick={() => setStarter(true)}><Sparkles size={15} /> Standard categories</Button>
+          <ImportButton entity="expense-items" title="expense items" onDone={() => { reloadItems(); reloadCats(); }} />
+        </>} />
+      <ExpenseStarter key={String(starter)} open={starter} onClose={() => setStarter(false)} onImported={() => { reloadCats(); reloadItems(); }} />
       <ErrorBox message={error} />
       <div className="grid gap-5 lg:grid-cols-2">
         <Card className="overflow-x-auto">

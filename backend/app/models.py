@@ -136,6 +136,8 @@ class Business(Base):
     entity_type: Mapped[str] = mapped_column(String(20), default="PROPRIETORSHIP", server_default="PROPRIETORSHIP")
     # which menus the business uses: {"mode": "BOTH" | "GOODS" | "SERVICES", "hidden": [module keys]}
     modules: Mapped[dict | None] = mapped_column(JSON)
+    # standard expense categories offered on first visit: None = not asked yet, IMPORTED / SKIPPED
+    expense_setup: Mapped[str | None] = mapped_column(String(10))
     # compliance calendar answers: {"gst_filing": "MONTHLY" | "QUARTERLY", "tax_audit": bool, "tds": bool, ...}
     compliance_settings: Mapped[dict | None] = mapped_column(JSON)
     # staff sign-in rules (approval / office IPs / hours) — see services/staff_access.py

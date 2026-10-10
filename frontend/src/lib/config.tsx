@@ -8,7 +8,7 @@
  * kept in localStorage so pages render with current values immediately on the next visit.
  */
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useSyncExternalStore } from "react";
 import { APP_NAME, BY_LINE, COMPANY_NAME, TAGLINE } from "@/lib/brand";
 import { GST_RATES, STATES, UNITS } from "@/lib/constants";
 
@@ -16,6 +16,7 @@ export interface AppConfig {
   whatsapp?: { login: boolean; signup_verify: boolean; send: boolean; sandbox?: boolean };
   signup?: { verify: string[]; google_client_id: string | null };
   analytics?: { enabled: boolean; respect_dnt: boolean };
+  maintenance?: { active: boolean; scheduled: boolean; starts_at: string | null; ends_at: string | null; message: string; auto_end: boolean };
   live_chat?: { enabled: boolean; provider: string; property_id: string; widget_id: string; show_on: "WEBSITE" | "APP" | "BOTH"; pass_user: boolean; secure: boolean };
   legal?: Record<string, string>;
   gst_rates: number[]; b2cl_limit: number; invoice_number_max_len: number; ewb_threshold: number; ewb_km_per_day?: number;
@@ -90,30 +91,38 @@ function readCached(): AppConfig | null {
 const initial: AppConfig = (typeof window !== "undefined" && readCached()) || DEFAULT_CONFIG;
 if (initial !== DEFAULT_CONFIG) applyGlobals(initial);
 
+/* The config lives in a tiny store read with useSyncExternalStore: while hydrating, React uses the server snapshot
+   (the built-in defaults, exactly what the server rendered), then switches to the cached / fresh values — no
+   hydration mismatch when the saved settings differ from the defaults. */
+type Snap = { config: AppConfig; rev: number };
+let snap: Snap = { config: initial, rev: 0 };
+const SERVER_SNAP: Snap = { config: DEFAULT_CONFIG, rev: 0 };
+const listeners = new Set<() => void>();
+const subscribe = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
+let fetched = false;
+
+function loadMeta() {
+  if (fetched) return;
+  fetched = true;
+  fetch(`${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/meta`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((meta) => {
+      if (!meta?.config) return;
+      const next: AppConfig = { ...DEFAULT_CONFIG, ...meta.config, whatsapp: meta.whatsapp, signup: meta.signup,
+        analytics: meta.analytics, live_chat: meta.live_chat, maintenance: meta.maintenance };
+      const text = JSON.stringify(next);
+      try { localStorage.setItem(KEY, text); } catch { /* private mode */ }
+      if (text === JSON.stringify(snap.config)) return;
+      applyGlobals(next);
+      snap = { config: next, rev: snap.rev + 1 };  // remount: the admin changed something since the last visit
+      listeners.forEach((fn) => fn());
+    })
+    .catch(() => { fetched = false; });
+}
+
 export function ConfigProvider({ children }: { children: React.ReactNode }) {
-  const [config, setConfig] = useState<AppConfig>(initial);
-  const [rev, setRev] = useState(0);
-
-  useEffect(() => {
-    let alive = true;
-    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/meta`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((meta) => {
-        if (!alive || !meta?.config) return;
-        const next: AppConfig = { ...DEFAULT_CONFIG, ...meta.config, whatsapp: meta.whatsapp, signup: meta.signup,
-          analytics: meta.analytics, live_chat: meta.live_chat };
-        const text = JSON.stringify(next);
-        try { localStorage.setItem(KEY, text); } catch { /* private mode */ }
-        if (text === JSON.stringify(initial)) return;
-        applyGlobals(next);
-        setConfig(next);
-        setRev((r) => r + 1);
-      })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, []);
-
-  // remount the tree only when the admin changed something since the last visit
+  const { config, rev } = useSyncExternalStore(subscribe, () => snap, () => SERVER_SNAP);
+  useEffect(loadMeta, []);
   return <ConfigContext.Provider value={config}><div key={rev} className="contents">{children}</div></ConfigContext.Provider>;
 }
 

@@ -290,7 +290,7 @@ export default function Landing() {
       <section className="relative isolate overflow-hidden bg-slate-950 text-white">
         <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
           <div className="lp-blob absolute -top-24 -left-24 h-96 w-96 rounded-full bg-indigo-600/40 blur-3xl" />
-          <div className="lp-blob absolute top-40 right-0 h-80 w-80 rounded-full bg-violet-600/30 blur-3xl" style={{ animationDelay: "-6s" }} />
+          <div className="lp-blob absolute top-40 right-0 h-80 w-80 rounded-full bg-amber-600/25 blur-3xl" style={{ animationDelay: "-6s" }} />
           <div className="lp-blob absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-amber-500/20 blur-3xl" style={{ animationDelay: "-12s" }} />
           <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.07)_1px,transparent_1px)] [background-size:22px_22px]" />
         </div>
@@ -436,7 +436,7 @@ export default function Landing() {
       {/* ---------------- final call */}
       <section className="px-4 py-20">
         <Reveal>
-          <div className="relative mx-auto max-w-5xl overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-indigo-700 px-6 py-14 text-center text-white shadow-2xl shadow-indigo-500/30">
+          <div className="relative mx-auto max-w-5xl overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-500 to-indigo-700 px-6 py-14 text-center text-white shadow-2xl shadow-indigo-500/30">
             <div aria-hidden className="lp-blob absolute -top-20 -right-10 h-64 w-64 rounded-full bg-amber-400/30 blur-3xl" />
             <h2 className="relative text-3xl font-bold sm:text-4xl">{t(c.final.title)}</h2>
             <p className="relative mx-auto mt-3 max-w-xl text-indigo-100">{t(c.final.text)}</p>

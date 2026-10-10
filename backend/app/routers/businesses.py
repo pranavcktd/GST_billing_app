@@ -8,7 +8,6 @@ from ..security import encrypt_secret
 from ..services.accounts import cash_account
 from ..services.godowns import default_godown
 from ..services.plans import business_plan, check_business_limit, require_feature, start_trial
-from .expenses import seed_categories
 
 router = APIRouter(prefix="/businesses", tags=["business"])
 
@@ -73,8 +72,7 @@ def create_business(data: BusinessIn, db: DB, user: CurrentUser):
     db.flush()
     db.add(Membership(user_id=user.id, business_id=biz.id, role=Role.OWNER))
     cash_account(db, biz.id)
-    seed_categories(db, biz.id)
-    default_godown(db, biz.id)
+    default_godown(db, biz.id)  # expense categories: offered on first visit (services/expense_templates.py)
     db.commit()
     return MyBusinessOut(id=biz.id, name=biz.name, gstin=biz.gstin, gst_type=biz.gst_type, role=Role.OWNER,
                          modules=biz.modules, entity_type=biz.entity_type or "PROPRIETORSHIP")

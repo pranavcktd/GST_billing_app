@@ -26,6 +26,7 @@ from ..security import (
     verify_password,
 )
 from ..services import config_store, mailer, platform_team
+from ..services import maintenance as MT
 from ..services import privacy as PV
 from ..services import signup as SU
 from ..services import whatsapp as W
@@ -146,6 +147,7 @@ def register(data: RegisterIn, db: DB, request: Request):
     db.flush()
     log(db, user, "CREATE", "user", f"Signed up: {email}", entity_id=user.id, request=request)
     db.commit()
+    MT.guard_login(db, user)  # planned downtime: only super admins may sign in
     return TokenOut(token=token_for(user), **me_payload(db, user).model_dump())
 
 
@@ -200,6 +202,7 @@ def google(data: GoogleIn, db: DB, request: Request):
         user.previous_login_at, user.last_login_at = user.last_login_at, now()
         log(db, user, "LOGIN", "login", f"Signed in with Google: {user.email}", entity_id=user.id, request=request)
     db.commit()
+    MT.guard_login(db, user)  # planned downtime: only super admins may sign in
     return TokenOut(token=token_for(user), **me_payload(db, user).model_dump())
 
 
@@ -266,6 +269,7 @@ def otp_login(data: OtpLoginIn, db: DB, request: Request):
     user.previous_login_at, user.last_login_at = user.last_login_at, now()
     log(db, user, "LOGIN", "login", f"Signed in with WhatsApp code: {user.email}", entity_id=user.id, request=request)
     db.commit()
+    MT.guard_login(db, user)  # planned downtime: only super admins may sign in
     return TokenOut(token=token_for(user), **me_payload(db, user).model_dump())
 
 
@@ -348,6 +352,7 @@ def login(data: LoginWithOtp, db: DB, request: Request):
     user.previous_login_at, user.last_login_at = user.last_login_at, now()
     log(db, user, "LOGIN", "login", f"Signed in: {user.email}", entity_id=user.id, request=request)
     db.commit()
+    MT.guard_login(db, user)  # planned downtime: only super admins may sign in
     return TokenOut(token=token_for(user), **me_payload(db, user).model_dump())
 
 

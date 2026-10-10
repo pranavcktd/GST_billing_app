@@ -51,6 +51,7 @@ def test_exports_sez_and_imports(client):
     assert imp["export_type"] == "IMPORT" and imp["igst"] == 900
 
     # blocked credit u/s 17(5)
+    client.post("/api/expenses/templates/import", headers=h, json={})  # standard categories offered on first visit
     cats = {c["name"]: c for c in client.get("/api/expenses/categories", headers=h).json()}
     assert cats["Tea & Refreshments"]["itc_blocked"] is True
     vendor = party(client, h, "Cafe", "REGISTERED", gstin=gstin("27", "AABCC1111D"))

@@ -109,6 +109,12 @@ export async function api<T = unknown>(
       session.setToken(null);
       window.location.href = "/login";
     }
+    // planned downtime: everyone but super admins is signed out until the platform is live again
+    const md = (body as { detail?: { code?: string } })?.detail;
+    if (res.status === 503 && md?.code === "MAINTENANCE" && typeof window !== "undefined" && !path.startsWith("/auth/")) {
+      session.setToken(null);
+      if (!window.location.pathname.startsWith("/login")) window.location.href = "/login?maintenance=1";
+    }
     const detail = (body as { detail?: unknown })?.detail as Structured | undefined;
     const structured = detail && typeof detail === "object" ? detail : undefined;
     // an older entry needs a manager's approval: ask for the PIN and retry once

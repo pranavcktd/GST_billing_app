@@ -89,6 +89,7 @@ def build_books(client):
     assert r.status_code == 400
 
     # expenses
+    client.post("/api/expenses/templates/import", headers=h, json={})  # standard categories offered on first visit
     cats = {c["name"]: c for c in client.get("/api/expenses/categories", headers=h).json()}
     assert "Rent" in cats and cats["Manufacturing Expenses"]["kind"] == "DIRECT"
     rent_item = post(client, h, "/api/expenses/items", {"name": "Shop rent", "category_id": cats["Rent"]["id"], "gst_rate": 18})
