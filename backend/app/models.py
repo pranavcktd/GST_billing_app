@@ -159,6 +159,8 @@ class Business(Base):
     excel_backup: Mapped[bool | None] = mapped_column(Boolean)
     # GST filing-status sync — set by the super admin: None = platform default, True / False = this business only
     filing_sync: Mapped[bool | None] = mapped_column(Boolean)
+    # e-mail sender assigned by the super admin (None = the platform default, under the business's name)
+    mail_sender_id: Mapped[str | None] = mapped_column(ForeignKey("mail_senders.id", ondelete="SET NULL"))
     # payroll defaults: weekly offs, holidays, salary basis — see services/payroll.py
     payroll_settings: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -753,6 +755,54 @@ class PasswordReset(Base):
     expires_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
     used_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     requested_ip: Mapped[str | None] = mapped_column(String(45))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class SitePage(Base):
+    """Website page text edited by the super admin (Admin → Website); missing = the built-in text."""
+
+    __tablename__ = "site_pages"
+    slug: Mapped[str] = mapped_column(String(30), primary_key=True)
+    title: Mapped[str] = mapped_column(String(120))
+    body: Mapped[str] = mapped_column(Text)
+    updated_by: Mapped[str | None] = mapped_column(String(120))
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class SitePageVersion(Base):
+    """Earlier text of a website page — kept on every save, restorable."""
+
+    __tablename__ = "site_page_versions"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    slug: Mapped[str] = mapped_column(String(30), index=True)
+    title: Mapped[str] = mapped_column(String(120))
+    body: Mapped[str] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(String(300))
+    saved_by: Mapped[str | None] = mapped_column(String(120))
+    saved_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class MailSender(Base):
+    """An e-mail sender (API provider + from-address) managed by the super admin; one is the platform default and
+    businesses can be given their own (services/mailer.py)."""
+
+    __tablename__ = "mail_senders"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    label: Mapped[str] = mapped_column(String(80))
+    provider: Mapped[str] = mapped_column(String(10))  # BREVO / ZEPTOMAIL / RESEND / SENDGRID / POSTMARK / SMTP
+    secret_enc: Mapped[str | None] = mapped_column(Text)  # API key (or SMTP password), encrypted
+    region: Mapped[str | None] = mapped_column(String(5))  # ZeptoMail data centre: IN / COM / EU
+    host: Mapped[str | None] = mapped_column(String(200))  # SMTP only
+    port: Mapped[int | None] = mapped_column(Integer)
+    security: Mapped[str | None] = mapped_column(String(10))
+    username: Mapped[str | None] = mapped_column(String(200))
+    from_email: Mapped[str] = mapped_column(String(200))
+    from_name: Mapped[str | None] = mapped_column(String(120))
+    reply_to: Mapped[str | None] = mapped_column(String(200))
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_test_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(String(300))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

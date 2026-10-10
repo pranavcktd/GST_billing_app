@@ -39,6 +39,23 @@ def fake_mail(monkeypatch):
     monkeypatch.setattr(mailer.smtplib, "SMTP_SSL", FakeSMTP)
 
 
+def platform_mail(client, from_email="noreply@platform.in"):
+    """A platform default e-mail sender (SMTP, so FakeSMTP captures the messages) — e-mail is platform-managed."""
+    from app.db import get_db
+    from app.main import app
+    from app.models import MailSender
+    from app.security import encrypt_secret
+
+    gen = app.dependency_overrides.get(get_db, get_db)()
+    db = next(gen)
+    try:
+        db.add(MailSender(label="Platform", provider="SMTP", host="smtp.platform.in", port=587, security="STARTTLS",
+                          username="u", secret_enc=encrypt_secret("p"), from_email=from_email, is_default=True))
+        db.commit()
+    finally:
+        gen.close()
+
+
 def superadmin(client, monkeypatch, email="root@platform.in"):
     monkeypatch.setattr(get_settings(), "superadmin_emails", email)
     return signup(client, email)
@@ -187,29 +204,54 @@ def test_full_and_account_backups(client, monkeypatch):
 
 
 def test_smtp_levels_and_invoice_email(client, monkeypatch):
+    """E-mail is platform-managed: a default sender for everyone, an own sender for one business, API providers."""
+    from app.services import mailer
+
     root = superadmin(client, monkeypatch)
     h, cust, item = setup(client)
-    # business falls back to platform SMTP
-    post(client, root, "/api/admin/smtp", {"host": "smtp.platform.in", "from_email": "noreply@platform.in",
-                                           "username": "u", "password": "p"}, 200) if False else \
-        client.put("/api/admin/smtp", headers=root, json={"host": "smtp.platform.in", "from_email": "noreply@platform.in",
-                                                          "username": "u", "password": "p"})
-    assert client.get("/api/smtp", headers=h).json()["effective_source"] == "PLATFORM"
-    client.put("/api/smtp", headers=h, json={"host": "smtp.shop.in", "from_email": "billing@shop.in", "password": "x"})
+    assert client.put("/api/smtp", headers=h, json={"host": "smtp.shop.in", "from_email": "billing@shop.in", "password": "x"}).status_code == 403
+    sm = post(client, root, "/api/admin/mail/senders", {"label": "Platform SMTP", "provider": "SMTP", "host": "smtp.platform.in",
+                                                         "port": 587, "security": "STARTTLS", "username": "u", "secret": "p",
+                                                         "from_email": "noreply@platform.in"})
+    assert sm["is_default"] and sm["secret_set"] and "secret" not in sm
     st = client.get("/api/smtp", headers=h).json()
-    assert st["effective_source"] == "BUSINESS" and st["settings"]["password_set"] and "password" not in st["settings"]
-    assert post(client, h, "/api/smtp/test", {"to": "me@shop.in"}, 200)["via"] == "BUSINESS"
+    biz = client.get("/api/businesses/current", headers=h).json()
+    assert st["effective_source"] == "PLATFORM" and st["from_email"] == "noreply@platform.in" and st["from_name"] == biz["name"]
+    v0 = post(client, h, "/api/vouchers", {"type": "SALE", "date": "2026-09-10", "party_id": cust["id"],
+                                           "lines": [{"item_id": item["id"], "name": "Bottle", "qty": 1, "rate": 500, "gst_rate": 18}]})
+    post(client, h, f"/api/vouchers/{v0['id']}/email", {"to": ["buyer@client.in"]}, 200)
+    assert biz["name"] in SENT[-1]["From"] and "noreply@platform.in" in SENT[-1]["From"]
 
+    # an own sender (Brevo API) for this business
+    calls = []
+    monkeypatch.setattr(mailer, "_http_post", lambda url, headers, body: calls.append((url, headers, body)) or __import__("httpx").Response(201, json={"messageId": "x"}))
+    br = post(client, root, "/api/admin/mail/senders", {"label": "Shop domain", "provider": "BREVO", "secret": "xkeysib-123",
+                                                         "from_email": "billing@shop.in", "from_name": "Sharma Traders"})
+    assert not br["is_default"]
+    assert client.put(f"/api/admin/mail/businesses/{h['X-Business-Id']}", headers=root, json={"sender_id": br["id"]}).status_code == 200
+    assert client.get("/api/smtp", headers=h).json()["effective_source"] == "BUSINESS"
     v = post(client, h, "/api/vouchers", {"type": "SALE", "date": "2026-09-10", "party_id": cust["id"],
                                           "lines": [{"item_id": item["id"], "name": "Bottle", "qty": 2, "rate": 500, "gst_rate": 18}]})
     r = post(client, h, f"/api/vouchers/{v['id']}/email", {"to": ["buyer@client.in"], "message": "Thanks!"}, 200)
     assert r["via"] == "BUSINESS" and "/i/" in r["link"]
-    msg = SENT[-1]
-    assert "billing@shop.in" in msg["From"] and msg["To"] == "buyer@client.in"
-    pdfs = [a for a in msg.iter_attachments() if a.get_content_type() == "application/pdf"]
-    assert len(pdfs) == 1 and pdfs[0].get_content()[:5] == b"%PDF-" and pdfs[0].get_filename().endswith(".pdf")
+    url, headers, body = calls[-1]
+    assert url == "https://api.brevo.com/v3/smtp/email" and headers["api-key"] == "xkeysib-123"
+    assert body["sender"]["email"] == "billing@shop.in" and body["to"] == [{"email": "buyer@client.in"}]
+    import base64
+    assert len(body["attachment"]) == 1 and base64.b64decode(body["attachment"][0]["content"])[:5] == b"%PDF-"
     post(client, h, f"/api/vouchers/{v['id']}/email", {"to": ["buyer@client.in"], "attach_pdf": False}, 200)
-    assert not list(SENT[-1].iter_attachments())
+    assert "attachment" not in calls[-1][2]
+    # ZeptoMail (India data centre) request format, and a provider refusal shows its message
+    zp = post(client, root, "/api/admin/mail/senders", {"label": "Zepto", "provider": "ZEPTOMAIL", "region": "IN", "secret": "abc",
+                                                         "from_email": "bills@shop.in"})
+    assert post(client, root, f"/api/admin/mail/senders/{zp['id']}/test", {"to": "me@shop.in"}, 200)["sent"]
+    url, headers, body = calls[-1]
+    assert url == "https://api.zeptomail.in/v1.1/email" and headers["Authorization"] == "Zoho-enczapikey abc"
+    assert body["to"] == [{"email_address": {"address": "me@shop.in"}}]
+    monkeypatch.setattr(mailer, "_http_post", lambda *a: __import__("httpx").Response(401, json={"error": {"message": "Invalid API Token"}}))
+    refused = client.post(f"/api/admin/mail/senders/{zp['id']}/test", headers=root, json={"to": "me@shop.in"})
+    assert refused.status_code == 502 and "Invalid API Token" in refused.json()["detail"]
+    assert client.get("/api/admin/mail/senders", headers=root).json()["senders"][-1]["last_error"]
     token = r["link"].rsplit("/", 1)[1]
     pub = client.get(f"/api/public/invoice/{token}")  # no login
     assert pub.status_code == 200 and pub.json()["voucher"]["number"] == v["number"]

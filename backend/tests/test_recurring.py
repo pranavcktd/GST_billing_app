@@ -8,7 +8,7 @@ from app.models import RecurringInvoice
 from app.services import recurring as RC
 from tests.test_api_flow import make_business, signup
 from tests.test_modules import post
-from tests.test_security_admin import SENT, fake_mail  # noqa: F401
+from tests.test_security_admin import SENT, fake_mail, platform_mail  # noqa: F401
 
 
 def run(day):
@@ -30,7 +30,7 @@ def test_add_period_keeps_month_end():
 
 def test_recurring_flow(client):
     h = make_business(client, signup(client))
-    client.put("/api/smtp", headers=h, json={"host": "smtp.shop.in", "from_email": "billing@shop.in", "password": "x"})
+    platform_mail(client)
     tenant = post(client, h, "/api/parties", {"name": "Tenant Pvt Ltd", "gst_type": "UNREGISTERED", "email": "accounts@tenant.in"})
     inv = post(client, h, "/api/vouchers", {"type": "SALE", "date": "2026-04-01", "party_id": tenant["id"], "notes": "Office rent",
                                             "lines": [{"name": "Office rent", "hsn_sac": "997212", "qty": 1, "rate": 25000, "gst_rate": 18}]})

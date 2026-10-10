@@ -3,7 +3,7 @@
 from tests.test_api_flow import make_business, signup
 from tests.test_modules import post
 from tests.test_rbac import staff
-from tests.test_security_admin import SENT, fake_mail, superadmin  # noqa: F401 — fake_mail: autouse SMTP stub
+from tests.test_security_admin import platform_mail, SENT, fake_mail, superadmin  # noqa: F401 — fake_mail: autouse SMTP stub
 
 PDF = b"%PDF-1.4\n% test document\n"
 
@@ -48,7 +48,7 @@ def test_vault_upload_link_share_email(client, monkeypatch):
     assert post(client, h, f"/api/documents/{link.json()['id']}/share-link", {}, 200)["url"].startswith("https://drive.google.com")
 
     # e-mail with the file attached
-    client.put("/api/admin/smtp", headers=root, json={"host": "smtp.platform.in", "from_email": "noreply@platform.in", "username": "u", "password": "p"})
+    platform_mail(client)
     assert post(client, h, f"/api/documents/{doc['id']}/email", {"to": ["ca@firm.in"], "message": "For audit"}, 200)["sent"]
     msg = SENT[-1]
     assert msg["To"] == "ca@firm.in" and any(p.get_filename() == "itr.pdf" for p in msg.iter_attachments())

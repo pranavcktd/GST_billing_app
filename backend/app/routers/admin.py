@@ -338,7 +338,7 @@ def businesses(db: DB, _: SuperAdmin, search: str | None = None):
                         owner=owner.name if owner else None, owner_email=owner.email if owner else None,
                         members=db.scalar(select(func.count(Membership.id)).where(Membership.business_id == b.id)),
                         backups=db.scalar(select(func.count(Backup.id)).where(Backup.business_id == b.id)),
-                        excel_backup=b.excel_backup, excel_backup_on=XB.allowed(db, b),
+                        excel_backup=b.excel_backup, excel_backup_on=XB.allowed(db, b), mail_sender_id=b.mail_sender_id,
                         filing_sync=b.filing_sync, filing_sync_on=FS.allowed(db, b)))
     return out
 

@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 
@@ -123,28 +123,24 @@ def reseller_test(data: TestIn, db: DB, me: Reseller):
 # ---------------------------------------------------------------- business — invoices, reminders, backups
 @router.get("/smtp")
 def business_get(ctx: BCtx):
-    ctx.need("settings", "view")
-    row = ctx.db.scalar(select(SmtpConfig).where(SmtpConfig.scope == "BUSINESS", SmtpConfig.owner_id == ctx.bid))
-    return _out(row, mailer.business_smtp(ctx.db, ctx.bid, account_of(ctx.db, ctx.bid)))
+    """Which address this business's e-mails go from. E-mail is managed by the platform (Admin → Email)."""
+    cfg = mailer.business_smtp(ctx.db, ctx.bid, account_of(ctx.db, ctx.bid))
+    return {"managed": True, "effective_source": cfg.source if cfg else None, "from_email": cfg.from_email if cfg else None,
+            "from_name": cfg.from_name if cfg else None, "reply_to": cfg.reply_to if cfg else None,
+            "own_sender": cfg is not None and cfg.source == "BUSINESS"}
 
 
 @router.put("/smtp")
-def business_put(data: SmtpIn, ctx: BCtx):
-    ctx.need("settings", "edit")
-    _save(ctx.db, "BUSINESS", ctx.bid, data)
-    ctx.db.commit()
-    return business_get(ctx)
+def business_put(ctx: BCtx):
+    raise HTTPException(403, "E-mail is managed by the platform. Ask support to send from your own domain.")
 
 
 @router.delete("/smtp", status_code=204)
 def business_delete(ctx: BCtx):
-    ctx.need("settings", "edit")
-    _remove(ctx.db, "BUSINESS", ctx.bid)
-    ctx.db.commit()
+    raise HTTPException(403, "E-mail is managed by the platform.")
 
 
 @router.post("/smtp/test")
 def business_test(data: TestIn, ctx: BCtx):
-    ctx.need("settings", "edit")
+    ctx.need("settings", "view")
     return _test(mailer.business_smtp(ctx.db, ctx.bid, account_of(ctx.db, ctx.bid)), data.to, ctx.business.name)
-
