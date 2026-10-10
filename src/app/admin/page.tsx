@@ -1,6 +1,9 @@
 "use client";
 
-import { CheckCircle2, XCircle } from "lucide-react";
+import {
+  Activity, BadgeIndianRupee, BarChart3, BellRing, Building2, CheckCircle2, Crown, DatabaseBackup, Globe, HandCoins, LayoutDashboard,
+  Landmark, LifeBuoy, ListTree, Mail, Network, Plug, Receipt, ScrollText, ShieldCheck, Store, Tags, Users, UsersRound, Wrench, XCircle,
+} from "lucide-react";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { PlatformShell } from "@/components/PlatformShell";
@@ -31,6 +34,8 @@ import { AdminHelpdesk } from "@/components/admin/AdminHelpdesk";
 import { AdminTeam } from "@/components/admin/AdminTeam";
 import { AdminAnalytics } from "@/components/admin/AdminAnalytics";
 import { AdminLiveChat } from "@/components/admin/AdminLiveChat";
+import { AdminMaintenance } from "@/components/admin/AdminMaintenance";
+import { AdminExpenseTemplates } from "@/components/admin/AdminExpenseTemplates";
 import { useAuth } from "@/lib/auth";
 
 interface Stats { accounts: number; businesses: number; users: number; trials: number; by_plan: Record<string, number>; mrr: number; invoices_30d: number; signups_30d: number; revenue_30d: number }
@@ -43,10 +48,21 @@ interface Reseller { id: string; name: string; email: string; commission_pct: nu
 interface License { id: string; created_at: string; reseller: string; account: string; plan: string; months: number; amount: number; commission: number; payout_status: string }
 interface Health { app_env: string; database: boolean; database_engine: string; einvoice_provider: string; gsp_configured: boolean; razorpay_live: boolean; razorpay_webhook: boolean; email_configured: boolean; cloudinary_configured: boolean }
 
-const TABS = ["Overview", "Transactions", "Helpdesk", "Analytics", "Team", "Users", "Hierarchy", "Plans", "Businesses", "Resellers", "Payouts", "GST config", "HSN master", "Rate notices", "Pricing", "Integrations", "Website", "Backups", "Privacy & security", "Audit", "Email", "System"] as const;
+// the admin menu, in sections (labels can differ from the tab keys used in links like /admin?tab=Plans)
+const GROUPS = [
+  { title: "Home", tabs: [["Overview", "Dashboard", LayoutDashboard]] },
+  { title: "Customers & revenue", tabs: [["Plans", "Accounts & plans", Crown], ["Businesses", "Businesses", Building2], ["Transactions", "Transactions", Receipt], ["Analytics", "Analytics", BarChart3]] },
+  { title: "Support", tabs: [["Helpdesk", "Helpdesk", LifeBuoy]] },
+  { title: "People & access", tabs: [["Users", "Users", Users], ["Team", "Our team", UsersRound], ["Hierarchy", "Hierarchy", Network], ["Resellers", "Resellers", Store], ["Payouts", "Reseller payouts", HandCoins]] },
+  { title: "GST & masters", tabs: [["GST config", "GST settings", Landmark], ["HSN master", "HSN / SAC master", ListTree], ["Rate notices", "Rate notices", BellRing], ["Expense categories", "Expense categories", Tags]] },
+  { title: "Product & website", tabs: [["Pricing", "Plans & pricing", BadgeIndianRupee], ["Website", "Website content", Globe]] },
+  { title: "Platform", tabs: [["Integrations", "Integrations", Plug], ["Email", "E-mail senders", Mail], ["Maintenance", "Maintenance", Wrench], ["Backups", "Backups", DatabaseBackup], ["Privacy & security", "Privacy & security", ShieldCheck], ["Audit", "Audit log", ScrollText], ["System", "System health", Activity]] },
+] as const;
+const TABS = GROUPS.flatMap((g) => g.tabs.map((t) => t[0]));
+type Tab = (typeof TABS)[number];
 
 // tabs a company team member may open, by admin area (everything else is super admin only)
-const AREA_OF: Partial<Record<(typeof TABS)[number], string>> = {
+const AREA_OF: Partial<Record<Tab, string>> = {
   Transactions: "payments", Helpdesk: "helpdesk", Analytics: "analytics", Plans: "accounts", Businesses: "accounts", Website: "website",
 };
 
@@ -60,10 +76,11 @@ function Admin() {
   const tabs = TABS.filter((t) => isSuper || (AREA_OF[t] && me?.platform_areas?.includes(AREA_OF[t]!)));
   // alert links open a tab directly: /admin?tab=Transactions&id=…
   const [linked] = useState(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search)));
-  const [tab, setTab] = useState<(typeof TABS)[number]>(() => {
+  const [tab, setTab] = useState<Tab>(() => {
     const t = linked?.get("tab");
-    return (tabs as readonly string[]).includes(t ?? "") ? (t as (typeof TABS)[number]) : tabs[0];
+    return (tabs as readonly string[]).includes(t ?? "") ? (t as Tab) : tabs[0];
   });
+  const groups = GROUPS.map((g) => ({ ...g, tabs: g.tabs.filter((t) => tabs.includes(t[0])) })).filter((g) => g.tabs.length);
   const [search, setSearch] = useState("");
   const { data: stats } = useFetch<Stats>(isSuper ? "/admin/stats" : null);
   const { data: accounts, reload: reloadAcc } = useFetch<Account[]>(tab === "Plans" ? `/admin/accounts${qs({ search })}` : null);
@@ -83,13 +100,25 @@ function Admin() {
     <>
       <div className="lg:grid lg:grid-cols-[12.5rem_minmax(0,1fr)] lg:gap-6">
       <nav className="sticky top-14 z-10 -mx-4 mb-5 flex gap-1 overflow-x-auto border-b border-gray-200 bg-gray-50/95 px-4 py-2 text-sm backdrop-blur
-        lg:top-20 lg:mx-0 lg:mb-0 lg:max-h-[calc(100vh-6rem)] lg:flex-col lg:self-start lg:overflow-y-auto lg:rounded-lg lg:border lg:bg-white lg:p-2">
-        {tabs.map((t) => (
-          <button key={t} onClick={() => { setTab(t); window.scrollTo({ top: 0 }); }}
-            className={`shrink-0 rounded-md px-3 py-1.5 text-left whitespace-nowrap ${tab === t ? "bg-brand-600 text-white" : "text-gray-700 hover:bg-gray-100"}`}>{t}</button>
+        lg:top-20 lg:mx-0 lg:mb-0 lg:block lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:rounded-2xl lg:border lg:bg-white lg:p-2.5">
+        {groups.map((g) => (
+          <div key={g.title} className="flex shrink-0 gap-1 lg:mb-2.5 lg:block">
+            {groups.length > 1 && <div className="hidden px-2.5 pt-1 pb-1 text-[10.5px] font-bold tracking-wider text-gray-400 uppercase lg:block">{g.title}</div>}
+            {g.tabs.map(([key, label, Icon]) => (
+              <button key={key} onClick={() => { setTab(key); window.scrollTo({ top: 0 }); }}
+                className={`flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-left whitespace-nowrap lg:w-full ${tab === key ? "bg-brand-600 font-medium text-white shadow-sm" : "text-gray-700 hover:bg-brand-50"}`}>
+                <Icon size={15} className={tab === key ? "text-white" : "text-gray-400"} /> {label}
+              </button>
+            ))}
+          </div>
         ))}
       </nav>
       <div className="min-w-0">
+      {(() => {
+        const g = GROUPS.find((x) => x.tabs.some((t) => t[0] === tab));
+        const t = g?.tabs.find((x) => x[0] === tab);
+        return t ? <div className="mb-4 text-xs font-medium text-gray-500">{g!.title} <span className="text-gray-300">›</span> <span className="text-gray-800">{t[1]}</span></div> : null;
+      })()}
       <ErrorBox message={err} />
 
       {tab === "Overview" && (!stats ? <Loading /> : (
@@ -114,6 +143,8 @@ function Admin() {
       {tab === "Helpdesk" && <AdminHelpdesk initialId={linked?.get("id")} />}
       {tab === "Analytics" && <AdminAnalytics />}
       {tab === "Team" && <AdminTeam />}
+      {tab === "Maintenance" && <AdminMaintenance />}
+      {tab === "Expense categories" && <AdminExpenseTemplates />}
       {tab === "Users" && <AdminUsers />}
       {tab === "Hierarchy" && <AdminHierarchy />}
       {tab === "Businesses" && <AdminBusinesses />}

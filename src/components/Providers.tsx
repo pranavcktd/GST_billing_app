@@ -7,6 +7,7 @@ import { AuthProvider } from "@/lib/auth";
 import { ConfigProvider } from "@/lib/config";
 import { LegalConsentGate } from "@/components/LegalConsentGate";
 import { SiteExtras } from "@/components/SiteExtras";
+import { MaintenanceBanner } from "@/components/Maintenance";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -26,6 +27,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ConfigProvider>
       <AuthProvider>
+        <MaintenanceBanner />
         {children}
         <GlobalDialogs />
         <LegalConsentGate />

@@ -213,7 +213,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     href={href}
                     onClick={() => setOpen(false)}
                     className={`group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors ${active
-                      ? "bg-gradient-to-r from-indigo-500 to-violet-500 font-medium text-white shadow-md shadow-indigo-900/40"
+                      ? "bg-gradient-to-r from-brand-600 to-brand-500 font-medium text-white shadow-md shadow-black/30"
                       : "text-slate-300 hover:bg-white/5 hover:text-white"}`}
                   >
                     <Icon size={17} className={active ? "text-white" : "text-slate-400 group-hover:text-white"} />

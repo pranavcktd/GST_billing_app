@@ -1,11 +1,12 @@
 "use client";
 
-import { Mail, MessageCircle } from "lucide-react";
+import { Mail, MessageCircle, Wrench } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AuthCard } from "@/components/AuthCard";
 import { GoogleButton } from "@/components/GoogleButton";
+import { istTime, useCountdown, useMaintenance } from "@/components/Maintenance";
 import { Button, ErrorBox, Field, Input } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -30,6 +31,8 @@ export default function LoginPage() {
   const [needOtp, setNeedOtp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const maint = useMaintenance();
+  const backIn = useCountdown(maint?.active ? maint.ends_at : null);
 
   useEffect(() => {
     if (wait <= 0) return;
@@ -82,7 +85,18 @@ export default function LoginPage() {
   );
 
   return (
-    <AuthCard title="Welcome back" sub="Sign in to manage your billing">
+    <AuthCard title="Welcome back" sub="Sign in to manage your billing" notice={maint?.active ? (
+      <div role="status" className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <div className="flex items-center gap-2 font-semibold"><Wrench size={16} /> We&apos;re doing scheduled maintenance</div>
+        <p className="mt-1">{maint.message}</p>
+        {maint.ends_at && <p className="mt-2 text-xs">Expected back {istTime(maint.ends_at)}{backIn ? <> — in <b className="tabular-nums">{backIn}</b></> : null}.</p>}
+        <p className="mt-1 text-xs text-amber-800">Sign-in is paused until then. Your data is safe.</p>
+      </div>
+    ) : maint?.scheduled ? (
+      <div role="status" className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+        <b>Planned maintenance</b> {istTime(maint.starts_at)}{maint.ends_at ? ` – ${istTime(maint.ends_at)}` : ""}. {maint.message}
+      </div>
+    ) : null}>
       {!needOtp && <GoogleButton text="signin_with" />}
       <form onSubmit={submit} className="space-y-4">
         {waLogin && !needOtp && (

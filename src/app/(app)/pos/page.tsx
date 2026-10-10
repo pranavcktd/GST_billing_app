@@ -1,6 +1,7 @@
 "use client";
 
-import { Minus, Plus, ScanLine, Trash2 } from "lucide-react";
+import { Minus, Plus, ScanLine, Trash2, UserPlus } from "lucide-react";
+import { QuickPartyDialog } from "@/components/QuickPartyDialog";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button, Card, Combobox, ErrorBox, Field, Input, Loading } from "@/components/ui";
@@ -20,7 +21,8 @@ export default function PosPage() {
   const { data: items } = useFetch<Item[]>("/items");
   // stock in the godown POS bills from (the default one) — refreshed after each sale
   const { data: stock, reload: reloadStock } = useFetch<Record<string, number>>("/items/stock");
-  const { data: parties } = useFetch<Party[]>(`/parties${qs({ type: "CUSTOMER" })}`);
+  const { data: parties, setData: setParties } = useFetch<Party[]>(`/parties${qs({ type: "CUSTOMER" })}`);
+  const [quickParty, setQuickParty] = useState<string | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [scan, setScan] = useState("");
   const [partyId, setPartyId] = useState<string | null>(null);
@@ -169,7 +171,18 @@ export default function PosPage() {
 
       <Card className="h-fit space-y-4 p-5 lg:sticky lg:top-20">
         <Field label="Customer">
-          <Combobox items={parties} value={party?.name ?? ""} placeholder="Walk-in customer" getKey={(p) => p.id} getLabel={(p) => `${p.name} ${p.phone ?? ""}`} onSelect={(p) => setPartyId(p.id)} />
+          <div className="flex gap-2">
+            <div className="min-w-0 flex-1">
+              <Combobox items={parties ?? []} value={party?.name ?? ""} placeholder="Walk-in customer" getKey={(p) => p.id} getLabel={(p) => `${p.name} ${p.phone ?? ""}`} onSelect={(p) => setPartyId(p.id)}
+                footer={
+                  <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setQuickParty(walkIn.name)}
+                    className="flex w-full items-center gap-2 rounded px-2 py-2 text-left text-sm font-medium text-brand-600 hover:bg-brand-50">
+                    <UserPlus size={15} /> Add new customer
+                  </button>
+                } />
+            </div>
+            <Button type="button" variant="secondary" title="Add new customer" onClick={() => setQuickParty(walkIn.name)}><UserPlus size={16} /><span className="sr-only sm:not-sr-only">New</span></Button>
+          </div>
           {partyId && <button className="mt-1 text-xs text-gray-500 hover:underline" onClick={() => setPartyId(null)}>Walk-in instead</button>}
         </Field>
         {!partyId && (
@@ -197,6 +210,15 @@ export default function PosPage() {
         )}
         <Button className="w-full !py-3 text-base" disabled={!cart.length || busy} onClick={() => save()}>{busy ? "Saving…" : "Save & print (F9)"}</Button>
       </Card>
+      {quickParty !== null && (
+        <QuickPartyDialog type="CUSTOMER" initialName={quickParty} onClose={() => setQuickParty(null)}
+          onCreated={(p) => {
+            setParties([...(parties ?? []), p].sort((a, b) => a.name.localeCompare(b.name)));
+            setPartyId(p.id);
+            setWalkIn({ name: "", phone: "" });
+            setQuickParty(null);
+          }} />
+      )}
     </div>
   );
 }
