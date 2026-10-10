@@ -153,7 +153,7 @@ FIELDS: list[Field] = [
           {"2": 20, "3": 35},
           "Paid upfront: price = yearly price × years − this discount. Years 2 to 5. Remove a line to stop offering it."),
     Field("brand", "Subscription & company", "Product brand", "map_text",
-          {"app_name": "SmartHisab", "by_line": "by Corenexgen",
+          {"app_name": "MyBillSync", "by_line": "by Corenexgen",
            "tagline": "Billing, stock and accounts — made simple for Indian businesses"},
           "Shown in the app, website, e-mails and on bills of Free-plan users."),
     Field("legal", "Legal & privacy", "Legal pages, grievance officer and hosting", "map_text",
@@ -166,7 +166,7 @@ FIELDS: list[Field] = [
     Field("company", "Subscription & company", "Company details (legal pages, footer)", "map_text",
           {"name": "Corenexgen AI Technologies Pvt Ltd", "email": "corenexgenaipvtltd@gmail.com",
            "address": "Registered office address — to be filled in", "phone": "+91 96032 43575",
-           "gstin": "", "website": ""}),
+           "gstin": "", "website": "https://www.mybillsync.in"}),
 ]
 BY_KEY = {f.key: f for f in FIELDS}
 
@@ -226,7 +226,7 @@ def composition_rate(category: str | None, on: dt.date | None = None) -> Decimal
 
 
 def app_name() -> str:
-    return effective()["brand"].get("app_name") or "SmartHisab"
+    return effective()["brand"].get("app_name") or "MyBillSync"
 
 
 SERVER_ONLY = {"compliance_rules", "compliance_extensions"}  # large and only used by the server — not sent with /api/meta

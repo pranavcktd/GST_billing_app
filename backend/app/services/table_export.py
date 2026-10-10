@@ -79,7 +79,7 @@ def _meta_lines(doc: dict, business: str | None) -> list[str]:
 
 
 # ================================================================ Excel
-def to_xlsx(doc: dict, business: str | None = None, brand: str = "SmartHisab", watermark: bool = False) -> bytes:
+def to_xlsx(doc: dict, business: str | None = None, brand: str = "MyBillSync", watermark: bool = False) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = (doc.get("title") or "Report")[:31].replace("/", "-").replace(":", "-") or "Report"
@@ -163,7 +163,7 @@ def to_xlsx(doc: dict, business: str | None = None, brand: str = "SmartHisab", w
 
 
 # ================================================================ PDF
-def to_pdf(doc: dict, business: str | None = None, brand: str = "SmartHisab", watermark: bool = False) -> bytes:
+def to_pdf(doc: dict, business: str | None = None, brand: str = "MyBillSync", watermark: bool = False) -> bytes:
     sections = doc.get("sections") or []
     max_cols = max((len(s.get("columns") or []) for s in sections), default=1)
     size = landscape(A4) if max_cols > 6 else A4

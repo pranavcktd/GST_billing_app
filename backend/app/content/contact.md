@@ -3,6 +3,7 @@ We are happy to help with setup, billing questions or anything else.
 **{{company.name}}**
 E-mail: {{company.email}}
 Mobile / WhatsApp: {{company.phone}}
+Website: [www.mybillsync.in]({{company.website|https://www.mybillsync.in}})
 {{company.address}}
 
 Support hours: Monday–Saturday, 10:00–19:00 IST.

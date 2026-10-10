@@ -89,7 +89,7 @@ export const DEFAULT_LANDING: LandingContent = {
   },
   demo: { eyebrow: "Try it", title: "Move the slider. Watch the bill think." },
   features: {
-    eyebrow: "One app", title: "Everything for day-to-day hisab",
+    eyebrow: "One app", title: "Everything for your day-to-day accounts",
     subtitle: "Billing, stock, accounts, GST and staff work together, so a bill made at the counter shows up in stock, books and returns without typing it twice.",
     groups: [
       { label: "Billing", items: [

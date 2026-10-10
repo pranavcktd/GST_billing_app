@@ -1,13 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import { Nunito_Sans } from "next/font/google";
 import { Providers } from "@/components/Providers";
-import { APP_NAME, BY_LINE, DESCRIPTION } from "@/lib/brand";
+import { APP_NAME, BY_LINE, DESCRIPTION, SITE_URL } from "@/lib/brand";
 import "./globals.css";
 
 // warm, rounded and very readable at small sizes
 const appFont = Nunito_Sans({ variable: "--font-app", subsets: ["latin"] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+  openGraph: { siteName: APP_NAME, url: SITE_URL, title: `${APP_NAME} — billing, stock & accounts`, description: DESCRIPTION, locale: "en_IN", type: "website" },
   title: { default: `${APP_NAME} ${BY_LINE} — billing, stock & accounts`, template: `%s · ${APP_NAME}` },
   description: DESCRIPTION,
   applicationName: APP_NAME,

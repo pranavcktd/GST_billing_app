@@ -81,7 +81,7 @@ function EInvoiceSettings({ business, onSave }: { business: Business; onSave: (p
   const [f, setF] = useState({ einvoice_applicable: !!business.einvoice_applicable, einvoice_username: business.einvoice_username ?? "", einvoice_password: "",
     ewb_username: business.ewb_username ?? "", ewb_password: "" });
   const [err, setErr] = useState<string | null>(null);
-  const gsp = setup?.gsp_name || "the GSP named by SmartHisab";
+  const gsp = setup?.gsp_name || "the GSP named by MyBillSync";
   const plan = business.plan?.einvoice;
   return (
     <div className="max-w-3xl space-y-4">

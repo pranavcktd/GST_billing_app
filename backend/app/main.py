@@ -64,7 +64,7 @@ from .routers import (
     vouchers,
 )
 
-app = FastAPI(title="SmartHisab API", version="0.1.0", dependencies=[Depends(config_store.refresh_dep)])
+app = FastAPI(title="MyBillSync API", version="0.1.0", dependencies=[Depends(config_store.refresh_dep)])
 
 app.add_middleware(
     CORSMiddleware,

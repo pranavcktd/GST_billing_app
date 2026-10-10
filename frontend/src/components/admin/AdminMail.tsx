@@ -122,7 +122,7 @@ export function AdminMail() {
             </Field>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="From e-mail" hint="Must be verified with the provider"><Input type="email" value={d.from_email ?? ""} onChange={(e) => setDraft({ ...d, from_email: e.target.value })} /></Field>
-              <Field label="From name"><Input value={d.from_name ?? ""} placeholder="e.g. SmartHisab" onChange={(e) => setDraft({ ...d, from_name: e.target.value })} /></Field>
+              <Field label="From name"><Input value={d.from_name ?? ""} placeholder="e.g. MyBillSync" onChange={(e) => setDraft({ ...d, from_name: e.target.value })} /></Field>
               <Field label="Reply-to (optional)"><Input type="email" value={d.reply_to ?? ""} onChange={(e) => setDraft({ ...d, reply_to: e.target.value })} /></Field>
               <div className="space-y-1 pt-6">
                 <label className="flex items-center gap-2"><input type="checkbox" checked={d.active ?? true} onChange={(e) => setDraft({ ...d, active: e.target.checked })} /> Active</label>

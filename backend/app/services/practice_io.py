@@ -1,5 +1,5 @@
 """Getting figures into a practice file: trial-balance files (Excel / CSV, incl. Tally exports) and the
-books of a business kept in SmartHisab."""
+books of a business kept in MyBillSync."""
 
 import csv
 import datetime as dt
@@ -149,7 +149,7 @@ def template() -> bytes:
     return buf.getvalue()
 
 
-# ---------------------------------------------------------------- SmartHisab books → ledgers
+# ---------------------------------------------------------------- MyBillSync books → ledgers
 def _books_year(db: Session, biz: Business, start: dt.date, end: dt.date) -> tuple[dict[str, tuple[str, Decimal]], Decimal]:
     pl = profit_and_loss(db, biz, start, end)
     bs = balance_sheet(db, biz, end)
@@ -200,6 +200,6 @@ def books_to_ledgers(db: Session, biz: Business, fy: str) -> tuple[list[dict], d
     cy, cy_stock = _books_year(db, biz, start, end)
     py, py_stock = _books_year(db, biz, start.replace(year=start.year - 1), end.replace(year=end.year - 1))
     names = list(dict.fromkeys([*cy, *py]))
-    ledgers = [dict(id=new_id(), name=n, group="SmartHisab books", head=(cy.get(n) or py.get(n))[0], partner=None,
+    ledgers = [dict(id=new_id(), name=n, group="MyBillSync books", head=(cy.get(n) or py.get(n))[0], partner=None,
                     cy=str(cy.get(n, ("", ZERO))[1]), py=str(py.get(n, ("", ZERO))[1])) for n in names]
     return ledgers, {"cy": str(cy_stock), "py": str(py_stock)}

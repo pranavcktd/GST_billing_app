@@ -28,7 +28,7 @@ export default function PracticeHome() {
         <h1 className="mt-3 text-xl font-semibold text-gray-900">Practitioner workspace</h1>
         <p className="mt-2 text-sm text-gray-600">
           Prepare profit &amp; loss, balance sheet, capital accounts and depreciation for your clients — from a trial balance,
-          their SmartHisab books, or annual figures — with an explanation behind every figure.
+          their MyBillSync books, or annual figures — with an explanation behind every figure.
         </p>
         <p className="mt-4 text-sm text-gray-600">This add-on isn&apos;t active on your account yet. Contact us to enable it:
           <br /><a className="font-medium text-brand-600" href={`mailto:${config.company.email}`}>{config.company.email}</a></p>

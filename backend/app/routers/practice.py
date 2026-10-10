@@ -305,7 +305,7 @@ class BooksIn(BaseModel):
 
 @router.get("/linkable-businesses")
 def linkable(db: DB, user: CurrentUser):
-    """Businesses in SmartHisab the practitioner can read (owner, admin or CA / accountant member)."""
+    """Businesses in MyBillSync the practitioner can read (owner, admin or CA / accountant member)."""
     rows = db.execute(select(Business.id, Business.name, Business.gstin, Membership.role).join(
         Membership, Membership.business_id == Business.id).where(Membership.user_id == user.id)).all()
     return [dict(id=i, name=n, gstin=g, role=getattr(r, "value", r)) for i, n, g, r in rows]

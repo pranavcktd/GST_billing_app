@@ -239,7 +239,7 @@ export default function Landing() {
   const config = useConfig();
   const { data } = useFetch<PlansData>("/billing/plans");
   const [cycle, setCycle] = useState<string>("YEARLY");
-  const name = config.brand?.app_name || "SmartHisab";
+  const name = config.brand?.app_name || "MyBillSync";
   const trial = data?.trial_days ?? config.trial_days ?? 14;
   const cheapest = data?.plans.filter((p) => p.yearly > 0).sort((a, b) => a.yearly - b.yearly)[0];
   const firstPack = data?.credit_packs?.[0];

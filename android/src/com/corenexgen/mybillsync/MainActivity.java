@@ -1,4 +1,4 @@
-package com.corenexgen.smarthisab;
+package com.corenexgen.mybillsync;
 
 import android.Manifest;
 import android.app.Activity;
@@ -43,14 +43,14 @@ import java.io.FileOutputStream;
 import java.io.OutputStream;
 
 /**
- * SmartHisab test app: the web app full screen in a WebView, with the phone features it needs —
+ * MyBillSync test app: the web app full screen in a WebView, with the phone features it needs —
  * file downloads (reports, backups, Excel), printing / save as PDF, file and photo uploads, camera
  * (barcode scanning) and the back button. The server address can be changed when it cannot be reached.
  */
 public class MainActivity extends Activity {
     private static final int FILE_CHOOSER = 1;
     private static final int CAMERA_PERMISSION = 2;
-    private static final String PREFS = "smarthisab";
+    private static final String PREFS = "mybillsync";
 
     private WebView web;
     private ProgressBar progress;
@@ -92,7 +92,7 @@ public class MainActivity extends Activity {
         s.setLoadWithOverviewMode(true);
         s.setUseWideViewPort(true);
         s.setSupportZoom(false);
-        s.setUserAgentString(s.getUserAgentString() + " SmartHisabApp/1.0");
+        s.setUserAgentString(s.getUserAgentString() + " MyBillSyncApp/1.0");
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);
         web.addJavascriptInterface(new Bridge(), "Android");
@@ -222,10 +222,10 @@ public class MainActivity extends Activity {
                     ContentValues v = new ContentValues();
                     v.put(MediaStore.Downloads.DISPLAY_NAME, safe);
                     v.put(MediaStore.Downloads.MIME_TYPE, mime);
-                    v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/SmartHisab");
+                    v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/MyBillSync");
                     Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
                     try (OutputStream out = getContentResolver().openOutputStream(uri)) { out.write(data); }
-                    toast("Saved to Downloads/SmartHisab/" + safe);
+                    toast("Saved to Downloads/MyBillSync/" + safe);
                 } else {
                     File dir = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "");
                     dir.mkdirs();

@@ -60,7 +60,7 @@ def totp_new_secret() -> str:
 def totp_uri(secret: str, email: str) -> str:
     import pyotp
 
-    return pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name="SmartHisab")
+    return pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name="MyBillSync")
 
 
 def totp_ok(secret: str, code: str) -> bool:

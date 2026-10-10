@@ -1,5 +1,5 @@
 """Practitioner workspace: entitlement, trial-balance import, final accounts maths, partnership, carry forward,
-finalise / reopen, and importing from SmartHisab books."""
+finalise / reopen, and importing from MyBillSync books."""
 
 import io
 from decimal import Decimal
@@ -145,7 +145,7 @@ def test_parser_and_depreciation_units():
     assert d["total"]["depreciation"] == Decimal("9500.00")  # (100000 − 5% residual) / 10
 
 
-def test_import_from_smarthisab_books(client, monkeypatch):
+def test_import_from_mybillsync_books(client, monkeypatch):
     root = superadmin(client, monkeypatch)
     h = signup(client)
     b = make_business(client, h)

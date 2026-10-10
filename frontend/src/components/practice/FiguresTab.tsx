@@ -65,7 +65,7 @@ export function FiguresTab({ file, data, setData, heads, locked, onReplaced }: {
       <Card className="flex flex-wrap items-center gap-2 p-4">
         <span className="mr-2 text-sm text-gray-600">Bring in the year&apos;s figures:</span>
         <Button variant="secondary" disabled={locked} onClick={() => setImporting(true)}><Upload size={15} /> Import trial balance</Button>
-        <Button variant="secondary" disabled={locked} onClick={() => setBooks(true)}><Store size={15} /> From SmartHisab books</Button>
+        <Button variant="secondary" disabled={locked} onClick={() => setBooks(true)}><Store size={15} /> From MyBillSync books</Button>
         <Button variant="secondary" disabled={locked} onClick={guided} title="Adds one line for each common head — type the annual totals"><ListPlus size={15} /> Guided entry</Button>
         <Button variant="ghost" disabled={locked} onClick={() => add([{}])}><Plus size={15} /> Add ledger</Button>
         <div className="flex-1" />
@@ -96,7 +96,7 @@ export function FiguresTab({ file, data, setData, heads, locked, onReplaced }: {
 
       <Card className="overflow-x-auto">
         {!ledgers.length ? (
-          <p className="p-6 text-center text-sm text-gray-500">No figures yet — import a trial balance, pull from SmartHisab books, or use Guided entry.</p>
+          <p className="p-6 text-center text-sm text-gray-500">No figures yet — import a trial balance, pull from MyBillSync books, or use Guided entry.</p>
         ) : (
           <table className="tbl">
             <thead>
@@ -215,9 +215,9 @@ function FromBooks({ fileId, onClose, onDone }: { fileId: string; onClose: () =>
     catch (e) { setErr((e as Error).message); }
   }
   return (
-    <Modal title="Pull figures from SmartHisab books" onClose={onClose}>
+    <Modal title="Pull figures from MyBillSync books" onClose={onClose}>
       <div className="space-y-3 text-sm">
-        <p className="text-gray-600">Uses the client&apos;s sales, purchases, expenses, stock, bank, parties and loans kept in SmartHisab for this year and the previous year.
+        <p className="text-gray-600">Uses the client&apos;s sales, purchases, expenses, stock, bank, parties and loans kept in MyBillSync for this year and the previous year.
           The client must add you as a staff member (CA / Auditor role) of their business first.</p>
         {data && !data.length && <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-900">You are not a member of any business yet.</p>}
         <Field label="Business">

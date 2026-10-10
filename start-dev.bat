@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================================
-REM  SmartHisab - start the local servers
+REM  MyBillSync - start the local servers
 REM
 REM    start-dev.bat          development mode (auto-reload on code changes)
 REM    start-dev.bat prod     production build (faster pages; rebuilds the frontend first)
@@ -53,9 +53,9 @@ popd
 REM ---- 3. backend (FastAPI on 127.0.0.1:8000, reached by the frontend through /api)
 echo [3/4] Starting backend on http://127.0.0.1:8000 ...
 if /i "%MODE%"=="prod" (
-  start "SmartHisab backend" /d "%~dp0backend" cmd /k ".venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
+  start "MyBillSync backend" /d "%~dp0backend" cmd /k ".venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
 ) else (
-  start "SmartHisab backend" /d "%~dp0backend" cmd /k ".venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload"
+  start "MyBillSync backend" /d "%~dp0backend" cmd /k ".venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload"
 )
 
 REM ---- 4. frontend (Next.js on 0.0.0.0:3000 so other devices on the LAN can open it)
@@ -67,14 +67,14 @@ if not exist "frontend\node_modules" (
 )
 if /i "%MODE%"=="prod" (
   echo [4/4] Building and starting frontend - production - on http://localhost:3000 ...
-  start "SmartHisab frontend" /d "%~dp0frontend" cmd /k "npx next build && npx next start -p 3000 -H 0.0.0.0"
+  start "MyBillSync frontend" /d "%~dp0frontend" cmd /k "npx next build && npx next start -p 3000 -H 0.0.0.0"
 ) else (
   echo [4/4] Starting frontend - development - on http://localhost:3000 ...
-  start "SmartHisab frontend" /d "%~dp0frontend" cmd /k "npx next dev -p 3000 -H 0.0.0.0"
+  start "MyBillSync frontend" /d "%~dp0frontend" cmd /k "npx next dev -p 3000 -H 0.0.0.0"
 )
 
 echo.
-echo  SmartHisab is starting in two new windows (backend, frontend).
+echo  MyBillSync is starting in two new windows (backend, frontend).
 echo  Open http://localhost:3000 in a few seconds.
 for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4 Address"') do for /f "tokens=*" %%b in ("%%a") do echo  From other devices on your network: http://%%b:3000
 echo  Stop everything with stop-dev.bat

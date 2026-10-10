@@ -1,12 +1,12 @@
 @echo off
 rem ---------------------------------------------------------------------------
-rem  Builds the SmartHisab Android app (APK) without Android Studio.
+rem  Builds the MyBillSync Android app (APK) without Android Studio.
 rem
 rem    build-apk.bat                         opens http://<this PC's Wi-Fi IP>:3000
 rem    build-apk.bat https://your-site.com   opens that address
 rem
 rem  Needs: Java 17 (JAVA_HOME) and the Android SDK in D:\android-sdk
-rem  (platforms;android-35, build-tools;35.0.0). Output: android\SmartHisab.apk
+rem  (platforms;android-35, build-tools;35.0.0). Output: android\MyBillSync.apk
 rem ---------------------------------------------------------------------------
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
@@ -31,13 +31,13 @@ if "%URL%"=="" (
 echo Building for: %URL%
 
 if exist build rmdir /s /q build
-mkdir build\gen\com\corenexgen\smarthisab build\classes build\dex
+mkdir build\gen\com\corenexgen\mybillsync build\classes build\dex
 
 rem the address the app opens first (it can be changed in the app if unreachable)
 (
-  echo package com.corenexgen.smarthisab;
+  echo package com.corenexgen.mybillsync;
   echo public final class BuildConfig { public static final String DEFAULT_URL = "%URL%"; }
-) > build\gen\com\corenexgen\smarthisab\BuildConfig.java
+) > build\gen\com\corenexgen\mybillsync\BuildConfig.java
 
 echo [1/6] Resources
 "%BT%\aapt2.exe" compile --dir res -o build\res.zip || goto :fail
@@ -59,20 +59,20 @@ popd
 "%BT%\zipalign.exe" -p -f 4 build\app-unsigned.apk build\app-aligned.apk || goto :fail
 
 echo [5/6] Signing key
-if not exist keystore\smarthisab-test.jks (
+if not exist keystore\mybillsync-test.jks (
   mkdir keystore 2>nul
-  "%JAVA%\keytool.exe" -genkeypair -keystore keystore\smarthisab-test.jks -alias smarthisab -keyalg RSA -keysize 2048 ^
-    -validity 10000 -storepass smarthisab-test -keypass smarthisab-test ^
-    -dname "CN=SmartHisab Test, O=Corenexgen AI Technologies Pvt Ltd, C=IN" || goto :fail
+  "%JAVA%\keytool.exe" -genkeypair -keystore keystore\mybillsync-test.jks -alias mybillsync -keyalg RSA -keysize 2048 ^
+    -validity 10000 -storepass mybillsync-test -keypass mybillsync-test ^
+    -dname "CN=MyBillSync Test, O=Corenexgen AI Technologies Pvt Ltd, C=IN" || goto :fail
 )
 
 echo [6/6] Sign
-call "%BT%\apksigner.bat" sign --ks keystore\smarthisab-test.jks --ks-pass pass:smarthisab-test --key-pass pass:smarthisab-test ^
-  --out SmartHisab.apk build\app-aligned.apk || goto :fail
-call "%BT%\apksigner.bat" verify SmartHisab.apk || goto :fail
+call "%BT%\apksigner.bat" sign --ks keystore\mybillsync-test.jks --ks-pass pass:mybillsync-test --key-pass pass:mybillsync-test ^
+  --out MyBillSync.apk build\app-aligned.apk || goto :fail
+call "%BT%\apksigner.bat" verify MyBillSync.apk || goto :fail
 
 echo.
-echo Done: %~dp0SmartHisab.apk  (opens %URL%)
+echo Done: %~dp0MyBillSync.apk  (opens %URL%)
 exit /b 0
 
 :fail
