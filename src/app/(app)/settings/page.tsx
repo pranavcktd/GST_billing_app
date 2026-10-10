@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { BusinessForm } from "@/components/BusinessForm";
 import { DscSettings } from "@/components/DscSettings";
+import { BusinessMailInfo } from "@/components/BusinessMailInfo";
 import { PrintSettingsForm } from "@/components/PrintSettingsForm";
 import { SecuritySettings } from "@/components/SecuritySettings";
-import { SmtpForm } from "@/components/SmtpForm";
 import { Button, Card, ErrorBox, Field, Input, LinkButton, Loading, PageHeader } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth, usePerms } from "@/lib/auth";
@@ -68,10 +68,7 @@ export default function SettingsPage() {
       )}
       {tab === "print" && <PrintSettingsForm business={data} onSave={(ps: PrintSettings) => saveBusiness({ print_settings: ps })} />}
       {tab === "einvoice" && <EInvoiceSettings business={data} onSave={saveBusiness} />}
-      {tab === "email" && (
-        <SmtpForm base="/smtp" canEdit={canEdit} title="E-mail for this business"
-          help="Invoices, payment reminders and backups you e-mail go out from this address. Leave empty to use your reseller's or the platform's mail server." />
-      )}
+      {tab === "email" && <BusinessMailInfo />}
       {tab === "reminders" && <ReminderSettings canEdit={canEdit} />}
       {tab === "modules" && <ModuleSettings canEdit={canEdit} />}
       {tab === "security" && <SecuritySettings canApprove={["OWNER", "ADMIN", "MANAGER"].includes(mine?.role ?? "")} />}

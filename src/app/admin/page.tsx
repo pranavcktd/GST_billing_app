@@ -4,7 +4,6 @@ import { CheckCircle2, XCircle } from "lucide-react";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { PlatformShell } from "@/components/PlatformShell";
-import { SmtpForm } from "@/components/SmtpForm";
 import { AdminAudit } from "@/components/admin/AdminAudit";
 import { AdminBackups } from "@/components/admin/AdminBackups";
 import { AdminBusinesses } from "@/components/admin/AdminBusinesses";
@@ -15,6 +14,8 @@ import { AdminWhatsApp } from "@/components/admin/AdminWhatsApp";
 import { AdminIfsc } from "@/components/admin/AdminIfsc";
 import { AdminSignup } from "@/components/admin/AdminSignup";
 import { AdminPrivacy } from "@/components/admin/AdminPrivacy";
+import { AdminMail } from "@/components/admin/AdminMail";
+import { AdminSite } from "@/components/admin/AdminSite";
 import { AdminRazorpay } from "@/components/admin/AdminRazorpay";
 import { AdminPlanConfig } from "@/components/admin/AdminPlanConfig";
 import { AdminRateNotices } from "@/components/admin/AdminRateNotices";
@@ -36,7 +37,7 @@ interface Reseller { id: string; name: string; email: string; commission_pct: nu
 interface License { id: string; created_at: string; reseller: string; account: string; plan: string; months: number; amount: number; commission: number; payout_status: string }
 interface Health { app_env: string; database: boolean; database_engine: string; einvoice_provider: string; gsp_configured: boolean; razorpay_live: boolean; razorpay_webhook: boolean; email_configured: boolean; cloudinary_configured: boolean }
 
-const TABS = ["Overview", "Users", "Hierarchy", "Plans", "Businesses", "Resellers", "Payouts", "GST config", "HSN master", "Rate notices", "Pricing", "Integrations", "Backups", "Privacy & security", "Audit", "Email", "System"] as const;
+const TABS = ["Overview", "Users", "Hierarchy", "Plans", "Businesses", "Resellers", "Payouts", "GST config", "HSN master", "Rate notices", "Pricing", "Integrations", "Website", "Backups", "Privacy & security", "Audit", "Email", "System"] as const;
 
 export default function AdminPage() {
   return <PlatformShell need="SUPERADMIN"><Admin /></PlatformShell>;
@@ -98,13 +99,11 @@ function Admin() {
       {tab === "Rate notices" && <AdminRateNotices />}
       {tab === "Pricing" && <AdminPlanConfig />}
       {tab === "Integrations" && <div className="space-y-8"><AdminRazorpay /><AdminSignup /><AdminIntegrations /><AdminIfsc /><AdminWhatsApp /><AdminDocuments /></div>}
+      {tab === "Website" && <AdminSite />}
       {tab === "Backups" && <AdminBackups />}
       {tab === "Privacy & security" && <AdminPrivacy />}
       {tab === "Audit" && <AdminAudit />}
-      {tab === "Email" && (
-        <SmtpForm base="/admin/smtp" title="Platform e-mail"
-          help="Used for system e-mails — password resets, new account details — and as the fallback for resellers and businesses that have not set up their own." />
-      )}
+      {tab === "Email" && <AdminMail />}
 
       {tab === "Plans" && (
         <>

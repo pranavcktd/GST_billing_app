@@ -10,7 +10,7 @@ import { useFetch } from "@/lib/useFetch";
 
 interface Biz {
   id: string; name: string; gstin: string | null; created_at: string; owner: string | null; owner_email: string | null; members: number; backups: number;
-  excel_backup: boolean | null; excel_backup_on: boolean; filing_sync: boolean | null; filing_sync_on: boolean;
+  excel_backup: boolean | null; excel_backup_on: boolean; filing_sync: boolean | null; filing_sync_on: boolean; mail_sender_id?: string | null;
 }
 
 /** All businesses (metadata only) with ownership transfer. */
@@ -22,6 +22,7 @@ export function AdminBusinesses() {
   const [err, setErr] = useState<string | null>(null);
   const [wipe, setWipe] = useState<Biz | null>(null);
   const { data: excelDefault, setData: setExcelDefault } = useFetch<{ default: boolean }>("/admin/excel-backup");
+  const { data: mail } = useFetch<{ senders: { id: string; label: string; from_email: string; is_default: boolean }[] }>("/admin/mail/senders");
 
   async function setSwitch(b: Biz, what: "excel-backup" | "filing-sync", v: string) {
     setErr(null);
@@ -57,7 +58,7 @@ export function AdminBusinesses() {
       <Card className="overflow-x-auto">
         {!data ? <Loading /> : (
           <table className="tbl">
-            <thead><tr><th>Business</th><th>GSTIN</th><th>Owner</th><th className="num">People</th><th className="num">Backups</th><th>Excel backup</th><th title="Fetch GST filing status from the portal (API)">GST status sync</th><th>Created</th><th /></tr></thead>
+            <thead><tr><th>Business</th><th>GSTIN</th><th>Owner</th><th className="num">People</th><th className="num">Backups</th><th>Excel backup</th><th title="Fetch GST filing status from the portal (API)">GST status sync</th><th>E-mail from</th><th>Created</th><th /></tr></thead>
             <tbody>
               {data.map((b) => (
                 <tr key={b.id}>
@@ -79,6 +80,17 @@ export function AdminBusinesses() {
                       <option value="">Default</option><option value="on">On</option><option value="off">Off</option>
                     </select>
                     <span className={`ml-1.5 text-xs ${b.filing_sync_on ? "text-emerald-700" : "text-gray-400"}`}>{b.filing_sync_on ? "●" : "○"}</span>
+                  </td>
+                  <td>
+                    <select className="max-w-[11rem] rounded border border-gray-300 px-1.5 py-1 text-xs" value={b.mail_sender_id ?? ""}
+                      title="Sender for this business's e-mails" onChange={async (e) => {
+                        setErr(null);
+                        try { await api(`/admin/mail/businesses/${b.id}`, { method: "PUT", body: { sender_id: e.target.value || null } }); reload(); }
+                        catch (x) { setErr((x as Error).message); }
+                      }}>
+                      <option value="">Platform default</option>
+                      {mail?.senders.filter((s) => !s.is_default).map((s) => <option key={s.id} value={s.id}>{s.label} ({s.from_email})</option>)}
+                    </select>
                   </td>
                   <td className="text-xs">{new Date(b.created_at).toLocaleDateString("en-IN")}</td>
                   <td className="whitespace-nowrap text-right">
