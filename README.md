@@ -99,7 +99,7 @@ GST billing, inventory and accounting SaaS for small and medium Indian businesse
   - Account and business backups restore as new businesses.
   - A full backup replaces everything, after a typed confirmation and an automatic safety backup; the acting super admin keeps access.
   - A daily automatic full backup keeps the last 7.
-- **Email (SMTP) per level:** platform (password resets and new-account mails), reseller, and business (invoices and backups). Each level falls back to the one above.
+- **E-mail through API providers only** (ZeptoMail, Brevo, Resend, SendGrid, Postmark — no SMTP): the super admin adds senders in Admin → Email; one is the platform default (codes, password resets, and every business's invoices and backups sent under the business's name), and a business can be given its own sender.
 
 **Sign-in security**
 - Forgot/reset password by e-mail link (one-time, 30 minutes).
@@ -183,7 +183,6 @@ npm run dev                                         # http://localhost:3000
    - `APP_ENV=production`, `SUPERADMIN_EMAILS` and `APP_URL` (the public web address used in e-mailed links)
    - `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET` (webhook URL `/api/billing/webhook`, events `payment.captured` and `order.paid`)
    - `EINVOICE_PROVIDER` plus the `GSP_*` settings once you have a GSP
-   - optionally `SMTP_*` for emailed backups
 3. **Frontend:** add a service with root directory `frontend` (or deploy on Vercel). Set `API_PROXY_TARGET` to the backend's URL (the browser calls `/api` on the frontend's own domain, so no CORS setup is needed).
 
 ## Roadmap

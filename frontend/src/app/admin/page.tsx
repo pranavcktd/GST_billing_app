@@ -190,7 +190,7 @@ function Admin() {
             ["GSP credentials", health.gsp_configured ? "configured" : "not set", health.gsp_configured],
             ["Razorpay payments", health.razorpay_live ? "live keys set" : "not configured (simulated)", health.razorpay_live],
             ["Razorpay webhook", health.razorpay_webhook ? "secret set" : "not set", health.razorpay_webhook],
-            ["Email (backups)", health.email_configured ? "SMTP set" : "not set", health.email_configured],
+            ["E-mail (API sender)", health.email_configured ? "default sender set" : "not set — Admin → Email", health.email_configured],
             ["Cloudinary (images)", health.cloudinary_configured ? "configured" : "not set", health.cloudinary_configured],
           ] as [string, string, boolean][]).map(([k, v, ok]) => (
             <div key={k} className="flex items-center justify-between px-5 py-3 text-sm">

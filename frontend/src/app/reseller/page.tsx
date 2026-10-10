@@ -4,7 +4,6 @@ import { Copy, Plus } from "lucide-react";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { PlatformShell } from "@/components/PlatformShell";
-import { SmtpForm } from "@/components/SmtpForm";
 import { Button, Card, Empty, ErrorBox, Field, Input, Loading, Select } from "@/components/ui";
 import { api } from "@/lib/api";
 import { fmtDate, money } from "@/lib/format";
@@ -25,7 +24,6 @@ function Reseller() {
   const [issue, setIssue] = useState<{ account: Account; plan: string; months: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loginFor, setLoginFor] = useState<Account | null>(null);
-  const [showMail, setShowMail] = useState(false);
 
   const userAction = async (a: Account, action: string) => {
     setErr(null);
@@ -94,11 +92,6 @@ function Reseller() {
           </table>
         )}
       </Card>
-      <div className="mt-5">
-        <button className="text-sm font-medium text-brand-600 hover:underline" onClick={() => setShowMail(!showMail)}>{showMail ? "Hide" : "Set up"} e-mail for my customers</button>
-        {showMail && <div className="mt-3"><SmtpForm base="/reseller/smtp" title="Reseller e-mail"
-          help="Your customers' invoices and backups are e-mailed through this server unless a business sets up its own." /></div>}
-      </div>
       {loginFor && (
         <Modal title={`Login — ${loginFor.name}`} onClose={() => setLoginFor(null)}>
           <div className="grid gap-2">

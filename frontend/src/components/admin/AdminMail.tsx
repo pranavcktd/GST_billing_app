@@ -8,11 +8,10 @@ import { api } from "@/lib/api";
 import { useFetch } from "@/lib/useFetch";
 
 interface Sender {
-  id: string; label: string; provider: string; provider_label: string; region: string | null; host: string | null; port: number | null;
-  security: string | null; username: string | null; from_email: string; from_name: string | null; reply_to: string | null;
+  id: string; label: string; provider: string; provider_label: string; region: string | null; from_email: string; from_name: string | null; reply_to: string | null;
   is_default: boolean; active: boolean; secret_set: boolean; last_test_at: string | null; last_error: string | null; businesses: number;
 }
-interface Data { senders: Sender[]; providers: Record<string, string>; legacy_platform_smtp: boolean; effective: { source: string; kind: string; from_email: string } | null }
+interface Data { senders: Sender[]; providers: Record<string, string> }
 type Draft = Partial<Sender> & { secret?: string };
 
 const KEY_HELP: Record<string, string> = {
@@ -21,10 +20,9 @@ const KEY_HELP: Record<string, string> = {
   RESEND: "Resend → API Keys (starts with re_). The from-address domain must be verified in Resend.",
   SENDGRID: "SendGrid → Settings → API Keys (starts with SG.) with Mail Send permission; verify the sender.",
   POSTMARK: "Postmark → Server → API Tokens (Server API token). Use a verified sender signature.",
-  SMTP: "Any SMTP server — kept for compatibility. API providers are faster and more reliable.",
 };
 
-/** Super admin → Email: senders (API providers or SMTP); one is the platform default, others can be given to businesses. */
+/** Super admin → Email: senders (API providers only); one is the platform default, others can be given to businesses. */
 export function AdminMail() {
   const { data, setData, reload } = useFetch<Data>("/admin/mail/senders");
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -37,8 +35,7 @@ export function AdminMail() {
     if (!draft) return;
     setErr(null);
     const body = { label: draft.label, provider: draft.provider, secret: draft.secret || null, region: draft.provider === "ZEPTOMAIL" ? draft.region || "IN" : null,
-      host: draft.host || null, port: draft.port || null, security: draft.provider === "SMTP" ? draft.security || "STARTTLS" : null,
-      username: draft.username || null, from_email: draft.from_email, from_name: draft.from_name || null, reply_to: draft.reply_to || null,
+      from_email: draft.from_email, from_name: draft.from_name || null, reply_to: draft.reply_to || null,
       active: draft.active ?? true, is_default: !!draft.is_default };
     try {
       if (draft.id) await api(`/admin/mail/senders/${draft.id}`, { method: "PUT", body });
@@ -64,7 +61,8 @@ export function AdminMail() {
       {msg && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{msg}</p>}
       {data.senders.length === 0 && (
         <Card className="p-5 text-sm text-gray-600">
-          No senders yet. {data.legacy_platform_smtp ? "The older platform SMTP setting is still being used until you add one." : data.effective ? "The server's SMTP settings are being used." : "E-mail is not set up — codes and invoices cannot be e-mailed."}
+          No senders yet, so nothing can be e-mailed — sign-in codes, password resets, invoices, reminders and backups.
+          Add one (ZeptoMail India or Brevo work well) and send yourself a test.
         </Card>
       )}
       <div className="grid gap-3 lg:grid-cols-2">
@@ -114,19 +112,12 @@ export function AdminMail() {
               </Select></Field>
             </div>
             <p className="text-xs text-gray-500">{KEY_HELP[d.provider ?? "BREVO"]}</p>
-            {d.provider === "SMTP" ? (
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Field label="Host" className="sm:col-span-2"><Input value={d.host ?? ""} onChange={(e) => setDraft({ ...d, host: e.target.value })} /></Field>
-                <Field label="Port"><Input type="number" value={d.port ?? 587} onChange={(e) => setDraft({ ...d, port: Number(e.target.value) })} /></Field>
-                <Field label="Security"><Select value={d.security ?? "STARTTLS"} onChange={(e) => setDraft({ ...d, security: e.target.value })}><option>STARTTLS</option><option>SSL</option><option>NONE</option></Select></Field>
-                <Field label="Username" className="sm:col-span-2"><Input value={d.username ?? ""} onChange={(e) => setDraft({ ...d, username: e.target.value })} /></Field>
-              </div>
-            ) : d.provider === "ZEPTOMAIL" && (
+            {d.provider === "ZEPTOMAIL" && (
               <Field label="Data centre"><Select value={d.region ?? "IN"} onChange={(e) => setDraft({ ...d, region: e.target.value })}>
                 <option value="IN">India (zeptomail.in)</option><option value="COM">Global (zeptomail.com)</option><option value="EU">Europe (zeptomail.eu)</option>
               </Select></Field>
             )}
-            <Field label={d.provider === "SMTP" ? "Password" : "API key"} hint={d.secret_set ? "Saved — type a new one only to replace it" : "Stored encrypted; never shown again"}>
+            <Field label="API key" hint={d.secret_set ? "Saved — type a new one only to replace it" : "Stored encrypted; never shown again"}>
               <Input type="password" autoComplete="off" value={d.secret ?? ""} onChange={(e) => setDraft({ ...d, secret: e.target.value })} />
             </Field>
             <div className="grid gap-3 sm:grid-cols-2">

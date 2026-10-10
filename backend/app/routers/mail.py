@@ -1,4 +1,4 @@
-"""Super admin: e-mail senders (API providers / SMTP) and which business uses which. See services/mailer.py."""
+"""Super admin: e-mail senders (API providers) and which business uses which. See services/mailer.py."""
 
 import datetime as dt
 from typing import Literal
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/admin/mail", tags=["e-mail"])
 def _out(db, s: MailSender) -> dict:
     used = db.scalar(select(func.count(Business.id)).where(Business.mail_sender_id == s.id)) or 0
     return dict(id=s.id, label=s.label, provider=s.provider, provider_label=mailer.PROVIDERS.get(s.provider, s.provider),
-                region=s.region, host=s.host, port=s.port, security=s.security, username=s.username, from_email=s.from_email,
+                region=s.region, from_email=s.from_email,
                 from_name=s.from_name, reply_to=s.reply_to, is_default=s.is_default, active=s.active, secret_set=bool(s.secret_enc),
                 last_test_at=s.last_test_at, last_error=s.last_error, businesses=used)
 
@@ -27,20 +27,14 @@ def _out(db, s: MailSender) -> dict:
 @router.get("/senders")
 def senders(db: DB, _: SuperAdmin):
     rows = db.scalars(select(MailSender).order_by(MailSender.is_default.desc(), MailSender.created_at)).all()
-    legacy = mailer._row(db, "PLATFORM")
-    return {"senders": [_out(db, s) for s in rows], "providers": mailer.PROVIDERS,
-            "legacy_platform_smtp": bool(legacy), "effective": (lambda c: c and dict(source=c.source, kind=c.kind, from_email=c.from_email))(mailer.system_smtp(db))}
+    return {"senders": [_out(db, s) for s in rows], "providers": mailer.PROVIDERS}
 
 
 class SenderIn(BaseModel):
     label: str = Field(min_length=2, max_length=80)
-    provider: Literal["BREVO", "ZEPTOMAIL", "RESEND", "SENDGRID", "POSTMARK", "SMTP"]
-    secret: str | None = Field(None, max_length=500)  # API key / SMTP password; blank = keep
+    provider: Literal["BREVO", "ZEPTOMAIL", "RESEND", "SENDGRID", "POSTMARK"]
+    secret: str | None = Field(None, max_length=500)  # API key; blank = keep
     region: Literal["IN", "COM", "EU"] | None = None
-    host: str | None = Field(None, max_length=200)
-    port: int | None = Field(None, ge=1, le=65535)
-    security: Literal["STARTTLS", "SSL", "NONE"] | None = None
-    username: str | None = Field(None, max_length=200)
     from_email: EmailStr
     from_name: str | None = Field(None, max_length=120)
     reply_to: EmailStr | None = None
@@ -49,14 +43,12 @@ class SenderIn(BaseModel):
 
 
 def _apply(s: MailSender, data: SenderIn) -> None:
-    for k in ("label", "provider", "region", "host", "port", "security", "username", "from_name", "active"):
+    for k in ("label", "provider", "region", "from_name", "active"):
         setattr(s, k, getattr(data, k))
     s.from_email, s.reply_to = str(data.from_email), str(data.reply_to) if data.reply_to else None
     if data.secret:
         s.secret_enc = encrypt_secret(data.secret.strip())
-    if s.provider == "SMTP" and not s.host:
-        raise HTTPException(422, "SMTP needs a server host")
-    if s.provider != "SMTP" and not s.secret_enc:
+    if not s.secret_enc:
         raise HTTPException(422, "Enter the provider's API key")
 
 

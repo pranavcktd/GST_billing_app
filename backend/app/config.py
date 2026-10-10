@@ -31,12 +31,7 @@ class Settings(BaseSettings):
     cloudinary_url: str | None = None  # cloudinary://<api_key>:<api_secret>@<cloud_name>
     cloudinary_folder: str = "gst-billing"
 
-    # e-mail for backups (any SMTP provider: Gmail app password, SendGrid, Brevo, SES...)
-    smtp_host: str | None = None
-    smtp_port: int = 587
-    smtp_user: str | None = None
-    smtp_password: str | None = None
-    smtp_from: str | None = None
+    # e-mail: API senders (Brevo, ZeptoMail, ...) are added by the super admin in Admin → Email — nothing here
 
     # subscriptions (Razorpay dashboard -> Settings -> API keys / Webhooks)
     razorpay_key_id: str | None = None

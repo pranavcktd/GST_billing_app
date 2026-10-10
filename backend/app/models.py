@@ -789,13 +789,9 @@ class MailSender(Base):
     __tablename__ = "mail_senders"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
     label: Mapped[str] = mapped_column(String(80))
-    provider: Mapped[str] = mapped_column(String(10))  # BREVO / ZEPTOMAIL / RESEND / SENDGRID / POSTMARK / SMTP
-    secret_enc: Mapped[str | None] = mapped_column(Text)  # API key (or SMTP password), encrypted
+    provider: Mapped[str] = mapped_column(String(10))  # BREVO / ZEPTOMAIL / RESEND / SENDGRID / POSTMARK
+    secret_enc: Mapped[str | None] = mapped_column(Text)  # API key, encrypted
     region: Mapped[str | None] = mapped_column(String(5))  # ZeptoMail data centre: IN / COM / EU
-    host: Mapped[str | None] = mapped_column(String(200))  # SMTP only
-    port: Mapped[int | None] = mapped_column(Integer)
-    security: Mapped[str | None] = mapped_column(String(10))
-    username: Mapped[str | None] = mapped_column(String(200))
     from_email: Mapped[str] = mapped_column(String(200))
     from_name: Mapped[str | None] = mapped_column(String(120))
     reply_to: Mapped[str | None] = mapped_column(String(200))
@@ -804,24 +800,6 @@ class MailSender(Base):
     last_test_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(String(300))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
-
-
-class SmtpConfig(Base):
-    """Outgoing e-mail server. PLATFORM (one), RESELLER (per reseller user), BUSINESS (per business)."""
-
-    __tablename__ = "smtp_configs"
-    __table_args__ = (UniqueConstraint("scope", "owner_id", name="uq_smtp_scope_owner"),)
-    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
-    scope: Mapped[str] = mapped_column(String(10))
-    owner_id: Mapped[str] = mapped_column(String(32), default="")  # "" for PLATFORM
-    host: Mapped[str] = mapped_column(String(200))
-    port: Mapped[int] = mapped_column(Integer, default=587)
-    security: Mapped[str] = mapped_column(String(10), default="STARTTLS")  # STARTTLS / SSL / NONE
-    username: Mapped[str | None] = mapped_column(String(200))
-    password_enc: Mapped[str | None] = mapped_column(Text)
-    from_email: Mapped[str] = mapped_column(String(200))
-    from_name: Mapped[str | None] = mapped_column(String(120))
-    updated_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
 
 class PlatformBackup(Base):

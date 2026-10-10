@@ -76,7 +76,7 @@ export const ENTRIES: SearchEntry[] = [
   // ---- settings
   { group: "Settings", title: "Business details", href: "/settings?tab=business", k: "company profile gstin address logo bank upi lut", perm: ["settings", "view"] },
   { group: "Settings", title: "Invoice design & print", href: "/settings?tab=print", k: "theme template format thermal print settings", perm: ["settings", "view"] },
-  { group: "Settings", title: "E-mail settings", href: "/settings?tab=email", k: "smtp mail", perm: ["settings", "view"] },
+  { group: "Settings", title: "E-mail settings", href: "/settings?tab=email", k: "email mail sender", perm: ["settings", "view"] },
   { group: "Settings", title: "Security, 2FA & sessions", href: "/settings?tab=security", k: "password two factor otp login devices" },
   { group: "Settings", title: "Staff & roles / manage companies", href: "/utilities/companies", k: "users team employee permission business add company" },
   { group: "Settings", title: "Subscription & plan", href: "/billing", k: "upgrade pay plan renew razorpay" },

@@ -1,4 +1,4 @@
-"""Login security, super-admin user management, hierarchy, audit, backups (full/account), SMTP and sharing."""
+"""Login security, super-admin user management, hierarchy, audit, backups (full/account), e-mail and sharing."""
 
 import pyotp
 import pytest
@@ -12,35 +12,40 @@ from tests.test_phase2 import setup
 SENT: list = []
 
 
-class FakeSMTP:
-    def __init__(self, host, port, timeout=30, **kw):
-        self.host = host
+def capture_api_mail(url, headers, body):
+    """Stands in for the e-mail provider's API: a Brevo request is rebuilt as an EmailMessage and kept in SENT."""
+    import base64
+    import mimetypes
+    from email.message import EmailMessage
+    from email.utils import formataddr
 
-    def starttls(self, context=None):
-        pass
+    import httpx
 
-    def login(self, u, p):
-        pass
-
-    def send_message(self, msg):
-        SENT.append(msg)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *a):
-        return False
+    msg = EmailMessage()
+    msg["Subject"] = body["subject"]
+    msg["From"] = formataddr((body["sender"].get("name", ""), body["sender"]["email"]))
+    msg["To"] = ", ".join(t["email"] for t in body["to"])
+    if body.get("cc"):
+        msg["Cc"] = ", ".join(t["email"] for t in body["cc"])
+    if body.get("replyTo"):
+        msg["Reply-To"] = body["replyTo"]["email"]
+    msg.set_content(body.get("textContent") or "-")
+    msg.add_alternative(body["htmlContent"], subtype="html")
+    for a in body.get("attachment", []):
+        main, sub = (mimetypes.guess_type(a["name"])[0] or "application/octet-stream").split("/", 1)
+        msg.add_attachment(base64.b64decode(a["content"]), maintype=main, subtype=sub, filename=a["name"])
+    SENT.append(msg)
+    return httpx.Response(201, json={"messageId": "test"})
 
 
 @pytest.fixture(autouse=True)
 def fake_mail(monkeypatch):
     SENT.clear()
-    monkeypatch.setattr(mailer.smtplib, "SMTP", FakeSMTP)
-    monkeypatch.setattr(mailer.smtplib, "SMTP_SSL", FakeSMTP)
+    monkeypatch.setattr(mailer, "_http_post", capture_api_mail)
 
 
 def platform_mail(client, from_email="noreply@platform.in"):
-    """A platform default e-mail sender (SMTP, so FakeSMTP captures the messages) — e-mail is platform-managed."""
+    """A platform default e-mail sender (Brevo; fake_mail captures the messages) — e-mail is platform-managed."""
     from app.db import get_db
     from app.main import app
     from app.models import MailSender
@@ -49,8 +54,8 @@ def platform_mail(client, from_email="noreply@platform.in"):
     gen = app.dependency_overrides.get(get_db, get_db)()
     db = next(gen)
     try:
-        db.add(MailSender(label="Platform", provider="SMTP", host="smtp.platform.in", port=587, security="STARTTLS",
-                          username="u", secret_enc=encrypt_secret("p"), from_email=from_email, is_default=True))
+        db.add(MailSender(label="Platform", provider="BREVO", secret_enc=encrypt_secret("xkeysib-test"), from_email=from_email,
+                          is_default=True))
         db.commit()
     finally:
         gen.close()
@@ -209,16 +214,21 @@ def test_smtp_levels_and_invoice_email(client, monkeypatch):
 
     root = superadmin(client, monkeypatch)
     h, cust, item = setup(client)
-    assert client.put("/api/smtp", headers=h, json={"host": "smtp.shop.in", "from_email": "billing@shop.in", "password": "x"}).status_code == 403
-    sm = post(client, root, "/api/admin/mail/senders", {"label": "Platform SMTP", "provider": "SMTP", "host": "smtp.platform.in",
-                                                         "port": 587, "security": "STARTTLS", "username": "u", "secret": "p",
+    assert client.put("/api/smtp", headers=h, json={"host": "smtp.shop.in", "from_email": "billing@shop.in", "password": "x"}).status_code == 405
+    assert client.get("/api/smtp", headers=h).json()["effective_source"] is None  # nothing set up → nothing is sent
+    v0 = post(client, h, "/api/vouchers", {"type": "SALE", "date": "2026-09-10", "party_id": cust["id"],
+                                           "lines": [{"item_id": item["id"], "name": "Bottle", "qty": 1, "rate": 500, "gst_rate": 18}]})
+    assert client.post(f"/api/vouchers/{v0['id']}/email", headers=h, json={"to": ["buyer@client.in"]}).status_code == 503
+    assert client.post("/api/admin/mail/senders", headers=root, json={"label": "Old", "provider": "SMTP", "secret": "p",
+                                                                      "from_email": "a@b.in"}).status_code == 422  # API only
+    assert client.post("/api/admin/mail/senders", headers=root, json={"label": "No key", "provider": "BREVO",
+                                                                      "from_email": "a@b.in"}).status_code == 422
+    sm = post(client, root, "/api/admin/mail/senders", {"label": "Platform", "provider": "BREVO", "secret": "xkeysib-p",
                                                          "from_email": "noreply@platform.in"})
     assert sm["is_default"] and sm["secret_set"] and "secret" not in sm
     st = client.get("/api/smtp", headers=h).json()
     biz = client.get("/api/businesses/current", headers=h).json()
     assert st["effective_source"] == "PLATFORM" and st["from_email"] == "noreply@platform.in" and st["from_name"] == biz["name"]
-    v0 = post(client, h, "/api/vouchers", {"type": "SALE", "date": "2026-09-10", "party_id": cust["id"],
-                                           "lines": [{"item_id": item["id"], "name": "Bottle", "qty": 1, "rate": 500, "gst_rate": 18}]})
     post(client, h, f"/api/vouchers/{v0['id']}/email", {"to": ["buyer@client.in"]}, 200)
     assert biz["name"] in SENT[-1]["From"] and "noreply@platform.in" in SENT[-1]["From"]
 
@@ -259,7 +269,8 @@ def test_smtp_levels_and_invoice_email(client, monkeypatch):
     client.delete(f"/api/vouchers/{v['id']}/share-link", headers=h)
     assert client.get(f"/api/public/invoice/{token}").status_code == 404
 
-    # forgot password now goes out through the platform SMTP
+    # forgot password goes out through the platform default sender
+    monkeypatch.setattr(mailer, "_http_post", capture_api_mail)
     signup(client, "someone@x.in")
     out = client.post("/api/auth/forgot", json={"email": "someone@x.in"}).json()
     assert "dev_temp_password" not in out and "noreply@platform.in" in SENT[-1]["From"]
