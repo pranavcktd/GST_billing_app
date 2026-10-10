@@ -57,7 +57,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   blocked_itc_categories: ["Tea & Refreshments"], subscription_gst_rate: 18, trial_days: 14,
   brand: { app_name: APP_NAME, by_line: BY_LINE, tagline: TAGLINE }, links: { ...DEFAULT_LINKS },
   company: { name: COMPANY_NAME, email: "corenexgenaipvtltd@gmail.com",
-    address: "Registered office address — to be filled in", phone: "Phone — to be filled in" },
+    address: "Registered office address — to be filled in", phone: "+91 96032 43575" },
 };
 
 const KEY = "app-config";

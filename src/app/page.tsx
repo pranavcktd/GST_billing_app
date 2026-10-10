@@ -250,7 +250,7 @@ export default function Landing() {
 
   useEffect(() => {
     if (!loading && me) {
-      router.replace(business ? "/dashboard" : me.platform_role === "SUPERADMIN" ? "/admin" : me.platform_role === "RESELLER" ? "/reseller" : me.practice_clients > 0 ? "/practice" : "/onboarding");
+      router.replace(business ? "/dashboard" : me.platform_role === "SUPERADMIN" || me.platform_role === "TEAM" ? "/admin" : me.platform_role === "RESELLER" ? "/reseller" : me.practice_clients > 0 ? "/practice" : "/onboarding");
     }
   }, [me, loading, business, router]);
 
@@ -440,6 +440,10 @@ export default function Landing() {
             <div className="max-w-sm">
               <BrandLogo size="sm" />
               <p className="mt-2 text-xs">{config.brand?.tagline}</p>
+              <p className="mt-3 text-xs text-gray-600">
+                {config.company.email && <a href={`mailto:${config.company.email}`} className="hover:underline">{config.company.email}</a>}
+                {/^\+?[\d\s-]{8,}$/.test(config.company.phone ?? "") && <> · <a href={`tel:${config.company.phone.replace(/[\s-]/g, "")}`} className="hover:underline">{config.company.phone}</a></>}
+              </p>
             </div>
             <nav className="flex flex-wrap gap-5">
               <Link href="/terms" className="hover:underline">Terms</Link>

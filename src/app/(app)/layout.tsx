@@ -22,6 +22,7 @@ import {
   History,
   Landmark,
   LayoutDashboard,
+  LifeBuoy,
   LogOut,
   Menu,
   Plus,
@@ -52,10 +53,12 @@ import { GlobalSearch } from "@/components/GlobalSearch";
 import { OfflineSync } from "@/components/OfflineSync";
 import { MobileNav } from "@/components/MobileNav";
 import { PlanBadge } from "@/components/PlanBadge";
+import { NotificationBell } from "@/components/NotificationBell";
 import { UserBar } from "@/components/UserBar";
 import { businessMode, hiddenHrefs, isHiddenHref } from "@/lib/modules";
 import { InvitationsBanner, PendingSignIns } from "@/components/StaffComponents";
 import { CheckInButton } from "@/components/CheckInButton";
+import { HelpButton } from "@/components/Support";
 
 type NavItem = { href: string; label: string; icon: React.ElementType; perm?: [Module, Action] | [Module, Action][] };
 
@@ -135,6 +138,7 @@ const NAV: { section?: string; items: NavItem[] }[] = [
       { href: "/utilities/audit", label: "Audit Trail", icon: History, perm: ["audit", "view"] },
       { href: "/utilities", label: "Utilities", icon: Wrench },
       { href: "/billing", label: "Subscription", icon: Crown },
+      { href: "/support", label: "Help & support", icon: LifeBuoy },
       { href: "/settings", label: "Settings", icon: Settings, perm: ["settings", "view"] },
     ],
   },
@@ -151,7 +155,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (loading) return;
     if (!me) router.replace("/login");
     else if (me.must_change_password) router.replace("/change-password");
-    else if (!business) router.replace(me.platform_role === "SUPERADMIN" ? "/admin" : me.platform_role === "RESELLER" ? "/reseller" : me.practice_clients > 0 ? "/practice" : "/onboarding");
+    else if (!business) router.replace(me.platform_role === "SUPERADMIN" || me.platform_role === "TEAM" ? "/admin" : me.platform_role === "RESELLER" ? "/reseller" : me.practice_clients > 0 ? "/practice" : "/onboarding");
   }, [loading, me, business, router]);
 
   if (loading || !me || !business) return <Loading />;
@@ -165,9 +169,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const platformItems: NavItem[] = [];
   if (me.practice_clients > 0) platformItems.push({ href: "/practice", label: "Practitioner workspace", icon: Briefcase });
   if (me.platform_role === "SUPERADMIN") platformItems.push({ href: "/admin", label: "Super Admin", icon: Shield });
+  else if (me.platform_role === "TEAM") platformItems.push({ href: "/admin", label: "Admin panel (team)", icon: Shield });
   else if (me.platform_role === "RESELLER") platformItems.push({ href: "/reseller", label: "Reseller Portal", icon: Store });
   if (platformItems.length) nav.push({ section: "More", items: platformItems });
   const allHrefs = nav.flatMap((g) => g.items.map((i) => i.href));
+  // the screen the person is on (for help tickets): the longest menu link that matches
+  const here = nav.flatMap((g) => g.items).filter((i) => pathname === i.href || pathname.startsWith(i.href + "/"))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.label;
 
   return (
     <div className="flex min-h-screen">
@@ -262,10 +270,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <LinkButton href="/v/sales/new"><Plus size={16} /> Sale</LinkButton>
             </span>
           )}
-          <div className="flex items-center gap-2 sm:ml-1 sm:border-l sm:border-gray-200 sm:pl-3"><PlanBadge /><UserBar /></div>
+          <div className="flex items-center gap-2 sm:ml-1 sm:border-l sm:border-gray-200 sm:pl-3"><PlanBadge /><NotificationBell /><UserBar /></div>
         </header>
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 pt-4 pb-24 sm:px-6 md:py-6"><InvitationsBanner />{children}</main>
         <Suspense fallback={null}><MobileNav onMenu={() => setOpen(true)} /></Suspense>
+        {!pathname.startsWith("/support") && <HelpButton module={here ?? (pathname === "/dashboard" ? "Dashboard" : undefined)} />}
       </div>
     </div>
   );

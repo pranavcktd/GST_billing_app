@@ -30,7 +30,8 @@ export interface MyBusiness {
 export interface Invitation { id: string; business_id: string; business_name: string; role: Role; invited_by: string | null }
 export interface Me {
   invitations: Invitation[];
-  user: User; businesses: MyBusiness[]; platform_role: "SUPERADMIN" | "RESELLER" | null;
+  user: User; businesses: MyBusiness[]; platform_role: "SUPERADMIN" | "RESELLER" | "TEAM" | null;
+  platform_areas?: string[]; platform_team?: string | null;
   last_login_at: string | null; previous_login_at: string | null; practice_clients: number;
   totp_enabled: boolean; must_change_password: boolean;
   legal_ok?: boolean; legal_version?: string | null;

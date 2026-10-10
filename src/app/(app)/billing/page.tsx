@@ -3,6 +3,7 @@
 import { Coins, Crown, PlusCircle } from "lucide-react";
 import { useState } from "react";
 import { type Cycle, type PlanOut, CycleToggle, PlanCards } from "@/components/PlanCards";
+import { MyTransactions, type Txn } from "@/components/Transactions";
 import { Button, Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -15,7 +16,7 @@ interface Status {
   status: "TRIAL" | "ACTIVE" | "EXPIRED"; valid_until: string | null; extra_businesses: number; is_owner: boolean;
   usage: { invoices_this_month: number; invoices_this_year: number; businesses: number; users: number; godowns: number; api_calls_this_month: number; backup_mb: number };
   payments_live: boolean; dev_mode: boolean; test_mode: boolean;
-  payments: { id: string; plan: string; cycle: string; amount: number; status: string; payment_id: string | null; mode: string | null; method: string | null; created_at: string }[];
+  payments: Txn[];
 }
 interface Plans { plans: PlanOut[]; cycles?: Cycle[]; trial_days: number; addon: { code: string; name: string; yearly: number; yearly_with_gst: number } }
 interface Credits {
@@ -87,11 +88,18 @@ export default function BillingPage() {
                 resolve();
               } catch (e) { reject(e); }
             },
-            modal: { ondismiss: () => reject(new Error("Payment was cancelled")) },
+            modal: { ondismiss: () => {
+              api("/billing/failed", { body: { order_id: order.order_id, cancelled: true } }).catch(() => undefined).finally(reload);
+              reject(new Error("Payment was cancelled"));
+            } },
             notes: { plan, cycle: c },
           });
-          (rzp as unknown as { on?: (ev: string, cb: (r: { error?: { description?: string } }) => void) => void }).on?.(
-            "payment.failed", (r) => setErr(`Payment failed: ${r.error?.description ?? "please try again"}`));
+          type Failure = { error?: { code?: string; description?: string; reason?: string; metadata?: { payment_id?: string } } };
+          (rzp as unknown as { on?: (ev: string, cb: (r: Failure) => void) => void }).on?.("payment.failed", (r) => {
+            setErr(`Payment failed: ${r.error?.description ?? "please try again"}`);
+            api("/billing/failed", { body: { order_id: order.order_id, payment_id: r.error?.metadata?.payment_id ?? null,
+              code: r.error?.code ?? null, reason: r.error?.description ?? r.error?.reason ?? null } }).catch(() => undefined).finally(reload);
+          });
           rzp.open();
         });
         setMsg(plan.startsWith("CREDITS_") ? "Payment successful — credits added." : "Payment successful — your plan is active.");
@@ -210,21 +218,14 @@ export default function BillingPage() {
         </Card></div>
       )}
 
-      {st.payments.length > 0 && (
-        <Card className="mt-5 overflow-x-auto">
-          <h2 className="px-5 pt-4 pb-2 font-semibold text-gray-900">Payment history</h2>
-          <table className="tbl">
-            <thead><tr><th>Date</th><th>Plan</th><th>Cycle</th><th className="num">Amount (incl. GST)</th><th>Status</th><th>Payment id</th></tr></thead>
-            <tbody>
-              {st.payments.map((x) => (
-                <tr key={x.id}>
-                  <td>{new Date(x.created_at).toLocaleDateString("en-IN")}</td><td>{x.plan}</td><td>{x.cycle.startsWith("YEARS_") ? `${x.cycle.slice(6)} years` : x.cycle.toLowerCase()}</td>
-                  <td className="num">{money(x.amount)}</td><td>{x.status}{x.mode === "TEST" ? " · test" : x.mode === "DEV" ? " · simulated" : ""}{x.method ? ` · ${x.method}` : ""}</td><td className="font-mono text-xs">{x.payment_id}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+      {st.is_owner && (
+        <div id="transactions" className="scroll-mt-20"><Card className="mt-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 px-5 pt-4 pb-2">
+            <h2 className="font-semibold text-gray-900">Transactions</h2>
+            <span className="text-xs text-gray-500">Every payment attempt — successful, failed or not completed. Open a paid one for its receipt.</span>
+          </div>
+          <MyTransactions rows={st.payments} />
+        </Card></div>
       )}
     </>
   );

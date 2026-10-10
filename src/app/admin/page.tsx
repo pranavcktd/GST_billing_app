@@ -26,6 +26,10 @@ import { api, qs } from "@/lib/api";
 import { fmtDate, money } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 import { AdminDocuments } from "@/components/admin/AdminDocuments";
+import { AdminTransactions } from "@/components/admin/AdminTransactions";
+import { AdminHelpdesk } from "@/components/admin/AdminHelpdesk";
+import { AdminTeam } from "@/components/admin/AdminTeam";
+import { useAuth } from "@/lib/auth";
 
 interface Stats { accounts: number; businesses: number; users: number; trials: number; by_plan: Record<string, number>; mrr: number; invoices_30d: number; signups_30d: number; revenue_30d: number }
 interface Account {
@@ -37,16 +41,29 @@ interface Reseller { id: string; name: string; email: string; commission_pct: nu
 interface License { id: string; created_at: string; reseller: string; account: string; plan: string; months: number; amount: number; commission: number; payout_status: string }
 interface Health { app_env: string; database: boolean; database_engine: string; einvoice_provider: string; gsp_configured: boolean; razorpay_live: boolean; razorpay_webhook: boolean; email_configured: boolean; cloudinary_configured: boolean }
 
-const TABS = ["Overview", "Users", "Hierarchy", "Plans", "Businesses", "Resellers", "Payouts", "GST config", "HSN master", "Rate notices", "Pricing", "Integrations", "Website", "Backups", "Privacy & security", "Audit", "Email", "System"] as const;
+const TABS = ["Overview", "Transactions", "Helpdesk", "Team", "Users", "Hierarchy", "Plans", "Businesses", "Resellers", "Payouts", "GST config", "HSN master", "Rate notices", "Pricing", "Integrations", "Website", "Backups", "Privacy & security", "Audit", "Email", "System"] as const;
+
+// tabs a company team member may open, by admin area (everything else is super admin only)
+const AREA_OF: Partial<Record<(typeof TABS)[number], string>> = {
+  Transactions: "payments", Helpdesk: "helpdesk", Plans: "accounts", Businesses: "accounts", Website: "website",
+};
 
 export default function AdminPage() {
   return <PlatformShell need="SUPERADMIN"><Admin /></PlatformShell>;
 }
 
 function Admin() {
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
+  const { me } = useAuth();
+  const isSuper = me?.platform_role === "SUPERADMIN";
+  const tabs = TABS.filter((t) => isSuper || (AREA_OF[t] && me?.platform_areas?.includes(AREA_OF[t]!)));
+  // alert links open a tab directly: /admin?tab=Transactions&id=…
+  const [linked] = useState(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search)));
+  const [tab, setTab] = useState<(typeof TABS)[number]>(() => {
+    const t = linked?.get("tab");
+    return (tabs as readonly string[]).includes(t ?? "") ? (t as (typeof TABS)[number]) : tabs[0];
+  });
   const [search, setSearch] = useState("");
-  const { data: stats } = useFetch<Stats>("/admin/stats");
+  const { data: stats } = useFetch<Stats>(isSuper ? "/admin/stats" : null);
   const { data: accounts, reload: reloadAcc } = useFetch<Account[]>(tab === "Plans" ? `/admin/accounts${qs({ search })}` : null);
   const { data: resellers, reload: reloadRes } = useFetch<Reseller[]>(tab === "Resellers" ? "/admin/resellers" : null);
   const { data: licenses, reload: reloadLic } = useFetch<License[]>(tab === "Payouts" ? "/admin/licenses" : null);
@@ -65,7 +82,7 @@ function Admin() {
       <div className="lg:grid lg:grid-cols-[12.5rem_minmax(0,1fr)] lg:gap-6">
       <nav className="sticky top-14 z-10 -mx-4 mb-5 flex gap-1 overflow-x-auto border-b border-gray-200 bg-gray-50/95 px-4 py-2 text-sm backdrop-blur
         lg:top-20 lg:mx-0 lg:mb-0 lg:max-h-[calc(100vh-6rem)] lg:flex-col lg:self-start lg:overflow-y-auto lg:rounded-lg lg:border lg:bg-white lg:p-2">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button key={t} onClick={() => { setTab(t); window.scrollTo({ top: 0 }); }}
             className={`shrink-0 rounded-md px-3 py-1.5 text-left whitespace-nowrap ${tab === t ? "bg-brand-600 text-white" : "text-gray-700 hover:bg-gray-100"}`}>{t}</button>
         ))}
@@ -91,6 +108,9 @@ function Admin() {
         </>
       ))}
 
+      {tab === "Transactions" && <AdminTransactions initialId={linked?.get("id")} />}
+      {tab === "Helpdesk" && <AdminHelpdesk initialId={linked?.get("id")} />}
+      {tab === "Team" && <AdminTeam />}
       {tab === "Users" && <AdminUsers />}
       {tab === "Hierarchy" && <AdminHierarchy />}
       {tab === "Businesses" && <AdminBusinesses />}

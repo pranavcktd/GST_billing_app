@@ -47,7 +47,7 @@ export function GoogleButton({ text = "continue_with" }: { text?: "continue_with
     try {
       const res = await api<Me & { token: string }>("/auth/google", { body: { credential, otp: code } });
       login(res.token, res);
-      router.replace(res.businesses.length ? "/dashboard" : res.platform_role === "SUPERADMIN" ? "/admin" : "/onboarding");
+      router.replace(res.businesses.length ? "/dashboard" : res.platform_role === "SUPERADMIN" || res.platform_role === "TEAM" ? "/admin" : "/onboarding");
     } catch (e) {
       if (e instanceof ApiError && e.code === "OTP_REQUIRED") { setPending(credential); if (code) setErr(e.message); }
       else setErr((e as Error).message);
