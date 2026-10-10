@@ -16,6 +16,7 @@ export function DataWipeDialog({ path, onClose, onDone }: { path: string; onClos
   const { data } = useFetch<Options>(path);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [name, setName] = useState("");
+  const [testData, setTestData] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<Result | null>(null);
@@ -33,7 +34,7 @@ export function DataWipeDialog({ path, onClose, onDone }: { path: string; onClos
   async function submit() {
     setBusy(true); setErr(null);
     try {
-      const r = await api<Result>(path, { body: { groups: [...needed], confirm_name: name } });
+      const r = await api<Result>(path, { body: { groups: [...needed], confirm_name: name, test_data: testData } });
       setDone(r);
       onDone?.(r);
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
@@ -80,6 +81,14 @@ export function DataWipeDialog({ path, onClose, onDone }: { path: string; onClos
         <div className="grid gap-2 sm:grid-cols-2">{data.groups.filter((g) => !g.master).map(row)}</div>
         <div className="text-xs font-medium text-gray-600">Masters</div>
         <div className="grid gap-2 sm:grid-cols-2">{data.groups.filter((g) => g.master).map(row)}</div>
+        {["sales", "purchases", "expenses"].some((k) => needed.has(k)) && (
+          <label className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <input type="checkbox" className="mt-0.5" checked={testData} onChange={(e) => setTestData(e.target.checked)} />
+            <span>I confirm these are <b>test / practice entries</b>, not real business records. Real invoices and books of account must be kept
+              for 72 months (CGST Act s.36) — cancel wrong documents or issue credit notes instead. Clearing is refused once documents have an
+              IRN / e-way bill or GST returns are recorded as filed.</span>
+          </label>
+        )}
         <label className="block">
           <span className="text-xs text-gray-600">Type the business name <b>{data.business_name}</b> to confirm</span>
           <Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
@@ -87,7 +96,8 @@ export function DataWipeDialog({ path, onClose, onDone }: { path: string; onClos
         <ErrorBox message={err} />
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button variant="danger" disabled={busy || needed.size === 0 || name.trim().toLowerCase() !== data.business_name.trim().toLowerCase()} onClick={submit}>
+          <Button variant="danger" disabled={busy || needed.size === 0 || name.trim().toLowerCase() !== data.business_name.trim().toLowerCase()
+            || (["sales", "purchases", "expenses"].some((k) => needed.has(k)) && !testData)} onClick={submit}>
             <Eraser size={16} /> {busy ? "Backing up & clearing…" : `Back up & clear ${needed.size} group${needed.size === 1 ? "" : "s"}`}
           </Button>
         </div>

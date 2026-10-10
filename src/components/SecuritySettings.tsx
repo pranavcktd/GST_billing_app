@@ -7,6 +7,7 @@ import { Button, Card, ErrorBox, Field, Input } from "@/components/ui";
 import { api, session } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useConfig } from "@/lib/config";
+import { PrivacyCentre } from "@/components/PrivacyCentre";
 
 /** Password, two-factor sign-in, sign out everywhere, and (for managers) the approval PIN. */
 export function SecuritySettings({ canApprove }: { canApprove: boolean }) {
@@ -119,6 +120,7 @@ export function SecuritySettings({ canApprove }: { canApprove: boolean }) {
           </div>
         </Card>
       )}
+      <PrivacyCentre />
     </div>
   );
 }

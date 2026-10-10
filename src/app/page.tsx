@@ -542,8 +542,11 @@ export default function Landing() {
             <nav className="flex flex-wrap gap-5">
               <Link href="/terms" className="hover:underline">Terms</Link>
               <Link href="/privacy" className="hover:underline">Privacy</Link>
+              <Link href="/dpa" className="hover:underline">Data Processing</Link>
+              <Link href="/security" className="hover:underline">Security</Link>
               <Link href="/refund" className="hover:underline">Refunds</Link>
               <Link href="/disclaimer" className="hover:underline">Disclaimer</Link>
+              <Link href="/grievance" className="hover:underline">Grievance</Link>
               <Link href="/contact" className="hover:underline">Contact</Link>
             </nav>
           </div>
