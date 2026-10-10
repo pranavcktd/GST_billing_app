@@ -59,6 +59,7 @@ import { businessMode, hiddenHrefs, isHiddenHref } from "@/lib/modules";
 import { InvitationsBanner, PendingSignIns } from "@/components/StaffComponents";
 import { CheckInButton } from "@/components/CheckInButton";
 import { HelpButton } from "@/components/Support";
+import { trackUsage } from "@/lib/track";
 
 type NavItem = { href: string; label: string; icon: React.ElementType; perm?: [Module, Action] | [Module, Action][] };
 
@@ -144,6 +145,14 @@ const NAV: { section?: string; items: NavItem[] }[] = [
   },
 ];
 
+/** The module a screen belongs to (longest menu link that matches) — for usage analytics and help tickets. */
+const ALL_ITEMS = NAV.flatMap((g) => g.items);
+function moduleOf(pathname: string): string | undefined {
+  if (pathname === "/dashboard") return "Dashboard";
+  return ALL_ITEMS.filter((i) => pathname === i.href || pathname.startsWith(i.href + "/"))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.label;
+}
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { me, loading, business, logout, switchBusiness } = useAuth();
   const { can } = usePerms();
@@ -157,6 +166,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     else if (me.must_change_password) router.replace("/change-password");
     else if (!business) router.replace(me.platform_role === "SUPERADMIN" || me.platform_role === "TEAM" ? "/admin" : me.platform_role === "RESELLER" ? "/reseller" : me.practice_clients > 0 ? "/practice" : "/onboarding");
   }, [loading, me, business, router]);
+
+  const signedIn = Boolean(me && business);
+  useEffect(() => { if (signedIn) trackUsage(moduleOf(pathname)); }, [pathname, signedIn]);
 
   if (loading || !me || !business) return <Loading />;
 
@@ -173,9 +185,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   else if (me.platform_role === "RESELLER") platformItems.push({ href: "/reseller", label: "Reseller Portal", icon: Store });
   if (platformItems.length) nav.push({ section: "More", items: platformItems });
   const allHrefs = nav.flatMap((g) => g.items.map((i) => i.href));
-  // the screen the person is on (for help tickets): the longest menu link that matches
-  const here = nav.flatMap((g) => g.items).filter((i) => pathname === i.href || pathname.startsWith(i.href + "/"))
-    .sort((a, b) => b.href.length - a.href.length)[0]?.label;
 
   return (
     <div className="flex min-h-screen">
@@ -274,7 +283,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </header>
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 pt-4 pb-24 sm:px-6 md:py-6"><InvitationsBanner />{children}</main>
         <Suspense fallback={null}><MobileNav onMenu={() => setOpen(true)} /></Suspense>
-        {!pathname.startsWith("/support") && <HelpButton module={here ?? (pathname === "/dashboard" ? "Dashboard" : undefined)} />}
+        {!pathname.startsWith("/support") && <HelpButton module={moduleOf(pathname)} />}
       </div>
     </div>
   );

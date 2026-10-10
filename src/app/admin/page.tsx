@@ -29,6 +29,8 @@ import { AdminDocuments } from "@/components/admin/AdminDocuments";
 import { AdminTransactions } from "@/components/admin/AdminTransactions";
 import { AdminHelpdesk } from "@/components/admin/AdminHelpdesk";
 import { AdminTeam } from "@/components/admin/AdminTeam";
+import { AdminAnalytics } from "@/components/admin/AdminAnalytics";
+import { AdminLiveChat } from "@/components/admin/AdminLiveChat";
 import { useAuth } from "@/lib/auth";
 
 interface Stats { accounts: number; businesses: number; users: number; trials: number; by_plan: Record<string, number>; mrr: number; invoices_30d: number; signups_30d: number; revenue_30d: number }
@@ -41,11 +43,11 @@ interface Reseller { id: string; name: string; email: string; commission_pct: nu
 interface License { id: string; created_at: string; reseller: string; account: string; plan: string; months: number; amount: number; commission: number; payout_status: string }
 interface Health { app_env: string; database: boolean; database_engine: string; einvoice_provider: string; gsp_configured: boolean; razorpay_live: boolean; razorpay_webhook: boolean; email_configured: boolean; cloudinary_configured: boolean }
 
-const TABS = ["Overview", "Transactions", "Helpdesk", "Team", "Users", "Hierarchy", "Plans", "Businesses", "Resellers", "Payouts", "GST config", "HSN master", "Rate notices", "Pricing", "Integrations", "Website", "Backups", "Privacy & security", "Audit", "Email", "System"] as const;
+const TABS = ["Overview", "Transactions", "Helpdesk", "Analytics", "Team", "Users", "Hierarchy", "Plans", "Businesses", "Resellers", "Payouts", "GST config", "HSN master", "Rate notices", "Pricing", "Integrations", "Website", "Backups", "Privacy & security", "Audit", "Email", "System"] as const;
 
 // tabs a company team member may open, by admin area (everything else is super admin only)
 const AREA_OF: Partial<Record<(typeof TABS)[number], string>> = {
-  Transactions: "payments", Helpdesk: "helpdesk", Plans: "accounts", Businesses: "accounts", Website: "website",
+  Transactions: "payments", Helpdesk: "helpdesk", Analytics: "analytics", Plans: "accounts", Businesses: "accounts", Website: "website",
 };
 
 export default function AdminPage() {
@@ -110,6 +112,7 @@ function Admin() {
 
       {tab === "Transactions" && <AdminTransactions initialId={linked?.get("id")} />}
       {tab === "Helpdesk" && <AdminHelpdesk initialId={linked?.get("id")} />}
+      {tab === "Analytics" && <AdminAnalytics />}
       {tab === "Team" && <AdminTeam />}
       {tab === "Users" && <AdminUsers />}
       {tab === "Hierarchy" && <AdminHierarchy />}
@@ -118,7 +121,7 @@ function Admin() {
       {tab === "HSN master" && <AdminHsnMaster />}
       {tab === "Rate notices" && <AdminRateNotices />}
       {tab === "Pricing" && <AdminPlanConfig />}
-      {tab === "Integrations" && <div className="space-y-8"><AdminRazorpay /><AdminSignup /><AdminIntegrations /><AdminIfsc /><AdminWhatsApp /><AdminDocuments /></div>}
+      {tab === "Integrations" && <div className="space-y-8"><AdminRazorpay /><AdminSignup /><AdminLiveChat /><AdminIntegrations /><AdminIfsc /><AdminWhatsApp /><AdminDocuments /></div>}
       {tab === "Website" && <AdminSite />}
       {tab === "Backups" && <AdminBackups />}
       {tab === "Privacy & security" && <AdminPrivacy />}

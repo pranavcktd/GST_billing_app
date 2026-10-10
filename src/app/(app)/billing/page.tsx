@@ -1,7 +1,7 @@
 "use client";
 
 import { Coins, Crown, PlusCircle } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { type Cycle, type PlanOut, CycleToggle, PlanCards } from "@/components/PlanCards";
 import { MyTransactions, type Txn } from "@/components/Transactions";
 import { Button, Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { fmtDate, money } from "@/lib/format";
 import { useFetch } from "@/lib/useFetch";
 import { APP_NAME } from "@/lib/brand";
+import { trackEvent } from "@/lib/track";
 
 interface Status {
   plan: PlanOut & { businesses: number | null; users: number | null; api_quota: number; backup_mb: number; godowns: number | null; invoices_per_year: number | null };
@@ -63,12 +64,14 @@ export default function BillingPage() {
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [now] = useState(() => Date.now());
+  useEffect(() => { trackEvent("PRICING_VIEW"); }, []);  // existing users exploring plans (Admin → Analytics)
 
   if (error) return <ErrorBox message={error} />;
   if (!st || !plans) return <Loading />;
 
   async function buy(plan: string, c: string) {
     setErr(null); setMsg(null);
+    trackEvent("PLAN_CLICK", { plan, cycle: c });
     try {
       const order = await api<Order>("/billing/order", { body: { plan, cycle: c } });
       if (!order.live) {
@@ -152,7 +155,7 @@ export default function BillingPage() {
 
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-900">Plans</h2>
-        <CycleToggle cycles={plans.cycles} value={cycle} onChange={setCycle} />
+        <CycleToggle cycles={plans.cycles} value={cycle} onChange={(c) => { setCycle(c); trackEvent("CYCLE", { cycle: c }); }} />
       </div>
       <PlanCards plans={plans.plans} cycle={cycle} current={st.status === "TRIAL" ? undefined : p.code}
         onChoose={st.is_owner ? (pl) => buy(pl.code, cycle) : undefined} />
