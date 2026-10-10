@@ -5,7 +5,7 @@ from tests.test_modules import build_books, post
 
 def _wipe(client, h, groups, name=None, path="/api/data-wipe"):
     biz = client.get("/api/businesses/current", headers=h).json() if "X-Business-Id" in h else None
-    return client.post(path, headers=h, json={"groups": groups, "confirm_name": name or biz["name"]})
+    return client.post(path, headers=h, json={"groups": groups, "confirm_name": name or biz["name"], "test_data": True})
 
 
 def test_clear_sales_only_then_everything(client):
@@ -66,7 +66,7 @@ def test_only_owner_and_super_admin(client, monkeypatch):
     bid = h["X-Business-Id"]
     opts = client.get(f"/api/admin/businesses/{bid}/data-wipe", headers=root).json()
     r = client.post(f"/api/admin/businesses/{bid}/data-wipe", headers=root,
-                    json={"groups": ["purchases"], "confirm_name": opts["business_name"]})
+                    json={"groups": ["purchases"], "confirm_name": opts["business_name"], "test_data": True})
     assert r.status_code == 200, r.text
     assert not any(v["type"] == "PURCHASE" for v in client.get("/api/vouchers", headers=h).json())
     assert client.get("/api/backups", headers=h).json()[0]["kind"] == "WIPE"

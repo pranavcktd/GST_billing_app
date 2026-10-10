@@ -26,6 +26,7 @@ from ..security import (
     verify_password,
 )
 from ..services import config_store, mailer
+from ..services import privacy as PV
 from ..services import signup as SU
 from ..services import whatsapp as W
 from ..services.platform_audit import client_ip, log
@@ -69,6 +70,7 @@ def me_payload(db, user: User) -> MeOut:
         practice_clients=_practice_limit(db, user),
         totp_enabled=user.totp_enabled,
         must_change_password=user.must_change_password,
+        legal_ok=PV.accepted(user), legal_version=PV.current_version(),
         businesses=[
             MyBusinessOut(id=m.business.id, name=m.business.name, gstin=m.business.gstin,
                           gst_type=m.business.gst_type, role=m.role, owned=m.business.owner_id == user.id,
@@ -132,9 +134,13 @@ def register(data: RegisterIn, db: DB, request: Request):
                                 else "Verify your mobile (WhatsApp code) or your e-mail (e-mail code)")
         SU.check_email_code(db, email, data.email_code or "")
         email_ok = True
+    if not data.accept_terms:
+        raise HTTPException(422, "Please accept the Terms of Service and Privacy Policy to create an account")
     user = User(name=data.name, email=email, phone=data.phone, password_hash=hash_password(data.password),
                 mobile=mobile, mobile_verified_at=now() if mobile else None, email_verified_at=now() if email_ok else None)
     db.add(user)
+    db.flush()
+    PV.accept(db, user, "SIGNUP", client_ip(request))
     db.flush()
     log(db, user, "CREATE", "user", f"Signed up: {email}", entity_id=user.id, request=request)
     db.commit()
@@ -174,6 +180,7 @@ def google(data: GoogleIn, db: DB, request: Request):
                     google_sub=g["sub"], email_verified_at=now())
         db.add(user)
         db.flush()
+        PV.accept(db, user, "GOOGLE", client_ip(request))  # "By continuing you agree…" is shown with the button
         log(db, user, "CREATE", "user", f"Signed up with Google: {user.email}", entity_id=user.id, request=request)
     else:
         if not user.is_active:
@@ -340,6 +347,14 @@ def login(data: LoginWithOtp, db: DB, request: Request):
     log(db, user, "LOGIN", "login", f"Signed in: {user.email}", entity_id=user.id, request=request)
     db.commit()
     return TokenOut(token=token_for(user), **me_payload(db, user).model_dump())
+
+
+@router.post("/legal/accept")
+def accept_legal(db: DB, user: CurrentUser, request: Request):
+    """Accept the Terms of Service and Privacy Policy now in force."""
+    PV.accept(db, user, "PROMPT", client_ip(request))
+    db.commit()
+    return {"legal_version": user.legal_version, "legal_ok": True}
 
 
 @router.get("/me", response_model=MeOut)

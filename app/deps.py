@@ -30,6 +30,10 @@ def current_user(
     # token_version changes on password change / reset / "sign out everywhere" / deactivation
     if not user or not user.is_active or decoded[1] != (user.token_version or 0):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+    from .services.platform_audit import client_ip  # local import: the service imports models that import this module
+
+    # who is acting, for the edit log (services/edit_log.py) — kept on this request's database session
+    db.info["actor"] = {"user_id": user.id, "user_name": user.name, "ip": client_ip(request)}
     if user.email.lower() in get_settings().superadmins and user.platform_role != PlatformRole.SUPERADMIN.value:
         user.platform_role = PlatformRole.SUPERADMIN.value
         db.commit()

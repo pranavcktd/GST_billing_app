@@ -67,7 +67,7 @@ GROUPS = [
 BY_KEY = {g["key"]: g for g in GROUPS}
 
 
-def options() -> list[dict]:
+def options() -> list[dict]:  # noqa: D103
     return [{k: g.get(k, False) if k == "master" else g[k] for k in ("key", "label", "help", "requires", "master")} for g in GROUPS]
 
 
@@ -105,13 +105,45 @@ def counts(db: Session, bid: str) -> dict[str, int]:
     return out
 
 
-def wipe(db: Session, biz: Business, keys: list[str], confirm_name: str, actor, by_admin: bool = False) -> dict:
+STATUTORY_TYPES = [V.SALE, V.SALE_RETURN, V.PURCHASE, V.PURCHASE_RETURN, V.EXPENSE]
+
+
+def statutory_lock(db: Session, bid: str, vtypes: list) -> str | None:
+    """Why these documents must be kept (CGST s.35/36 — 72 months; Companies Act s.128 — 8 years), or None.
+    Clearing is meant for test entries: once a document went to the government (IRN / e-way bill) or a GST return
+    was recorded as filed, the records are real books of account."""
+    kinds = [t for t in vtypes if t in STATUTORY_TYPES]
+    if not kinds:
+        return None
+    reported = db.scalar(select(func.count()).select_from(Voucher).where(
+        Voucher.business_id == bid, Voucher.type.in_(kinds), (Voucher.irn.is_not(None)) | (Voucher.ewb_no.is_not(None))))
+    if reported:
+        return (f"{reported} document(s) have an IRN or e-way bill, so they are reported to the government and must be kept "
+                "for 72 months (CGST Act s.36). Cancel wrong documents or issue credit notes instead.")
+    filed = db.scalar(select(func.count()).select_from(ComplianceFiling).where(
+        ComplianceFiling.business_id == bid, ComplianceFiling.rule_code.like("GSTR%") | ComplianceFiling.rule_code.like("CMP%")))
+    if filed:
+        return ("GST returns are recorded as filed for this business, so its bills are real books of account and must be kept "
+                "(CGST Act s.36: 72 months). Cancel wrong documents or issue credit notes instead.")
+    return None
+
+
+def wipe(db: Session, biz: Business, keys: list[str], confirm_name: str, actor, by_admin: bool = False,
+         test_data: bool = False) -> dict:
     if (confirm_name or "").strip().lower() != biz.name.strip().lower():
         raise HTTPException(400, "Type the business name exactly to confirm")
     groups = closure(keys)
     if not groups:
         raise HTTPException(422, "Choose what to clear")
     bid = biz.id
+    vtypes_all = [t for g in groups for t in BY_KEY[g]["types"]]
+    if any(t in STATUTORY_TYPES for t in vtypes_all):
+        if not test_data:
+            raise HTTPException(400, "Confirm that these are test / practice entries — real bills are books of account and "
+                                     "must be kept (cancel them or issue credit notes instead).")
+        why = statutory_lock(db, bid, vtypes_all)
+        if why:
+            raise HTTPException(409, why)
     before = counts(db, bid)
 
     # ---- safety backup first, saved on its own (kept even if clearing fails)
@@ -190,7 +222,7 @@ def wipe(db: Session, biz: Business, keys: list[str], confirm_name: str, actor, 
     after = counts(db, bid)
     labels = ", ".join(BY_KEY[g]["label"] for g in groups)
     log(db, actor, "DELETE", "data-wipe", f"Cleared data{' (by platform admin)' if by_admin else ''}: {labels}. "
-        f"Backup taken first ({bk.filename(biz.name, created)})", business_id=bid)
+        f"Backup taken first ({bk.filename(biz.name, created)})" + (" — declared as test data" if test_data else ""), business_id=bid)
     db.commit()
     return {"cleared": groups, "removed": {k: before[k] - after.get(k, 0) for k in before if before[k] - after.get(k, 0)},
             "backup_id": backup_id, "backup_file": bk.filename(biz.name, created), "emailed_to": emailed,

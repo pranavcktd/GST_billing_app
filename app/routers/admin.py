@@ -311,6 +311,9 @@ def delete_user(user_id: str, db: DB, me: SuperAdmin, request: Request, force: b
         blob = bk.account_snapshot(db, u)
         b = bk.create_platform_backup(db, "ACCOUNT", f"Before deleting {u.email}", blob, "SAFETY", me.id, u.id)
         backup_id = b.id
+        from ..services.edit_log import allow_purge
+
+        allow_purge(db)  # the account's audit trail goes with it; the safety backup keeps a copy
         for biz in owned:
             db.delete(biz)
     log(db, me, "DELETE", "user", f"Deleted user {u.email}" + (f" and {len(owned)} business(es) (backup kept)" if owned else ""),
@@ -360,6 +363,7 @@ def set_business_filing_sync(business_id: str, data: SwitchIn, db: DB, me: Super
 class WipeIn(BaseModel):
     groups: list[str] = Field(min_length=1, max_length=20)
     confirm_name: str = Field(max_length=200)
+    test_data: bool = False  # "these are test / practice entries" — needed to clear bills
 
 
 @router.get("/businesses/{business_id}/data-wipe")
@@ -378,7 +382,7 @@ def admin_wipe(business_id: str, data: WipeIn, db: DB, me: SuperAdmin):
     biz = db.get(Business, business_id)
     if not biz:
         raise HTTPException(404, "Business not found")
-    return WIPE.wipe(db, biz, data.groups, data.confirm_name, me, by_admin=True)
+    return WIPE.wipe(db, biz, data.groups, data.confirm_name, me, by_admin=True, test_data=data.test_data)
 
 
 class ExcelBackupIn(BaseModel):

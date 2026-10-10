@@ -216,6 +216,8 @@ def delete_backup(backup_id: str, ctx: BCtx):
     b = ctx.db.get(Backup, backup_id)
     if not b or b.business_id != ctx.bid:
         raise HTTPException(404, "Backup not found")
+    if b.kind == "WIPE":
+        raise HTTPException(403, "This backup was taken before data was cleared and is kept as the record of it — it cannot be deleted.")
     ctx.db.delete(b)
     ctx.db.commit()
 
@@ -261,6 +263,7 @@ def restore_saved_backup(backup_id: str, ctx: BCtx):
 class WipeIn(BaseModel):
     groups: list[str] = Field(min_length=1, max_length=20)
     confirm_name: str = Field(max_length=200)
+    test_data: bool = False  # "these are test / practice entries" — needed to clear bills
 
 
 @router.get("/data-wipe")
@@ -274,7 +277,7 @@ def data_wipe_options(ctx: BCtx):
 def data_wipe(data: WipeIn, ctx: BCtx):
     """Owner only: clear the chosen data of this business. A backup is saved (and e-mailed) first."""
     ctx.require(Role.OWNER)
-    return wipe_svc.wipe(ctx.db, ctx.business, data.groups, data.confirm_name, ctx.user)
+    return wipe_svc.wipe(ctx.db, ctx.business, data.groups, data.confirm_name, ctx.user, test_data=data.test_data)
 
 
 # ---------------------------------------------------------------- company members

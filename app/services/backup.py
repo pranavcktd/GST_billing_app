@@ -334,6 +334,9 @@ def restore_full(db: Session, data: dict, keep_user) -> dict:
     keep = {c.name: getattr(keep_user, c.name) for c in keep_user.__table__.c}
     tables = data["tables"]
     ordered = [t for t in Base.metadata.sorted_tables if t.name not in FULL_EXCLUDE]
+    from .edit_log import allow_purge
+
+    allow_purge(db)  # the backup being restored carries the audit trail
     for t in reversed(ordered):
         if t.name == "backups" and "backups" not in tables:
             continue  # keep business backups if the file does not carry them
