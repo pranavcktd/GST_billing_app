@@ -96,6 +96,7 @@ class RegisterIn(BaseModel):
     phone: Opt(20) = None
     phone_code: Opt(6) = None  # WhatsApp code that verifies `phone`
     email_code: Opt(6) = None  # e-mail code that verifies `email`
+    accept_terms: bool = False  # Terms of Service + Privacy Policy accepted (recorded with version and time)
 
 
 class LoginIn(BaseModel):
@@ -140,6 +141,8 @@ class MeOut(BaseModel):
     practice_clients: int = 0                      # practitioner workspace: clients allowed (0 = not enabled)
     totp_enabled: bool = False
     must_change_password: bool = False
+    legal_ok: bool = True        # has accepted the Terms / Privacy version in force
+    legal_version: str | None = None
     businesses: list[MyBusinessOut]
 
 

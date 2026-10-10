@@ -35,6 +35,7 @@ export default function RegisterPage() {
   const [sandboxCode, setSandboxCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [agree, setAgree] = useState(false);
   const active: Way | null = ways.length ? (way && ways.includes(way) ? way : ways[0]) : null;
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
 
@@ -54,7 +55,7 @@ export default function RegisterPage() {
     setError(null);
     try {
       const res = await api<Me & { token: string }>("/auth/register", {
-        body: { ...form, phone_code: active === "WHATSAPP" ? code : undefined, email_code: active === "EMAIL" ? code : undefined },
+        body: { ...form, accept_terms: agree, phone_code: active === "WHATSAPP" ? code : undefined, email_code: active === "EMAIL" ? code : undefined },
       });
       login(res.token, res);
       router.replace("/onboarding");
@@ -119,13 +120,15 @@ export default function RegisterPage() {
         <Field label="Password" hint="At least 8 characters" required>
           <Input type="password" required minLength={8} autoComplete="new-password" value={form.password} onChange={set("password")} />
         </Field>
-        <Button type="submit" disabled={busy || (!!active && code.length !== 6)} className="w-full">
+        <label className="flex items-start gap-2 text-sm text-gray-700">
+          <input type="checkbox" className="mt-1" required checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+          <span>I agree to the <Link href="/terms" target="_blank" className="text-brand-600 underline">Terms of Service</Link>,{" "}
+            <Link href="/privacy" target="_blank" className="text-brand-600 underline">Privacy Policy</Link> and{" "}
+            <Link href="/dpa" target="_blank" className="text-brand-600 underline">Data Processing Addendum</Link>, and I am 18 or older.</span>
+        </label>
+        <Button type="submit" disabled={busy || !agree || (!!active && code.length !== 6)} className="w-full">
           {busy ? "Creating account…" : "Create account"}
         </Button>
-        <p className="text-center text-xs text-gray-500">
-          By creating an account you agree to the <Link href="/terms" className="underline">Terms of Service</Link>,{" "}
-          <Link href="/privacy" className="underline">Privacy Policy</Link> and <Link href="/disclaimer" className="underline">Disclaimer</Link>.
-        </p>
         <p className="text-center text-sm text-gray-600">
           Already have an account?{" "}
           <Link href="/login" className="font-medium text-brand-600 hover:underline">Sign in</Link>

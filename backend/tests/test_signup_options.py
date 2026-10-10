@@ -8,7 +8,7 @@ from tests.test_whatsapp import fake as wa_fake
 
 
 def _signup(client, **extra):
-    return client.post("/api/auth/register", json={"name": "New Shop", "email": "new@shop.in", "password": "secret123", **extra})
+    return client.post("/api/auth/register", json={"name": "New Shop", "email": "new@shop.in", "password": "secret123", "accept_terms": True, **extra})
 
 
 def test_email_code_and_either_choice(client, monkeypatch):
@@ -31,11 +31,11 @@ def test_email_code_and_either_choice(client, monkeypatch):
     assert client.get("/api/meta").json()["signup"]["verify"] == ["WHATSAPP", "EMAIL"]
     client.post("/api/auth/otp/send", json={"phone": "9811100011", "purpose": "SIGNUP"})
     from tests.test_whatsapp import last_code
-    r = client.post("/api/auth/register", json={"name": "WA Shop", "email": "wa@shop.in", "password": "secret123",
+    r = client.post("/api/auth/register", json={"name": "WA Shop", "email": "wa@shop.in", "password": "secret123", "accept_terms": True,
                                                 "phone": "9811100011", "phone_code": last_code()})
     assert r.status_code == 201 and r.json()["user"]["mobile"] == "919811100011"
     code = client.post("/api/auth/email-code", json={"email": "mail@shop.in"}).json()["sandbox_code"]
-    assert client.post("/api/auth/register", json={"name": "Mail Shop", "email": "mail@shop.in", "password": "secret123",
+    assert client.post("/api/auth/register", json={"name": "Mail Shop", "email": "mail@shop.in", "password": "secret123", "accept_terms": True,
                                                    "email_code": code}).status_code == 201
 
 
@@ -62,6 +62,6 @@ def test_continue_with_google(client, monkeypatch):
     again = client.post("/api/auth/google", json={"credential": "ok" + "x" * 40}).json()
     assert again["user"]["id"] == me["user"]["id"]  # same account, signed in
     # an existing e-mail / password account is signed in (and linked), not duplicated
-    client.post("/api/auth/register", json={"name": "Old", "email": "old@gmail.com", "password": "secret123"})
+    client.post("/api/auth/register", json={"name": "Old", "email": "old@gmail.com", "password": "secret123", "accept_terms": True})
     monkeypatch.setattr(SU, "_verify_google", lambda c, i: {"email": "old@gmail.com", "email_verified": True, "name": "Old", "sub": "g-9"})
     assert client.post("/api/auth/google", json={"credential": "ok" + "x" * 40}).json()["user"]["name"] == "Old"

@@ -10,7 +10,7 @@ def test_global_search(client):
                                             "gstin": gstin("29", "AAACK5678D"), "phone": "9876500000"})
     post(client, h, "/api/items", {"name": "Steel Bottle", "code": "SB-1", "hsn_sac": "7323", "gst_rate": 18})
     inv = post(client, h, "/api/vouchers", {"type": "SALE", "date": "2026-09-10", "party_id": cust["id"],
-                                            "lines": [{"name": "Steel Bottle", "qty": 1, "rate": 100, "gst_rate": 18}]})
+                                            "lines": [{"name": "Steel Bottle", "hsn_sac": "7323", "qty": 1, "rate": 100, "gst_rate": 18}]})
     post(client, h, "/api/payments", {"type": "IN", "date": "2026-09-11", "party_id": cust["id"], "amount": 50, "mode": "CASH"})
 
     r = client.get("/api/search", headers=h, params={"q": "karnat"}).json()

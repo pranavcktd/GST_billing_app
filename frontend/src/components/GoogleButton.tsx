@@ -70,6 +70,9 @@ export function GoogleButton({ text = "continue_with" }: { text?: "continue_with
   return (
     <div className="space-y-3">
       <div ref={box} className="flex min-h-10 w-full justify-center" />
+      <p className="text-center text-[11px] text-gray-500">By continuing with Google you agree to the{" "}
+        <a href="/terms" target="_blank" className="underline">Terms</a>, <a href="/privacy" target="_blank" className="underline">Privacy Policy</a> and{" "}
+        <a href="/dpa" target="_blank" className="underline">Data Processing Addendum</a>.</p>
       <ErrorBox message={err} />
       {pending && (
         <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); finish(pending, otp); }}>

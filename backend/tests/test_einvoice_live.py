@@ -109,7 +109,7 @@ def test_helpers():
 def test_ewaybill_goods_only_and_irn_only_when_applicable(client):
     from tests.test_phase2 import einvoicing_on
 
-    h, cust, item = setup(client)  # item is goods (HSN 7323)
+    h, cust, item = setup(client)  # item is goods (HSN 732393)
     svc = post(client, h, "/api/items", {"type": "SERVICE", "name": "Consulting", "hsn_sac": "998311", "sale_price": 100000, "gst_rate": 18})
     t = {"vehicle_no": "MH12AB1234", "distance_km": 100}
     # services only, ₹1,18,000: no e-way bill, and it cannot be generated
@@ -124,7 +124,7 @@ def test_ewaybill_goods_only_and_irn_only_when_applicable(client):
         {"item_id": item["id"], "name": "Bottle", "qty": 2, "rate": 500, "gst_rate": 18}]})
     assert not client.get(f"/api/vouchers/{m['id']}", headers=h).json()["ewb_required"]
     j = client.get(f"/api/vouchers/{m['id']}/ewaybill/json", headers=h).json()["billLists"][0]
-    assert [i["hsnCode"] for i in j["itemList"]] == [7323] and j["totalValue"] == 1000 and j["totInvValue"] == 119180
+    assert [i["hsnCode"] for i in j["itemList"]] == [732393] and j["totalValue"] == 1000 and j["totInvValue"] == 119180
     # goods above the limit: needed
     g = post(client, h, "/api/vouchers", {"type": "SALE", "date": "2026-09-10", "party_id": cust["id"], "transport": t,
                                           "lines": [{"item_id": item["id"], "name": "Bottle", "qty": 120, "rate": 500, "gst_rate": 18}]})

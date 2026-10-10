@@ -6,7 +6,7 @@ from tests.test_modules import gstin, post
 Q = {"date_from": "2026-09-01", "date_to": "2026-09-30"}
 
 
-def line(qty=1, rate=1000, gst=18, name="Widget", hsn="8471"):
+def line(qty=1, rate=1000, gst=18, name="Widget", hsn="847130"):
     return {"name": name, "hsn_sac": hsn, "qty": qty, "rate": rate, "gst_rate": gst}
 
 

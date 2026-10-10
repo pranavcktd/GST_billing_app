@@ -66,6 +66,7 @@ class User(Base):
     mobile_verified_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     email_verified_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     google_sub: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)  # "Continue with Google"
+    legal_version: Mapped[str | None] = mapped_column(String(20))  # Terms / Privacy version last accepted
     password_hash: Mapped[str] = mapped_column(String(100))
     platform_role: Mapped[str | None] = mapped_column(String(12))  # SUPERADMIN / RESELLER
     reseller_commission_pct: Mapped[Decimal | None] = mapped_column(Rate)
@@ -611,6 +612,74 @@ class Backup(Base):
     emailed_to: Mapped[str | None] = mapped_column(String(200))
     created_by_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class LegalAcceptance(Base):
+    """Each acceptance of the Terms / Privacy Policy: which version, when, from where, how (consent record)."""
+
+    __tablename__ = "legal_acceptances"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    version: Mapped[str] = mapped_column(String(20))
+    method: Mapped[str] = mapped_column(String(10))  # SIGNUP / GOOGLE / PROMPT / ADMIN
+    ip: Mapped[str | None] = mapped_column(String(45))
+    accepted_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class DataRequest(Base):
+    """Data-protection rights request or grievance (Privacy centre → Admin → Privacy & security)."""
+
+    __tablename__ = "data_requests"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    user_email: Mapped[str] = mapped_column(String(200))
+    user_name: Mapped[str | None] = mapped_column(String(120))
+    business_id: Mapped[str | None] = mapped_column(String(32))
+    kind: Mapped[str] = mapped_column(String(12))  # ACCESS / CORRECTION / ERASURE / WITHDRAW / GRIEVANCE
+    details: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(12), default="OPEN")  # OPEN / IN_PROGRESS / CLOSED / REJECTED
+    response: Mapped[str | None] = mapped_column(Text)
+    due_on: Mapped[dt.date | None] = mapped_column(Date)
+    handled_by: Mapped[str | None] = mapped_column(String(120))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+    closed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SecurityIncident(Base):
+    """Security-incident register kept by the platform (data processor) — affected businesses are notified."""
+
+    __tablename__ = "security_incidents"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text)
+    affected: Mapped[str | None] = mapped_column(Text)
+    actions: Mapped[str | None] = mapped_column(Text)
+    severity: Mapped[str] = mapped_column(String(8), default="MEDIUM")  # LOW / MEDIUM / HIGH
+    status: Mapped[str] = mapped_column(String(12), default="OPEN")  # OPEN / CONTAINED / CLOSED
+    detected_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+    notified_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    notified_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_by: Mapped[str | None] = mapped_column(String(120))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class AuditChange(Base):
+    """Edit log: values before and after every change to a book-of-account record (services/edit_log.py). Append-only."""
+
+    __tablename__ = "audit_changes"
+    __table_args__ = (Index("ix_audit_changes_business_at", "business_id", "at"), Index("ix_audit_changes_row", "row_id"))
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    business_id: Mapped[str | None] = mapped_column(ForeignKey("businesses.id", ondelete="CASCADE"))
+    table_name: Mapped[str] = mapped_column(String(40))
+    entity: Mapped[str] = mapped_column(String(40))
+    row_id: Mapped[str | None] = mapped_column(String(32))
+    op: Mapped[str] = mapped_column(String(6))  # INSERT / UPDATE / DELETE
+    before: Mapped[dict | None] = mapped_column(JSON)
+    after: Mapped[dict | None] = mapped_column(JSON)
+    user_id: Mapped[str | None] = mapped_column(String(32))
+    user_name: Mapped[str | None] = mapped_column(String(120))
+    ip: Mapped[str | None] = mapped_column(String(45))
+    at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class AuditLog(Base):

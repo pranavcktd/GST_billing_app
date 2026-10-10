@@ -1,6 +1,7 @@
 """Create / update / cancel billing documents, keeping stock and payments consistent."""
 
 import datetime as dt
+import re
 from decimal import Decimal
 
 from fastapi import HTTPException
@@ -72,6 +73,27 @@ def number_exists(ctx: Ctx, vtype: VoucherType, number: str, exclude_id: str | N
     if exclude_id:
         q = q.where(Voucher.id != exclude_id)
     return ctx.db.scalar(q) is not None
+
+
+HSN_DOCS = (VoucherType.SALE, VoucherType.SALE_RETURN, VoucherType.PURCHASE_RETURN)
+
+
+def _check_hsn(biz, vtype: VoucherType, voucher: Voucher, tax_applicable: bool, lines, items: dict, on: dt.date) -> None:
+    """Rule 46 / Notification 78/2020-CT: HSN/SAC on tax invoices and notes of regular taxpayers — B2B always
+    (4 digits up to ₹5 crore turnover, 6 above); B2C too above ₹5 crore (e-invoicing applies)."""
+    gst = biz.gst_type.value if hasattr(biz.gst_type, "value") else str(biz.gst_type)
+    if gst != "REGULAR" or vtype not in HSN_DOCS or not tax_applicable or not config_store.get("hsn_required", on):
+        return
+    large = bool(getattr(biz, "einvoice_applicable", False))
+    if not voucher.party_gstin and not large:
+        return
+    need = int(config_store.get("hsn_digits_large" if large else "hsn_digits_small", on))
+    for n, li in enumerate(lines, 1):
+        item = items.get(li.item_id) if li.item_id else None
+        code = re.sub(r"\D", "", li.hsn_sac or (item.hsn_sac if item else None) or "")
+        if len(code) < need:
+            raise bad(f"Line {n} ({li.name}): an HSN/SAC code of at least {need} digits is required on "
+                      f"{'B2B ' if voucher.party_gstin else ''}tax invoices and notes (Rule 46). Add it to the item or the line.")
 
 
 def save_voucher(ctx: Ctx, data: VoucherIn, voucher: Voucher | None = None) -> Voucher:
@@ -253,6 +275,7 @@ def save_voucher(ctx: Ctx, data: VoucherIn, voucher: Voucher | None = None) -> V
     for f in ("sub_total", "discount", "taxable", "cgst", "sgst", "igst", "cess", "round_off", "grand_total"):
         setattr(voucher, f, getattr(totals, f))
 
+    _check_hsn(biz, vtype, voucher, tax_applicable, data.lines, items, data.date)
     for i, (li, lo) in enumerate(zip(data.lines, totals.lines)):
         item = items.get(li.item_id) if li.item_id else None
         voucher.lines.append(VoucherLine(

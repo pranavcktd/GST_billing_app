@@ -22,7 +22,7 @@ def setup(client):
     cust = post(client, h, "/api/parties", {"name": "Karnataka Retail", "gst_type": "REGISTERED",
                                             "gstin": gstin("29", "AAACK5678D"), "billing_address": "Brigade Road",
                                             "city": "Bengaluru", "pincode": "560001"})
-    item = post(client, h, "/api/items", {"name": "Bottle", "hsn_sac": "7323", "unit": "PCS", "sale_price": 500,
+    item = post(client, h, "/api/items", {"name": "Bottle", "hsn_sac": "732393", "unit": "PCS", "sale_price": 500,
                                           "purchase_price": 300, "gst_rate": 18, "opening_stock": 20,
                                           "opening_stock_date": "2026-04-01"})
     return h, cust, item
@@ -77,7 +77,7 @@ def test_einvoice_and_ewaybill(client):
     assert payload["Version"] == "1.1" and payload["DocDtls"] == {"Typ": "INV", "No": v["number"], "Dt": "10/09/2026"}
     assert payload["SellerDtls"]["Pin"] == 411001 and payload["BuyerDtls"]["Pos"] == "29"
     assert payload["ValDtls"]["IgstVal"] == 180 and payload["ValDtls"]["TotInvVal"] == 1180
-    assert payload["ItemList"][0]["HsnCd"] == "7323" and payload["ItemList"][0]["IsServc"] == "N"
+    assert payload["ItemList"][0]["HsnCd"] == "732393" and payload["ItemList"][0]["IsServc"] == "N"
 
     done = post(client, h, f"/api/vouchers/{v['id']}/einvoice", {}, 200)
     biz = client.get("/api/businesses/current", headers=h).json()
@@ -85,7 +85,7 @@ def test_einvoice_and_ewaybill(client):
     assert done["einvoice_status"] == "GENERATED" and done["einvoice_sandbox"] and done["signed_qr"].startswith("SANDBOX.")
     # locked for editing until the IRN is cancelled
     edit = client.put(f"/api/vouchers/{v['id']}", headers=h, json={"type": "SALE", "date": "2026-09-10", "party_id": cust["id"],
-                                                                   "lines": [{"name": "x", "qty": 1, "rate": 1}]})
+                                                                   "lines": [{"name": "x", "hsn_sac": "732393", "qty": 1, "rate": 1}]})
     assert edit.status_code == 400
     assert post(client, h, f"/api/vouchers/{v['id']}/einvoice/cancel", {"reason": "2", "remark": "typo"}, 200)["einvoice_status"] == "CANCELLED"
 
@@ -184,7 +184,7 @@ def test_subscription_trial_limits_and_payments(client, monkeypatch):
     monkeypatch.setitem(P.PLANS["FREE"], "invoices_per_month", 1)
     sale(client, h, cust, item)
     r = client.post("/api/vouchers", headers=h, json={"type": "SALE", "date": "2026-09-10", "party_id": cust["id"],
-                                                      "lines": [{"name": "x", "qty": 1, "rate": 1}]})
+                                                      "lines": [{"name": "x", "hsn_sac": "732393", "qty": 1, "rate": 1}]})
     assert r.status_code == 402 and r.json()["detail"]["code"] == "UPGRADE" and r.json()["detail"]["plan"] == "STARTER"
     assert client.get("/api/exports/tally", headers=h, params={"date_from": "2026-09-01", "date_to": "2026-09-30"}).status_code == 402
     assert client.get("/api/exports/gstr1-json", headers=h, params={"date_from": "2026-09-01", "date_to": "2026-09-30"}).status_code == 402
@@ -204,7 +204,7 @@ def test_subscription_trial_limits_and_payments(client, monkeypatch):
     res = post(client, h, "/api/billing/verify", {"order_id": order["order_id"], "simulate": True}, 200)
     assert res["plan"] == "STARTER" and res["status"] == "ACTIVE"
     assert client.post("/api/vouchers", headers=h, json={"type": "SALE", "date": "2026-09-10", "party_id": cust["id"],
-                                                         "lines": [{"name": "x", "qty": 1, "rate": 1}]}).status_code == 201
+                                                         "lines": [{"name": "x", "hsn_sac": "732393", "qty": 1, "rate": 1}]}).status_code == 201
     assert client.get("/api/businesses/current", headers=h).json()["plan"]["watermark"] is False
     # addon packs are Enterprise-only
     assert client.post("/api/billing/order", headers=h, json={"plan": "ADDON_BUSINESSES"}).status_code == 400

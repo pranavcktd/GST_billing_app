@@ -5,6 +5,7 @@ import { GlobalDialogs } from "@/components/GlobalDialogs";
 import { Toaster } from "@/components/Toaster";
 import { AuthProvider } from "@/lib/auth";
 import { ConfigProvider } from "@/lib/config";
+import { LegalConsentGate } from "@/components/LegalConsentGate";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -26,6 +27,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <AuthProvider>
         {children}
         <GlobalDialogs />
+        <LegalConsentGate />
         <Toaster />
       </AuthProvider>
     </ConfigProvider>

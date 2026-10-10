@@ -33,6 +33,7 @@ export interface Me {
   user: User; businesses: MyBusiness[]; platform_role: "SUPERADMIN" | "RESELLER" | null;
   last_login_at: string | null; previous_login_at: string | null; practice_clients: number;
   totp_enabled: boolean; must_change_password: boolean;
+  legal_ok?: boolean; legal_version?: string | null;
 }
 
 export interface CustomField { key: string; label: string; print: boolean }

@@ -85,6 +85,9 @@ FIELDS: list[Field] = [
     Field("hsn_digits_small", "GST rules", "HSN digits — turnover up to ₹5 crore", "int", 4,
           "Minimum HSN digits on B2B invoices and GSTR-1 table 12."),
     Field("hsn_digits_large", "GST rules", "HSN digits — turnover above ₹5 crore", "int", 6),
+    Field("hsn_required", "GST rules", "Require HSN/SAC on tax invoices and notes", "bool", True,
+          "On (Rule 46 / Notification 78/2020): B2B invoices, credit and debit notes of regular taxpayers need an HSN/SAC "
+          "with the digits above (businesses above ₹5 crore — those with e-invoicing on — also on B2C invoices)."),
     Field("hsn_strict", "GST rules", "Only allow HSN/SAC codes from the official master", "bool", False,
           "On: items and bills must use a code from Admin → HSN master (businesses can request missing codes). "
           "Off: other codes are allowed with a warning."),
@@ -153,6 +156,13 @@ FIELDS: list[Field] = [
           {"app_name": "SmartHisab", "by_line": "by Corenexgen",
            "tagline": "Billing, stock and accounts — made simple for Indian businesses"},
           "Shown in the app, website, e-mails and on bills of Free-plan users."),
+    Field("legal", "Legal & privacy", "Legal pages, grievance officer and hosting", "map_text",
+          {"version": "2026-10-10", "grievance_officer": "Grievance Officer", "grievance_email": "corenexgenaipvtltd@gmail.com",
+           "grievance_phone": "", "jurisdiction": "", "data_location": "", "cin": ""},
+          "version: change it (e.g. to today's date) when you update the Terms / Privacy Policy — every user is asked to accept "
+          "again. grievance_*: shown on the policies (IT Rules 2021, DPDP Act). jurisdiction: city for disputes. "
+          "data_location: where data and backups are stored (shown only when filled — fill it once hosting is in India). "
+          "cin: company identification number."),
     Field("company", "Subscription & company", "Company details (legal pages, footer)", "map_text",
           {"name": "Corenexgen AI Technologies Pvt Ltd", "email": "corenexgenaipvtltd@gmail.com",
            "address": "Registered office address — to be filled in", "phone": "Phone — to be filled in",

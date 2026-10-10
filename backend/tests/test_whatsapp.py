@@ -85,7 +85,7 @@ def test_admin_settings_and_signin_with_whatsapp(client, monkeypatch):
     # sign-up needs a verified mobile when the admin asks for it
     monkeypatch.setattr(W, "OTP_RESEND_SECONDS", 0)
     enable(client, root, signup_verify=True)
-    body = {"name": "New Shop", "email": "new@x.in", "password": "secret123", "phone": "9988776655"}
+    body = {"name": "New Shop", "email": "new@x.in", "password": "secret123", "phone": "9988776655", "accept_terms": True}
     assert client.post("/api/auth/register", json=body).status_code == 400
     assert client.post("/api/auth/otp/send", json={"phone": "9123456780", "purpose": "SIGNUP"}).status_code == 409  # taken
     assert client.post("/api/auth/otp/send", json={"phone": "9988776655", "purpose": "SIGNUP"}).status_code == 200

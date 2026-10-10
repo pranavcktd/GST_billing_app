@@ -52,8 +52,7 @@ def tally_xml(ctx: BCtx, date_from: dt.date, date_to: dt.date):
 @router.get("/audit")
 def audit_log(ctx: BCtx, limit: int = 100, offset: int = 0, entity: str | None = None, user_id: str | None = None,
               date_from: dt.date | None = None, date_to: dt.date | None = None):
-    ctx.need("audit", "view")
-    require_feature(ctx.db, ctx.bid, "audit_view")
+    ctx.need("audit", "view")  # every plan: companies must keep an audit trail (Companies (Accounts) Rules 3(1))
     q = select(AuditLog).where(AuditLog.business_id == ctx.bid)
     if entity:
         q = q.where(func.lower(AuditLog.entity).contains(entity.lower()))
@@ -68,6 +67,29 @@ def audit_log(ctx: BCtx, limit: int = 100, offset: int = 0, entity: str | None =
     return {"total": total, "rows": [dict(id=a.id, created_at=a.created_at, user=a.user_name, action=a.action,
                                           entity=a.entity, entity_id=a.entity_id, summary=a.summary, ip=a.ip)
                                      for a in rows]}
+
+
+@router.get("/audit/changes")
+def audit_changes(ctx: BCtx, limit: int = 100, offset: int = 0, entity: str | None = None, row_id: str | None = None,
+                  date_from: dt.date | None = None, date_to: dt.date | None = None):
+    """Edit log: values before and after every change to the books (services/edit_log.py)."""
+    from ..models import AuditChange
+
+    ctx.need("audit", "view")
+    ist = dt.timezone(dt.timedelta(hours=5, minutes=30))
+    q = select(AuditChange).where(AuditChange.business_id == ctx.bid)
+    if entity:
+        q = q.where(func.lower(AuditChange.entity).contains(entity.lower()))
+    if row_id:
+        q = q.where(AuditChange.row_id == row_id)
+    if date_from:
+        q = q.where(AuditChange.at >= dt.datetime.combine(date_from, dt.time.min, ist))
+    if date_to:
+        q = q.where(AuditChange.at < dt.datetime.combine(date_to + dt.timedelta(days=1), dt.time.min, ist))
+    total = ctx.db.scalar(select(func.count()).select_from(q.subquery()))
+    rows = ctx.db.scalars(q.order_by(AuditChange.at.desc()).limit(min(limit, 500)).offset(offset)).all()
+    return {"total": total, "rows": [dict(id=c.id, at=c.at, user=c.user_name, op=c.op, entity=c.entity, row_id=c.row_id,
+                                          before=c.before, after=c.after, ip=c.ip) for c in rows]}
 
 
 @router.post("/reconcile/gstr2b")

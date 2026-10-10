@@ -15,6 +15,7 @@ import { GST_RATES, STATES, UNITS } from "@/lib/constants";
 export interface AppConfig {
   whatsapp?: { login: boolean; signup_verify: boolean; send: boolean; sandbox?: boolean };
   signup?: { verify: string[]; google_client_id: string | null };
+  legal?: Record<string, string>;
   gst_rates: number[]; b2cl_limit: number; invoice_number_max_len: number; ewb_threshold: number; ewb_km_per_day?: number;
   einvoice_turnover_limit: number; composition_rates: Record<string, number>; hsn_digits_small: number;
   hsn_digits_large: number; late_fee_per_day: number; interest_rate: number; gstr1_due_day: number;
@@ -130,4 +131,14 @@ export function Company({ field, link }: { field: keyof AppConfig["company"]; li
 /** The product name as configured by the super admin (defaults to SmartHisab). */
 export function BrandName() {
   return <>{useConfig().brand?.app_name || APP_NAME}</>;
+}
+
+/** A value from Admin → GST config → Legal & privacy (grievance officer, jurisdiction, data location …). */
+export function Legal({ field, fallback = "" }: { field: string; fallback?: string }) {
+  return <>{useConfig().legal?.[field] || fallback}</>;
+}
+
+/** Renders children only when the Legal & privacy value is filled in (e.g. the hosting location). */
+export function IfLegal({ field, children }: { field: string; children: React.ReactNode }) {
+  return useConfig().legal?.[field] ? <>{children}</> : null;
 }

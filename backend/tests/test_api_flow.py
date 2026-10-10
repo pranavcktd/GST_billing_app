@@ -9,7 +9,7 @@ def gstin(state: str, pan: str = "AAPFU0939F") -> str:
 
 
 def signup(client, email="owner@shop.in"):
-    r = client.post("/api/auth/register", json={"name": "Owner", "email": email, "password": "secret123"})
+    r = client.post("/api/auth/register", json={"name": "Owner", "email": email, "password": "secret123", "accept_terms": True})
     assert r.status_code == 201, r.text
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
