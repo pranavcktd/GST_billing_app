@@ -14,7 +14,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select, text
 
 from ..config import get_settings
-from ..deps import DB, Reseller, SuperAdmin
+from ..deps import DB, Reseller, SuperAdmin, platform_area
 from ..gst.constants import PlatformRole, VoucherType
 from ..models import Business, LicenseSale, Subscription, SubscriptionPayment, User, Voucher
 from ..security import hash_password
@@ -24,6 +24,7 @@ from ..services import razorpay_cfg as rz
 from ..services.platform_audit import log
 
 router = APIRouter(tags=["platform"])
+AccountsTeam = platform_area("accounts")  # read-only lists for team members with the accounts area
 PAID = ["STARTER", "PROFESSIONAL", "ENTERPRISE"]
 
 
@@ -74,7 +75,7 @@ def stats(db: DB, _: SuperAdmin):
 
 
 @router.get("/admin/accounts")
-def accounts(db: DB, _: SuperAdmin, search: str | None = None, plan: str | None = None, limit: int = 100):
+def accounts(db: DB, _: AccountsTeam, search: str | None = None, plan: str | None = None, limit: int = 100):
     q = select(Subscription, User).join(User, User.id == Subscription.account_id).order_by(User.created_at.desc())
     if search:
         like = f"%{search}%"

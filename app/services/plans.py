@@ -343,7 +343,8 @@ def payments_live(db: Session) -> bool:
     return rz.creds(db) is not None
 
 
-def create_order(db: Session, account_id: str, plan: str, cycle: str) -> SubscriptionPayment:
+def create_order(db: Session, account_id: str, plan: str, cycle: str, business_id: str | None = None,
+                 user_id: str | None = None) -> SubscriptionPayment:
     if plan == ADDON["code"] and current(db, account_id).plan != "ENTERPRISE":
         raise HTTPException(400, "Business add-on packs are for the Business plan")
     if credit_pack(plan) is not None and PLANS[current(db, account_id).plan].get("einvoice") != "API":
@@ -365,7 +366,8 @@ def create_order(db: Session, account_id: str, plan: str, cycle: str) -> Subscri
     else:
         raise HTTPException(503, "Online payments are not configured")
     pay = SubscriptionPayment(account_id=account_id, plan=plan, cycle=cycle, amount=amount, order_id=order_id,
-                              status="CREATED", mode=mode)
+                              status="CREATED", mode=mode, business_id=business_id, user_id=user_id,
+                              gst_rate=config_store.get("subscription_gst_rate"))
     db.add(pay)
     db.flush()
     return pay
@@ -426,6 +428,9 @@ def activate(db: Session, pay: SubscriptionPayment, payment_id: str) -> Subscrip
     if pay.status == "PAID":
         return sub
     pay.status, pay.payment_id = "PAID", payment_id
+    from . import payment_records
+
+    payment_records.paid(db, pay)
     if pay.plan == ADDON["code"]:
         sub.extra_businesses = (sub.extra_businesses or 0) + ADDON["businesses"]
     elif credit_pack(pay.plan) is not None:

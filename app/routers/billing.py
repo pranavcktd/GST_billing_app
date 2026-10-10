@@ -1,5 +1,6 @@
-from decimal import Decimal
 """Subscription plans and payments (Razorpay). The subscription belongs to the account owner."""
+
+from decimal import Decimal
 
 from typing import Literal
 
@@ -8,11 +9,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from ..config import get_settings
-from ..deps import DB, BCtx
+from ..deps import DB, BCtx, CurrentUser
 from ..gst.constants import Role
 from ..models import SubscriptionPayment
 from ..services import api_credits as AC
-from ..services import config_store
+from ..services import config_store, platform_team
+from ..services import payment_records as PR
 from ..services import plans as P
 from ..services import razorpay_cfg as rz
 
@@ -63,16 +65,14 @@ def status(ctx: BCtx):
     ctx.db.commit()
     owner = ctx.role == Role.OWNER
     history = ctx.db.scalars(select(SubscriptionPayment).where(SubscriptionPayment.account_id == account)
-                             .order_by(SubscriptionPayment.created_at.desc()).limit(24)).all() if owner else []
+                             .order_by(SubscriptionPayment.created_at.desc()).limit(100)).all() if owner else []
     return {
         "plan": {**_plan_out(sub.plan), "businesses": plan["businesses"]}, "status": sub.status,
         "valid_until": sub.valid_until, "extra_businesses": sub.extra_businesses,
         "usage": P.usage(ctx.db, ctx.bid), "is_owner": owner, "payments_live": P.payments_live(ctx.db),
         "dev_mode": get_settings().is_dev and not P.payments_live(ctx.db),
         "test_mode": (rz.creds(ctx.db) or {}).get("mode") == "TEST",
-        "payments": [dict(id=h.id, plan=h.plan, cycle=h.cycle, amount=float(h.amount), status=h.status,
-                          order_id=h.order_id, payment_id=h.payment_id, mode=h.mode, method=h.method,
-                          created_at=h.created_at) for h in history],
+        "payments": [PR.row(ctx.db, h, ctx.user) for h in history],
     }
 
 
@@ -85,7 +85,7 @@ class OrderIn(BaseModel):
 def create_order(data: OrderIn, ctx: BCtx):
     ctx.require(Role.OWNER)
     account = P.account_of(ctx.db, ctx.bid)
-    pay = P.create_order(ctx.db, account, data.plan, data.cycle)
+    pay = P.create_order(ctx.db, account, data.plan, data.cycle, business_id=ctx.bid, user_id=ctx.user.id)
     ctx.db.commit()
     return {"order_id": pay.order_id, "amount": float(pay.amount), "amount_paise": int(pay.amount * 100),
             "currency": "INR", "key_id": (rz.creds(ctx.db) or {}).get("key_id"), "live": pay.mode != "DEV",
@@ -114,12 +114,18 @@ def verify(data: VerifyIn, ctx: BCtx):
         payment_id = "dev_pay_" + pay.order_id[-8:]
     else:
         if not P.signature_ok(ctx.db, data.order_id, data.payment_id or "", data.signature or ""):
-            pay.status = "FAILED"
+            PR.failed(ctx.db, pay, "Payment could not be verified", "SIGNATURE", data.payment_id)
             ctx.db.commit()
             raise HTTPException(400, "Payment could not be verified — if money was debited it will be refunded")
         payment_id = data.payment_id
         if pay.status != "PAID":
-            P.confirm_with_razorpay(ctx.db, pay, payment_id)
+            try:
+                P.confirm_with_razorpay(ctx.db, pay, payment_id)
+            except HTTPException as e:
+                if e.status_code == 400:  # Razorpay says it is not a completed payment (502 = could not ask: stays open)
+                    PR.failed(ctx.db, pay, str(e.detail), "NOT_CAPTURED", payment_id)
+                    ctx.db.commit()
+                raise
     sub = P.activate(ctx.db, pay, payment_id)
     ctx.db.commit()
     return {"plan": sub.plan, "status": sub.status, "valid_until": sub.valid_until,
@@ -135,13 +141,57 @@ async def webhook(request: Request, db: DB):
     event = await request.json()
     entity = (event.get("payload", {}).get("payment", {}) or {}).get("entity", {})
     order_id, payment_id = entity.get("order_id"), entity.get("id")
-    if event.get("event") in ("payment.captured", "order.paid") and order_id:
-        pay = db.scalar(select(SubscriptionPayment).where(SubscriptionPayment.order_id == order_id))
-        if pay:
-            pay.method = pay.method or (entity.get("method") or "")[:20] or None
-            P.activate(db, pay, payment_id)
-            db.commit()
+    pay = db.scalar(select(SubscriptionPayment).where(SubscriptionPayment.order_id == order_id)) if order_id else None
+    if pay and event.get("event") in ("payment.captured", "order.paid"):
+        pay.method = pay.method or (entity.get("method") or "")[:20] or None
+        P.activate(db, pay, payment_id)
+        db.commit()
+    elif pay and event.get("event") == "payment.failed":
+        pay.method = pay.method or (entity.get("method") or "")[:20] or None
+        PR.failed(db, pay, entity.get("error_description") or entity.get("error_reason"), entity.get("error_code"), payment_id)
+        db.commit()
     return {"ok": True}
+
+
+class FailedIn(BaseModel):
+    order_id: str
+    payment_id: str | None = Field(None, max_length=60)
+    code: str | None = Field(None, max_length=60)
+    reason: str | None = Field(None, max_length=300)
+    cancelled: bool = False  # the checkout window was closed without paying
+
+
+@router.post("/failed")
+def record_failure(data: FailedIn, ctx: BCtx):
+    """The checkout reported a failure, or the owner closed it — recorded so both sides can see it."""
+    ctx.require(Role.OWNER)
+    account = P.account_of(ctx.db, ctx.bid)
+    pay = ctx.db.scalar(select(SubscriptionPayment).where(SubscriptionPayment.order_id == data.order_id,
+                                                          SubscriptionPayment.account_id == account))
+    if not pay:
+        raise HTTPException(404, "Order not found")
+    PR.failed(ctx.db, pay, data.reason, data.code, data.payment_id, cancelled=data.cancelled)
+    ctx.db.commit()
+    return {"status": pay.status}
+
+
+@router.get("/payments")
+def my_payments(db: DB, user: CurrentUser, status: str | None = None, limit: int = 100):
+    """The signed-in account owner's transactions — successful, failed, cancelled and open."""
+    q = select(SubscriptionPayment).where(SubscriptionPayment.account_id == user.id)
+    if status:
+        q = q.where(SubscriptionPayment.status == status)
+    rows = db.scalars(q.order_by(SubscriptionPayment.created_at.desc()).limit(min(limit, 500))).all()
+    return [PR.row(db, p, user) for p in rows]
+
+
+@router.get("/payments/{payment_id}")
+def payment_receipt(payment_id: str, db: DB, user: CurrentUser):
+    """Receipt / details of one transaction: its account owner, or the platform team with the payments area."""
+    pay = db.get(SubscriptionPayment, payment_id)
+    if not pay or (pay.account_id != user.id and not platform_team.has_area(user, "payments")):
+        raise HTTPException(404, "Transaction not found")
+    return PR.receipt(db, pay)
 
 
 @router.get("/credits")

@@ -68,7 +68,9 @@ class User(Base):
     google_sub: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)  # "Continue with Google"
     legal_version: Mapped[str | None] = mapped_column(String(20))  # Terms / Privacy version last accepted
     password_hash: Mapped[str] = mapped_column(String(100))
-    platform_role: Mapped[str | None] = mapped_column(String(12))  # SUPERADMIN / RESELLER
+    platform_role: Mapped[str | None] = mapped_column(String(12))  # SUPERADMIN / RESELLER / TEAM (company team)
+    platform_areas: Mapped[list | None] = mapped_column(JSON)  # TEAM: admin areas they may use (services/platform_team.py)
+    platform_team: Mapped[str | None] = mapped_column(String(12))  # TEAM: SUPPORT / TECH / FINANCE / SALES / ADMIN
     reseller_commission_pct: Mapped[Decimal | None] = mapped_column(Rate)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # security
@@ -717,6 +719,7 @@ class Subscription(Base):
 
 class SubscriptionPayment(Base):
     __tablename__ = "subscription_payments"
+    __table_args__ = (UniqueConstraint("receipt_no", name="uq_subscription_payments_receipt_no"),)
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
     account_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     plan: Mapped[str] = mapped_column(String(20))  # plan code, or ADDON_BUSINESSES
@@ -724,10 +727,18 @@ class SubscriptionPayment(Base):
     amount: Mapped[Decimal] = mapped_column(Money)   # incl. GST
     order_id: Mapped[str] = mapped_column(String(60), unique=True)
     payment_id: Mapped[str | None] = mapped_column(String(60))
-    status: Mapped[str] = mapped_column(String(10))  # CREATED / PAID / FAILED
+    status: Mapped[str] = mapped_column(String(10))  # CREATED / PAID / FAILED / CANCELLED (checkout closed)
     mode: Mapped[str | None] = mapped_column(String(4))  # LIVE / TEST (Razorpay test keys) / DEV (simulated)
     method: Mapped[str | None] = mapped_column(String(20))  # card / upi / netbanking / wallet ...
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    business_id: Mapped[str | None] = mapped_column(String(32))  # business the owner was in when paying
+    user_id: Mapped[str | None] = mapped_column(String(32))  # who started the payment
+    gst_rate: Mapped[Decimal | None] = mapped_column(Rate)  # GST % included in amount
+    error_code: Mapped[str | None] = mapped_column(String(60))
+    error_reason: Mapped[str | None] = mapped_column(String(300))
+    receipt_no: Mapped[str | None] = mapped_column(String(20))  # given when paid
+    paid_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+    updated_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
 
 class LicenseSale(Base):
@@ -814,6 +825,70 @@ class PlatformBackup(Base):
     size: Mapped[int] = mapped_column(Integer)
     data: Mapped[bytes] = mapped_column(LargeBinary)
     created_by_id: Mapped[str | None] = mapped_column(String(32))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Notification(Base):
+    """An alert shown under the bell (and usually also e-mailed): payments, tickets ... (services/notify.py)."""
+
+    __tablename__ = "notifications"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))  # PAYMENT_OK / PAYMENT_FAILED / PAYMENT_CANCELLED / TICKET ...
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str | None] = mapped_column(Text)
+    link: Mapped[str | None] = mapped_column(String(300))
+    read_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class Ticket(Base):
+    """Helpdesk: an issue, question, feedback or feature request raised from inside the app (routers/support.py)."""
+
+    __tablename__ = "tickets"
+    __table_args__ = (UniqueConstraint("number", name="uq_ticket_number"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    number: Mapped[int] = mapped_column(Integer)  # shown as T-1001
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    business_id: Mapped[str | None] = mapped_column(String(32), index=True)
+    category: Mapped[str] = mapped_column(String(10))  # ISSUE / QUESTION / FEEDBACK / FEATURE / BILLING
+    subject: Mapped[str] = mapped_column(String(200))
+    priority: Mapped[str] = mapped_column(String(8), default="NORMAL")  # LOW / NORMAL / HIGH / URGENT
+    status: Mapped[str] = mapped_column(String(12), default="OPEN", index=True)  # OPEN / IN_PROGRESS / WAITING / RESOLVED / CLOSED
+    team: Mapped[str] = mapped_column(String(12), default="SUPPORT")  # SUPPORT / TECH / FINANCE / SALES
+    assigned_to: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    module: Mapped[str | None] = mapped_column(String(80))  # where in the app it was raised
+    page: Mapped[str | None] = mapped_column(String(300))
+    device: Mapped[str | None] = mapped_column(String(300))
+    first_response_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    rating: Mapped[int | None] = mapped_column(Integer)  # 1–5, given by the user after resolution
+    rating_note: Mapped[str | None] = mapped_column(String(300))
+    last_activity_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class TicketMessage(Base):
+    __tablename__ = "ticket_messages"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    ticket_id: Mapped[str] = mapped_column(ForeignKey("tickets.id", ondelete="CASCADE"), index=True)
+    author_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    by_team: Mapped[bool] = mapped_column(Boolean, default=False)  # written by our support team
+    internal: Mapped[bool] = mapped_column(Boolean, default=False)  # team-only note, never shown to the user
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class TicketAttachment(Base):
+    __tablename__ = "ticket_attachments"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
+    ticket_id: Mapped[str] = mapped_column(ForeignKey("tickets.id", ondelete="CASCADE"), index=True)
+    message_id: Mapped[str | None] = mapped_column(String(32))
+    uploaded_by: Mapped[str | None] = mapped_column(String(32))
+    name: Mapped[str] = mapped_column(String(200))
+    content_type: Mapped[str] = mapped_column(String(80))
+    size: Mapped[int] = mapped_column(Integer)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

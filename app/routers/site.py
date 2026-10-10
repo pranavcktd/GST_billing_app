@@ -15,11 +15,13 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from ..deps import DB, SuperAdmin
+from ..deps import DB, platform_area
 from ..models import SitePage, SitePageVersion
 from ..services import config_store as C
+from ..services import platform_team
 from ..services.platform_audit import log
 
+WebsiteTeam = platform_area("website")  # super admin, or team members with the website area
 router = APIRouter(tags=["website"])
 CONTENT = Path(__file__).resolve().parent.parent / "content"
 PAGES = {"landing": "Home page", "terms": "Terms of Service", "privacy": "Privacy Policy", "dpa": "Data Processing Addendum",
@@ -52,7 +54,7 @@ def public_page(slug: str, db: DB):
 
 # ---------------------------------------------------------------- super admin
 @router.get("/admin/site")
-def pages(db: DB, _: SuperAdmin):
+def pages(db: DB, _: WebsiteTeam):
     counts = dict(db.execute(select(SitePageVersion.slug, func.count(SitePageVersion.id)).group_by(SitePageVersion.slug)).all())
     out = []
     for slug in PAGES:
@@ -63,7 +65,7 @@ def pages(db: DB, _: SuperAdmin):
 
 
 @router.get("/admin/site/{slug}")
-def page(slug: str, db: DB, _: SuperAdmin):
+def page(slug: str, db: DB, _: WebsiteTeam):
     return {**_page(db, slug), "default_body": _default(slug), "consent": slug in CONSENT_PAGES}
 
 
@@ -95,8 +97,10 @@ def _bump_legal(db, admin) -> str:
 
 
 @router.put("/admin/site/{slug}")
-def save(slug: str, data: PageIn, db: DB, admin: SuperAdmin, request: Request):
+def save(slug: str, data: PageIn, db: DB, admin: WebsiteTeam, request: Request):
     _page(db, slug)
+    if data.reaccept and not platform_team.is_superadmin(admin):
+        raise HTTPException(403, "Only the super admin can ask every user to accept the policies again")
     if slug == "landing":
         try:
             if not isinstance(json.loads(data.body), dict):
@@ -113,13 +117,13 @@ def save(slug: str, data: PageIn, db: DB, admin: SuperAdmin, request: Request):
 
 
 @router.get("/admin/site/{slug}/versions")
-def versions(slug: str, db: DB, _: SuperAdmin):
+def versions(slug: str, db: DB, _: WebsiteTeam):
     rows = db.scalars(select(SitePageVersion).where(SitePageVersion.slug == slug).order_by(SitePageVersion.saved_at.desc()).limit(100))
     return [dict(id=v.id, title=v.title, saved_at=v.saved_at, saved_by=v.saved_by, note=v.note, size=len(v.body)) for v in rows]
 
 
 @router.get("/admin/site/{slug}/versions/{vid}")
-def version(slug: str, vid: str, db: DB, _: SuperAdmin):
+def version(slug: str, vid: str, db: DB, _: WebsiteTeam):
     v = db.get(SitePageVersion, vid)
     if not v or v.slug != slug:
         raise HTTPException(404, "Version not found")
@@ -127,7 +131,7 @@ def version(slug: str, vid: str, db: DB, _: SuperAdmin):
 
 
 @router.post("/admin/site/{slug}/versions/{vid}/restore")
-def restore(slug: str, vid: str, db: DB, admin: SuperAdmin, request: Request):
+def restore(slug: str, vid: str, db: DB, admin: WebsiteTeam, request: Request):
     v = db.get(SitePageVersion, vid)
     if not v or v.slug != slug:
         raise HTTPException(404, "Version not found")
@@ -139,7 +143,7 @@ def restore(slug: str, vid: str, db: DB, admin: SuperAdmin, request: Request):
 
 
 @router.post("/admin/site/{slug}/reset")
-def reset(slug: str, db: DB, admin: SuperAdmin, request: Request):
+def reset(slug: str, db: DB, admin: WebsiteTeam, request: Request):
     """Back to the built-in text (the current text is kept as a version)."""
     row = db.get(SitePage, slug)
     if row:

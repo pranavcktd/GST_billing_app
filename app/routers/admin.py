@@ -11,7 +11,7 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, or_, select
 
 from ..config import get_settings
-from ..deps import DB, SuperAdmin
+from ..deps import DB, SuperAdmin, platform_area
 from ..gst.constants import PlatformRole, Role
 from ..models import (
     AuditLog,
@@ -34,6 +34,7 @@ from ..services.platform_audit import log
 from .auth import frontend_url, issue_reset
 
 router = APIRouter(prefix="/admin", tags=["super admin"])
+AccountsTeam = platform_area("accounts")  # read-only lists for team members with the accounts area
 
 Level = Literal["SUPERADMIN", "RESELLER", "OWNER", "STAFF"]
 
@@ -327,7 +328,7 @@ def delete_user(user_id: str, db: DB, me: SuperAdmin, request: Request, force: b
 
 # ---------------------------------------------------------------- businesses (metadata only)
 @router.get("/businesses")
-def businesses(db: DB, _: SuperAdmin, search: str | None = None):
+def businesses(db: DB, _: AccountsTeam, search: str | None = None):
     q = select(Business, User).outerjoin(User, User.id == Business.owner_id).order_by(Business.created_at.desc())
     if search:
         like = f"%{search}%"

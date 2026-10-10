@@ -12,10 +12,16 @@ from . import audit
 from .deps import DB
 from .services import config_store
 from .services import edit_log  # noqa: F401 — registers the audit-trail hook and triggers
+from .services import notify  # noqa: F401 — registers the send-alert-e-mails-after-commit hook
 from .services import signup as signup_service
 from .services import whatsapp as wa_service
 from .routers import (
+    admin_payments,
     auth,
+    helpdesk,
+    support,
+    team,
+    notifications,
     billing,
     businesses,
     compliance,
@@ -122,7 +128,7 @@ async def integrity_error(_: Request, exc: IntegrityError):
     return JSONResponse(status_code=409, content={"detail": msg})
 
 
-for r in (auth, payroll, businesses, compliance, compliance_calendar, documents, dsc, gstin, integrations, mail, manufacturing, practice, privacy, price_lists, recurring, reminders, search, site, staff, parties, items, vouchers, payments, reports, uploads, cashbank, loans, expenses,
+for r in (admin_payments, notifications, helpdesk, support, team, auth, payroll, businesses, compliance, compliance_calendar, documents, dsc, gstin, integrations, mail, manufacturing, practice, privacy, price_lists, recurring, reminders, search, site, staff, parties, items, vouchers, payments, reports, uploads, cashbank, loans, expenses,
           utilities, godowns, einvoice, billing, exports, platform, admin, smtp, sharing, whatsapp):
     app.include_router(r.router, prefix="/api")
 

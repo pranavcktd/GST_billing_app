@@ -136,6 +136,8 @@ class MeOut(BaseModel):
     invitations: list[InvitationOut] = []
     user: UserOut
     platform_role: str | None = None
+    platform_areas: list[str] = []                 # admin areas this person may open (super admin: all)
+    platform_team: str | None = None
     last_login_at: dt.datetime | None = None       # this session
     previous_login_at: dt.datetime | None = None   # the sign-in before this one ("last login")
     practice_clients: int = 0                      # practitioner workspace: clients allowed (0 = not enabled)
