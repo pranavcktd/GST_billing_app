@@ -18,6 +18,7 @@ from ..deps import DB, Reseller, SuperAdmin
 from ..gst.constants import PlatformRole, VoucherType
 from ..models import Business, LicenseSale, Subscription, SubscriptionPayment, User, Voucher
 from ..security import hash_password
+from ..services import mailer
 from ..services import plans as P
 from ..services import razorpay_cfg as rz
 from ..services.platform_audit import log
@@ -175,7 +176,7 @@ def health(db: DB, _: SuperAdmin):
         app_env=s.app_env, database=db_ok, database_engine=db.bind.dialect.name,
         einvoice_provider=s.einvoice_provider, gsp_configured=bool(s.gsp_base_url and s.gsp_client_id),
         razorpay_live=(rz.creds(db) or {}).get("mode") == "LIVE", razorpay_webhook=bool(rz.webhook_secrets(db)),
-        email_configured=bool(s.smtp_host), cloudinary_configured=bool(s.cloudinary_url),
+        email_configured=mailer.system_smtp(db) is not None, cloudinary_configured=bool(s.cloudinary_url),
         superadmins=sorted(s.superadmins),
     )
 

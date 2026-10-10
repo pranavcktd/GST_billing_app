@@ -9,7 +9,7 @@ from app.models import Business
 from app.services import reminders as R
 from tests.test_api_flow import make_business, signup
 from tests.test_modules import post
-from tests.test_security_admin import SENT, fake_mail, platform_mail  # noqa: F401 — fake SMTP for this module
+from tests.test_security_admin import SENT, fake_mail, platform_mail  # noqa: F401 — fake e-mail API for this module
 
 
 def db_session():

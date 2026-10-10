@@ -3,7 +3,7 @@
 from tests.test_api_flow import make_business, signup
 from tests.test_modules import post
 from tests.test_rbac import staff
-from tests.test_security_admin import platform_mail, SENT, fake_mail, superadmin  # noqa: F401 — fake_mail: autouse SMTP stub
+from tests.test_security_admin import platform_mail, SENT, fake_mail, superadmin  # noqa: F401 — fake_mail: autouse e-mail API stub
 
 PDF = b"%PDF-1.4\n% test document\n"
 
