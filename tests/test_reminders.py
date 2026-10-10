@@ -9,7 +9,7 @@ from app.models import Business
 from app.services import reminders as R
 from tests.test_api_flow import make_business, signup
 from tests.test_modules import post
-from tests.test_security_admin import SENT, fake_mail  # noqa: F401 — fake SMTP for this module
+from tests.test_security_admin import SENT, fake_mail, platform_mail  # noqa: F401 — fake SMTP for this module
 
 
 def db_session():
@@ -18,7 +18,7 @@ def db_session():
 
 def setup(client):
     h = make_business(client, signup(client), address="12 MG Road", city="Pune", pincode="411001", upi_id="shop@okhdfc")
-    client.put("/api/smtp", headers=h, json={"host": "smtp.shop.in", "from_email": "billing@shop.in", "password": "x"})
+    platform_mail(client)
     cust = post(client, h, "/api/parties", {"name": "Karan Stores", "gst_type": "UNREGISTERED", "email": "karan@client.in", "phone": "98765 43210"})
     inv = post(client, h, "/api/vouchers", {"type": "SALE", "date": "2026-09-01", "due_date": "2026-09-10", "party_id": cust["id"],
                                             "lines": [{"name": "Widget", "qty": 2, "rate": 500, "gst_rate": 18}]})
