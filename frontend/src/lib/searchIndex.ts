@@ -80,6 +80,8 @@ export const ENTRIES: SearchEntry[] = [
   { group: "Settings", title: "Security, 2FA & sessions", href: "/settings?tab=security", k: "password two factor otp login devices" },
   { group: "Settings", title: "Staff & roles / manage companies", href: "/utilities/companies", k: "users team employee permission business add company" },
   { group: "Settings", title: "Subscription & plan", href: "/billing", k: "upgrade pay plan renew razorpay" },
+  { group: "Settings", title: "Payment receipts & transactions", href: "/billing#transactions", k: "receipt invoice payment failed transaction history" },
+  { group: "Settings", title: "Help & support tickets", href: "/support", k: "help support ticket issue problem bug feedback feature request contact" },
 
   // ---- utilities
   { group: "Utilities", title: "Import data (Excel)", href: "/utilities/import", k: "bulk upload excel template" },

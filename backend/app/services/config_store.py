@@ -165,7 +165,7 @@ FIELDS: list[Field] = [
           "cin: company identification number."),
     Field("company", "Subscription & company", "Company details (legal pages, footer)", "map_text",
           {"name": "Corenexgen AI Technologies Pvt Ltd", "email": "corenexgenaipvtltd@gmail.com",
-           "address": "Registered office address — to be filled in", "phone": "Phone — to be filled in",
+           "address": "Registered office address — to be filled in", "phone": "+91 96032 43575",
            "gstin": "", "website": ""}),
 ]
 BY_KEY = {f.key: f for f in FIELDS}

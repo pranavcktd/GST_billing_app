@@ -24,7 +24,7 @@ export default function ChangePassword() {
       const r = await api<{ token: string }>("/auth/password", { method: "PUT", body: { current_password: f.current_password, new_password: f.new_password } });
       session.setToken(r.token);
       const me = await refresh();
-      router.replace(me?.businesses.length ? "/dashboard" : me?.platform_role === "SUPERADMIN" ? "/admin" : me?.platform_role === "RESELLER" ? "/reseller" : "/onboarding");
+      router.replace(me?.businesses.length ? "/dashboard" : me?.platform_role === "SUPERADMIN" || me?.platform_role === "TEAM" ? "/admin" : me?.platform_role === "RESELLER" ? "/reseller" : "/onboarding");
     } catch (err) {
       setError((err as Error).message);
     } finally {

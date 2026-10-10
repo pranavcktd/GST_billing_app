@@ -2,10 +2,12 @@ We are happy to help with setup, billing questions or anything else.
 
 **{{company.name}}**
 E-mail: {{company.email}}
-{{company.phone}}
+Mobile / WhatsApp: {{company.phone}}
 {{company.address}}
 
 Support hours: Monday–Saturday, 10:00–19:00 IST.
+
+Already using the app? Tap **Help** (bottom-right of any screen) to raise a ticket — it reaches our support team directly and you can follow the reply in the app.
 
 ## Grievance Officer
 

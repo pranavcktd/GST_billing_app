@@ -25,7 +25,7 @@ from ..security import (
     totp_uri,
     verify_password,
 )
-from ..services import config_store, mailer
+from ..services import config_store, mailer, platform_team
 from ..services import privacy as PV
 from ..services import signup as SU
 from ..services import whatsapp as W
@@ -65,6 +65,8 @@ def me_payload(db, user: User) -> MeOut:
                      for m in rows if m.status == "INVITED"],
         user=UserOut.model_validate(user),
         platform_role=user.platform_role,
+        platform_areas=platform_team.areas_of(user),
+        platform_team=user.platform_team,
         last_login_at=user.last_login_at,
         previous_login_at=user.previous_login_at,
         practice_clients=_practice_limit(db, user),

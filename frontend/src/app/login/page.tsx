@@ -41,7 +41,7 @@ export default function LoginPage() {
     login(res.token, res);
     if (res.must_change_password) router.replace("/change-password");
     else if (res.businesses.length) router.replace("/dashboard");
-    else router.replace(res.platform_role === "SUPERADMIN" ? "/admin" : res.platform_role === "RESELLER" ? "/reseller" : "/onboarding");
+    else router.replace(res.platform_role === "SUPERADMIN" || res.platform_role === "TEAM" ? "/admin" : res.platform_role === "RESELLER" ? "/reseller" : "/onboarding");
   }
 
   async function sendCode() {

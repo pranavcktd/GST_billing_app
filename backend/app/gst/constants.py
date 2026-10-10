@@ -32,6 +32,7 @@ class Role(str, Enum):
 class PlatformRole(str, Enum):
     SUPERADMIN = "SUPERADMIN"  # SaaS owner / tech team
     RESELLER = "RESELLER"      # channel partner: sells licences, never sees business data
+    TEAM = "TEAM"              # company team member: only the admin areas given to them (services/platform_team.py)
 
 
 class BusinessGstType(str, Enum):

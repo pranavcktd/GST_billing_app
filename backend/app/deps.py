@@ -59,6 +59,18 @@ SuperAdmin = Annotated[User, Depends(superadmin)]
 Reseller = Annotated[User, Depends(reseller)]
 
 
+def platform_area(area: str):
+    """Dependency type: the super admin, or a company team member given this admin area (services/platform_team.py)."""
+    from .services import platform_team
+
+    def dep(user: CurrentUser) -> User:
+        if not platform_team.has_area(user, area):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "You do not have access to this area")
+        return user
+
+    return Annotated[User, Depends(dep)]
+
+
 @dataclass
 class Ctx:
     db: Session
